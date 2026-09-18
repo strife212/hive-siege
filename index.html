@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hive Siege — Alien Base Defense</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="sidebar">
+    <div class="hud">
+      <div class="stat"><span>CREDITS</span><b id="credits">0</b></div>
+      <div class="stat"><span>WAVE</span><b id="wave">0</b></div>
+      <div class="stat"><span>KILLS</span><b id="kills">0</b></div>
+      <div class="stat wide"><span>CORE INTEGRITY</span><div class="bar"><div id="corehp"></div></div></div>
+    </div>
+    <button id="startWave" class="big">START WAVE 1</button>
+    <div class="tabs">
+      <button data-tab="build" class="active">BUILD</button>
+      <button data-tab="tech">TECH</button>
+    </div>
+    <div id="buildList" class="cards"></div>
+    <div id="techList" class="cards" hidden></div>
+    <div id="infoPanel" hidden></div>
+    <div id="desc"></div>
+  </div>
+
+  <div id="log"></div>
+  <div id="help">LMB place / select &nbsp;·&nbsp; RMB drag rotate &nbsp;·&nbsp; MMB drag / WASD pan &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; Q/E rotate &nbsp;·&nbsp; ESC cancel</div>
+
+  <div id="overlay" hidden>
+    <h1>THE CORE HAS FALLEN</h1>
+    <p id="overlayStats"></p>
+    <button id="restart" class="big">REBUILD</button>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
