@@ -1,30 +1,40 @@
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
-import { HALF } from './config.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { FLAT } from './config.js';
+import { createSky, HORIZON } from './sky.js';
 
 export function createScene(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b0e14);
-  scene.fog = new THREE.Fog(0x0b0e14, 80, 160);
+  scene.fog = new THREE.Fog(HORIZON.clone(), 110, 270);
+  scene.add(createSky());
 
-  const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 400);
+  // Soft image-based lighting so metals and crystals pick up reflections.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.35;
+  pmrem.dispose();
+
+  const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 1500);
   camera.position.set(0, 26, 28);
 
-  scene.add(new THREE.HemisphereLight(0x8fa8ff, 0x3a2a20, 0.7));
-  const sun = new THREE.DirectionalLight(0xffe0b0, 2.2);
-  sun.position.set(30, 50, 20);
+  scene.add(new THREE.HemisphereLight(0x7a6aa8, 0x2a1c14, 0.75));
+  const sun = new THREE.DirectionalLight(0xffdcb0, 2.4);
+  sun.position.set(45, 38, 18);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -50, right: 50, top: 50, bottom: -50, near: 1, far: 150 });
-  sun.shadow.bias = -0.0005;
+  Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 1, far: 220 });
+  sun.shadow.mapSize.set(3072, 3072);
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
 
   // RTS camera: MMB pan, RMB rotate, wheel zoom, WASD pan, Q/E rotate. LMB is left free for the game.
@@ -32,7 +42,7 @@ export function createScene(container) {
   controls.enableDamping = true;
   controls.dampingFactor = 0.12;
   controls.minDistance = 12;
-  controls.maxDistance = 95;
+  controls.maxDistance = 130;
   controls.minPolarAngle = 0.25;
   controls.maxPolarAngle = 1.25;
   controls.zoomToCursor = true;
@@ -68,7 +78,7 @@ export function createScene(container) {
       const off = camera.position.clone().sub(controls.target).applyAxisAngle(camera.up, rot);
       camera.position.copy(controls.target).add(off);
     }
-    const lim = HALF + 6;
+    const lim = FLAT + 6;
     const cx = THREE.MathUtils.clamp(controls.target.x, -lim, lim);
     const cz = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
     camera.position.x += cx - controls.target.x;

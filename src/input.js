@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { state, canPlace, placeStructure, log } from './game.js';
-import { worldToCell, cellToWorld, cellKey, heightAt } from './terrain.js';
+import { state, canPlace, placeStructure, log, anchorFor, footprintCenter } from './game.js';
+import { worldToCell, cellToWorld, cellKey, heightAt, pickTerrain } from './terrain.js';
 import { makeBuildingMesh, ghostify } from './entities.js';
+import { abilities } from './abilities.js';
 
 export function createInput({ renderer, camera, scene, terrain, ui }) {
   const el = renderer.domElement;
@@ -13,13 +14,13 @@ export function createInput({ renderer, camera, scene, terrain, ui }) {
   function pick(ev) {
     ndc.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
     ray.setFromCamera(ndc, camera);
-    const hit = ray.intersectObject(terrain, false)[0];
-    return hit ? hit.point : null;
+    return pickTerrain(ray.ray);
   }
 
   function setBuild(type) {
     if (ghost) { scene.remove(ghost); ghost = null; }
     ghostType = type;
+    terrain.material.userData.setGrid?.(type ? 1 : 0);
     if (type) {
       ghost = makeBuildingMesh(type);
       ghostify(ghost, true);
@@ -32,25 +33,30 @@ export function createInput({ renderer, camera, scene, terrain, ui }) {
     if (!ghost) return;
     const p = pick(ev);
     if (!p) { ghost.visible = false; return; }
-    const c = worldToCell(p.x, p.z);
-    const w = cellToWorld(c.i, c.j);
+    const c = anchorFor(ghostType, p.x, p.z);
+    const w = footprintCenter(ghostType, c.i, c.j);
     ghost.visible = true;
     ghost.position.set(w.x, heightAt(w.x, w.z) - 0.15, w.z);
     ghostify(ghost, canPlace(ghostType, c.i, c.j).ok);
   }
 
-  el.addEventListener('pointermove', updateGhost);
+  el.addEventListener('pointermove', (ev) => {
+    if (state.intro) return;
+    updateGhost(ev);
+    if (abilities.armed || abilities.laserActive) abilities.hover(pick(ev));
+  });
   el.addEventListener('pointerdown', (ev) => { down = { x: ev.clientX, y: ev.clientY, b: ev.button }; });
   el.addEventListener('pointerup', (ev) => {
-    if (!down) return;
+    if (!down || state.intro) return;
     const moved = Math.hypot(ev.clientX - down.x, ev.clientY - down.y);
     down = null;
     if (moved > 5) return;                                   // it was a drag (camera), not a click
-    if (ev.button === 2) { ghostType ? ui.cancel() : ui.showSelected(null); return; }
+    if (ev.button === 2) { if (abilities.armed) abilities.cancel(); else if (ghostType) ui.cancel(); else ui.showSelected(null); return; }
     if (ev.button !== 0) return;
     const p = pick(ev);
     if (!p) return;
-    const c = worldToCell(p.x, p.z);
+    if (abilities.armed || abilities.laserActive) { if (abilities.click(p)) return; }
+    const c = ghostType ? anchorFor(ghostType, p.x, p.z) : worldToCell(p.x, p.z);
     if (ghostType) {
       const res = canPlace(ghostType, c.i, c.j);
       if (!res.ok) return log(res.reason, true);
@@ -63,7 +69,7 @@ export function createInput({ renderer, camera, scene, terrain, ui }) {
     }
   });
   addEventListener('keydown', (e) => {
-    if (e.code === 'Escape') { ui.cancel(); ui.showSelected(null); }
+    if (e.code === 'Escape') { abilities.cancel(); ui.cancel(); ui.showSelected(null); }
   });
 
   return { setBuild };

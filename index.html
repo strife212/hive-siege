@@ -6,7 +6,7 @@
   <title>Hive Siege — Alien Base Defense</title>
   <link rel="stylesheet" href="/src/style.css" />
 </head>
-<body>
+<body class="intro">
   <div id="app"></div>
 
   <div id="sidebar">
@@ -28,13 +28,18 @@
   </div>
 
   <div id="log"></div>
-  <div id="help">LMB place / select &nbsp;·&nbsp; RMB drag rotate &nbsp;·&nbsp; MMB drag / WASD pan &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; Q/E rotate &nbsp;·&nbsp; ESC cancel</div>
+  <div id="help">LMB place / select &nbsp;·&nbsp; RMB drag rotate &nbsp;·&nbsp; MMB drag / WASD pan &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; Q/E rotate &nbsp;·&nbsp; ESC cancel &nbsp;·&nbsp; M mute</div>
 
   <div id="overlay" hidden>
     <h1>THE CORE HAS FALLEN</h1>
     <p id="overlayStats"></p>
     <button id="restart" class="big">REBUILD</button>
   </div>
+
+  <div id="abilities"></div>
+  <div id="flash"></div>
+  <div id="fade"></div>
+  <div id="skip">PRESS ANY KEY TO SKIP</div>
 
   <script type="module" src="/src/main.js"></script>
 </body>

@@ -1,5 +1,6 @@
 import { BUILDINGS, RESEARCH } from './config.js';
 import { state, on, startWave, doResearch, sellStructure, hasBuilding, log } from './game.js';
+import { abilities } from './abilities.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -48,7 +49,7 @@ export function createUI({ onSelectBuild }) {
   function setActive(key) {
     activeBuild = key;
     for (const [k, el] of Object.entries(cards)) el.classList.toggle('active', k === key);
-    if (key) showSelected(null);
+    if (key) { showSelected(null); abilities.cancel(); }
     onSelectBuild(key);
   }
 
@@ -76,7 +77,12 @@ export function createUI({ onSelectBuild }) {
     infoName.textContent = s.name;
     sellBtn.hidden = s.type === 'core';
     const d = s.def || {};
-    infoStats.textContent = d.kind
+    infoStats.textContent = d.kind === 'flame'
+      ? `Range ${d.range} · Burns ${d.damage}/s for ${d.burn} s · ${d.cone}° cone`
+      : d.kind === 'mortar' ? `Range ${d.minRange}-${d.range} · ${d.damage} dmg, ${d.splash} splash · ${d.rate}/s`
+      : d.kind === 'missile' ? `Range ${d.range} · ${d.salvo} x ${d.damage} rockets every ${d.interval} s`
+      : d.kind === 'rail' ? `Range ${d.range} · ${d.damage} piercing bolt · ${d.charge} s charge`
+      : d.kind
       ? `Range ${d.range} · Damage ${d.damage} · ${d.rate}/s ${d.kind}`
       : d.income ? `+${d.income} credits / s` : '';
   }
