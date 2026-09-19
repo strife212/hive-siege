@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createScene } from './scene.js';
 import { createTerrain } from './terrain.js';
-import { state, init, update, log, spawnMany, placeStructure } from './game.js';
+import { state, init, update, log, spawnMany, spawnEnemy, placeStructure } from './game.js';
 import { swarm } from './swarm.js';
 import { createUI } from './ui.js';
 import { createInput } from './input.js';
@@ -11,6 +11,11 @@ import { abilities } from './abilities.js';
 import { audio } from './audio.js';
 import { initParticles } from './particles.js';
 import { initEffects, updateEffects } from './effects.js';
+import { initDebug } from './debug.js';
+import { DEMO, DEPLOY_KEY, RECORD, MAP, MAPS } from './config.js';
+import { startDemo } from './demo.js';
+import { iconImg } from './icons.js';
+import { troopers } from './troopers.js';
 
 const { renderer, scene, camera, controls, updateCamera } = createScene(document.getElementById('app'));
 const terrain = createTerrain(renderer);
@@ -24,25 +29,46 @@ input = createInput({ renderer, camera, scene, terrain, ui });
 initParticles(scene);
 initEffects(scene);
 abilities.init({ scene, ui });
-audio.init({ getListener: () => controls.target });
+troopers.init(scene);
+try { sessionStorage.removeItem(DEPLOY_KEY); } catch { /* fine */ }      // a manual refresh shows the title screen again
+if (!DEMO && !RECORD) audio.init({ getListener: () => controls.target });   // the demo plays silent; the recorder owns the audio graph
+initDebug();
+const muteBtn = document.getElementById('mute');
+audio.onMute((m) => { muteBtn.innerHTML = iconImg(m ? 'sound_off' : 'sound_on', 16); muteBtn.classList.toggle('off', m); });
+muteBtn.addEventListener('pointerdown', (e) => e.stopPropagation());      // not a skip-intro / place-building click
+muteBtn.addEventListener('click', () => { audio.toggleMute(); muteBtn.blur(); });
 
-const intro = playIntro({
+const demo = DEMO ? startDemo({ camera, controls }) : null;
+const intro = DEMO ? null : playIntro({
   scene, camera, controls, core: state.core,
-  onDone: () => { state.intro = false; log('Protect the Core. Build defenses, then start the first wave.'); },
+  onDone: () => {
+    state.intro = false;
+    if (!MAPS[MAP].population) return log('Protect the Core. Build defenses, then start the first wave.');
+    // test range: carpet the basin with bugs straight away; tick() keeps it topped up
+    state.credits = MAPS[MAP].credits;
+    for (let k = 0; k < MAPS[MAP].population; k++) {
+      const a = Math.random() * Math.PI * 2, r = 14 + Math.sqrt(Math.random()) * 43;
+      spawnEnemy(k % 7 === 6 ? 'brute' : 'skitter', Math.cos(a) * r, Math.sin(a) * r, true);
+    }
+    log(`Test range: ${MAPS[MAP].population} bugs, invincible Core, ${MAPS[MAP].credits} credits.`, true);
+  },
 });
-if (location.search.includes('nointro')) intro.skip();
+if (intro && (RECORD || location.search.includes('nointro'))) intro.skip();
+let director = null;                                   // scripted camera for recorded scenes (record.js)
 const stress = Number(new URLSearchParams(location.search).get('stress'));
 if (stress > 0) setTimeout(() => { spawnMany(stress); log(`Stress test: ${stress} bugs`, true); }, 500);
 
 function tick(dt) {
-  if (state.intro) {
+  if (demo) demo.update(dt);
+  else if (state.intro) {
     intro.update(dt);
     ui.refresh();
     renderer.render(scene, camera);
     return;
   }
-  updateCamera(dt);
-  if (!state.gameOver) update(dt);
+  if (director) director(dt); else if (!demo) updateCamera(dt);
+  if (!state.gameOver) { update(dt); troopers.update(dt); }
+  if (MAPS[MAP].population && state.enemies.length < MAPS[MAP].population) spawnMany(Math.min(25, MAPS[MAP].population - state.enemies.length));   // test range refills from the rim
   abilities.update(dt);
   updateEffects(dt);
   audio.update();
@@ -57,7 +83,9 @@ function tick(dt) {
 }
 
 const timer = new THREE.Timer();
+if (RECORD) import('./record.js').then((m) => m.record({ seconds: RECORD, tick, renderer, camera, scene, setDirector: (f) => { director = f; } }));
 function frame() {
+  if (RECORD) return;                                     // record.js drives the ticks
   timer.update();
   tick(Math.min(timer.getDelta(), 0.05));
   requestAnimationFrame(frame);

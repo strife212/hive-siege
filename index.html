@@ -28,7 +28,7 @@
   </div>
 
   <div id="log"></div>
-  <div id="help">LMB place / select &nbsp;·&nbsp; RMB drag rotate &nbsp;·&nbsp; MMB drag / WASD pan &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; Q/E rotate &nbsp;·&nbsp; ESC cancel &nbsp;·&nbsp; M mute</div>
+  <div id="help">LMB place / select &nbsp;·&nbsp; LMB drag select troopers &nbsp;·&nbsp; RMB drag rotate &nbsp;·&nbsp; MMB drag / WASD pan &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; Q/E rotate &nbsp;·&nbsp; ESC cancel &nbsp;·&nbsp; M mute</div>
 
   <div id="overlay" hidden>
     <h1>THE CORE HAS FALLEN</h1>
@@ -36,9 +36,23 @@
     <button id="restart" class="big">REBUILD</button>
   </div>
 
+  <div id="debug" hidden>
+    <h4>DEBUG</h4>
+    <button id="dbgCash">Add 1000 cash</button>
+    <button id="dbgMap">Change map</button>
+    <button id="dbgTest">Test map (bug flood)</button>
+    <button id="dbgWave">Spawn next wave</button>
+    <button id="dbgBoss">Spawn boss</button>
+    <small id="dbgMapName"></small>
+  </div>
+  <button id="mute" title="Mute / unmute (M)"></button>
+  <div id="bossbar" hidden><span id="bossname">COLOSSUS</span><div class="track"><div id="bossfill"></div></div></div>
+  <div id="wavebanner"><b></b><span></span></div>
+  <div id="selbox"></div>
   <div id="abilities"></div>
   <div id="flash"></div>
   <div id="fade"></div>
+  <div id="deploy"><b>HIVE SIEGE</b><span>CLICK OR PRESS ANY KEY TO DEPLOY</span></div>
   <div id="skip">PRESS ANY KEY TO SKIP</div>
 
   <script type="module" src="/src/main.js"></script>

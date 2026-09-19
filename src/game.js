@@ -1,16 +1,21 @@
 import * as THREE from 'three';
-import { BUILDINGS, ENEMIES, RESEARCH, START_CREDITS, CELLS, MAX_SLOPE, SPAWN_RADIUS, CELL, HALF, FLAT } from './config.js';
-import { heightAt, cellToWorld, worldToCell, cellKey, inBounds, cellSlope } from './terrain.js';
+import { MAPS, BOSS_EVERY, BUILDINGS, ENEMIES, RESEARCH, START_CREDITS, CELLS, MAX_SLOPE, SPAWN_RADIUS, CELL, HALF, FLAT, MAP } from './config.js';
+import { heightAt, cellToWorld, worldToCell, cellKey, inBounds, cellSlope, nestPosition, confine, walkInPoint, approachDir, isScenery } from './terrain.js';
 import {
-  makeBuildingMesh, makeHpBar, setHpBar,
+  makeBuildingMesh, makeHpBar, setHpBar, setWallLinks,
   makeProjectile, makeBeam, makeTracer, makeGib, makeSpawnMarker, makeCasing, makeMortarShell, makeMissile,
 } from './entities.js';
 import { explode, railBeam } from './effects.js';
 import { spawnSplatter, updateDecals } from './decals.js';
 import { audio } from './audio.js';
 import { flow } from './flowfield.js';
+import { updateHeli, updateHeliRockets, removeHeli } from './heli.js';
+import { boss } from './boss.js';
+import { updateAirship, updateAirshipOrdnance, removeAirship } from './airship.js';
 import { spatial } from './spatial.js';
 import { swarm } from './swarm.js';
+import { gore } from './gore.js';
+import { flame } from './flame.js';
 import { puff } from './particles.js';
 
 export const state = {
@@ -31,22 +36,24 @@ export const state = {
   gibs: [],
   casings: [],
   shake: 0,
+  demo: false,
+  troopers: [],                  // player infantry (troopers.js); bugs hunt them when they get close                   // title-screen attract mode (see demo.js)
   corpses: [],
   markers: [],
   occ: new Map(),          // "i,j" -> structure
   research: {},
   core: null,
   spawnQueue: [],
+  walkQueue: [],                 // canyon: extra bugs that march in from beyond the mouth
   spawnTimer: 0,
-  spawnAngles: [],
-  hpMul: 1,
+  nests: [],
   flowDirty: true,
   flowBuilt: -99,
   deadCount: 0,
   gibCount: 0,
 };
 
-const listeners = { log: [], gameover: [] };
+const listeners = { log: [], gameover: [], wave: [] };
 export function on(evt, fn) { listeners[evt].push(fn); }
 export function log(msg, bad = false) { listeners.log.forEach((f) => f(msg, bad)); }
 
@@ -58,6 +65,8 @@ const _q = new THREE.Quaternion();
 export function init(scene) {
   state.scene = scene;
   swarm.init(scene);
+  gore.init(scene);
+  flame.init(scene);
   const core = {
     id: nextId++, type: 'core', name: 'Core', hp: 1000, maxHp: 1000,
     x: 0, z: 0, y: heightAt(0, 0), cells: [], cooldown: 0,
@@ -71,7 +80,7 @@ export function init(scene) {
   core.mesh.position.set(0, core.y - 0.2, 0);
   scene.add(core.mesh);
   core.bar = makeHpBar(4);
-  core.bar.position.set(0, core.y + 4.6, 0);
+  core.bar.position.set(0, core.y + 10.2, 0);
   core.bar.visible = false;
   scene.add(core.bar);
   state.core = core;
@@ -98,6 +107,8 @@ function footprintCells(type, i, j) {
   return cells;
 }
 
+export const countBuildings = (type) => state.structures.reduce((n, s) => n + (s.type === type ? 1 : 0), 0);
+
 export function canPlace(type, i, j) {
   const def = BUILDINGS[type];
   const cells = footprintCells(type, i, j);
@@ -113,13 +124,27 @@ export function canPlace(type, i, j) {
   }
   if (hi - lo > MAX_SLOPE * (w > 1 || h > 1 ? 1.6 : 1)) return { ok: false, reason: 'Ground too steep' };
   if (def.requires && !hasBuilding(def.requires)) return { ok: false, reason: `Requires ${BUILDINGS[def.requires].name}` };
+  if (def.limit && countBuildings(type) >= def.limit) return { ok: false, reason: `Only ${def.limit} ${def.name} allowed` };
   const { x, z } = footprintCenter(type, i, j);
+  if (isScenery(x, z)) return { ok: false, reason: 'Out of reach' };       // e.g. flat spots on top of the canyon mesa
   const clear = 0.7 + Math.max(w, h) * CELL * 0.45;
   let blocked = false;
   spatial.each(x, z, clear, () => (blocked = true));
   if (blocked) return { ok: false, reason: 'A bug is in the way' };
   if (state.credits < def.cost) return { ok: false, reason: 'Not enough credits' };
   return { ok: true };
+}
+
+// Which of the four neighbouring tiles hold a wall (used for wall joins and the placement ghost).
+export function wallLinks(i, j) {
+  const at = (di, dj) => state.occ.get(cellKey(i + di, j + dj))?.type === 'wall';
+  return { e: at(1, 0), w: at(-1, 0), s: at(0, 1), n: at(0, -1) };
+}
+function refreshWalls(i, j) {
+  for (const [di, dj] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const s = state.occ.get(cellKey(i + di, j + dj));
+    if (s && s.type === 'wall') setWallLinks(s.mesh, wallLinks(s.i, s.j));
+  }
 }
 
 export function placeStructure(type, i, j) {
@@ -141,6 +166,7 @@ export function placeStructure(type, i, j) {
   for (const [ci, cj] of s.cells) state.occ.set(cellKey(ci, cj), s);
   state.flowDirty = true;
   state.structures.push(s);
+  if (type === 'wall') refreshWalls(i, j);
   state.credits -= def.cost;
   return s;
 }
@@ -155,17 +181,21 @@ export function sellStructure(s) {
 
 function removeStructure(s) {
   state.flowDirty = true;
+  if (s.def?.kind === 'heli') removeHeli(s);
+  if (s.def?.kind === 'airship') removeAirship(s);
   if (s.snd) { s.snd.stop(); s.snd = null; }
   state.scene.remove(s.mesh, s.bar);
   if (s.cells) for (const [i, j] of s.cells) state.occ.delete(cellKey(i, j));
   else state.occ.delete(cellKey(s.i, s.j));
   const k = state.structures.indexOf(s);
   if (k >= 0) state.structures.splice(k, 1);
+  if (s.type === 'wall') refreshWalls(s.i, s.j);
   s.hp = 0;
 }
 
-function damageStructure(s, dmg) {
+export function damageStructure(s, dmg) {
   if (s.hp <= 0) return;
+  if (s === state.core && MAPS[MAP].invincibleCore) return;
   s.hp -= dmg;
   s.bar.visible = true;
   setHpBar(s.bar, s.hp / s.maxHp);
@@ -196,9 +226,10 @@ export function doResearch(key) {
 }
 
 // ---------------------------------------------------------------- enemies
-function spawnEnemy(type, x, z) {
+export function spawnEnemy(type, x, z, walkIn = false) {
   const def = ENEMIES[type];
-  const maxHp = Math.round(def.hp * state.hpMul);
+  // +12% health per wave, up to the wave each species stops toughening at (hpCapWave; none = keeps scaling)
+  const maxHp = Math.round(def.hp * (1 + 0.12 * (Math.max(1, Math.min(state.wave, def.hpCapWave ?? Infinity)) - 1)));
   const e = {
     id: nextId++, type, def, x, z, hp: maxHp, maxHp, dead: false,
     speed: def.speed * (0.9 + Math.random() * 0.2),
@@ -208,7 +239,9 @@ function spawnEnemy(type, x, z) {
     jit: (Math.random() - 0.5) * 0.35, burn: null, deadT: 0,
   };
   e.fx = -x; e.fz = -z;                                  // face the Core as it burrows out
-  burst(x, heightAt(x, z) + 0.2, z, 'soil', 4, 4);
+  if (def.boss) boss.init(e);
+  else if (walkIn) { e.emerge = 1; e.fx = 0; e.fz = 1; }       // already above ground, marching in
+  else burst(x, heightAt(x, z) + 0.2, z, 'soil', 4, 4);
   state.enemies.push(e);
   return e;
 }
@@ -216,13 +249,16 @@ function spawnEnemy(type, x, z) {
 // Test helper: drop n bugs around the basin edge at once.
 export function spawnMany(n, type = 'skitter') {
   for (let k = 0; k < n; k++) {
-    const a = Math.random() * Math.PI * 2, r = SPAWN_RADIUS - Math.random() * 12;
-    spawnEnemy(k % 6 === 5 ? 'brute' : type, Math.cos(a) * r, Math.sin(a) * r);
+    const p = nestPosition(Math.random() * 8, 8, 0, SPAWN_RADIUS - Math.random() * 12);
+    spawnEnemy(k % 6 === 5 ? 'brute' : type, p.x, p.z);
   }
 }
 
 // Visit every live enemy within r of (x, z): fn(e, distSquared). Return true to stop.
 export function eachEnemy(x, z, r, fn) { spatial.each(x, z, r, fn); }
+
+// World height to shoot at: a bug's body. Ground bugs sit low; the Colossus reports how high its hull is (e.aimH).
+export const aimY = (e) => heightAt(e.x, e.z) + (e.aimH ?? 0.5 * e.def.scale);
 
 export function damageEnemy(e, dmg) {
   if (e.dead) return;
@@ -234,11 +270,9 @@ function killEnemy(e) {
   e.dead = true;
   state.credits += e.def.reward;
   state.kills++;
-  burst(e.x, heightAt(e.x, e.z) + 0.5 * e.def.scale, e.z, 'ichor', 5);
-  spawnSplatter(state.scene, e.x, e.z, e.def.scale);
-  e.deadT = 0;
+  if (e.boss) boss.die(e);
+  else { spawnSplatter(state.scene, e.x, e.z, e.def.scale); gore.spawnDeath(e); }
   e.target = null;
-  state.corpses.push(e);
   state.deadCount++;                                     // compacted out of state.enemies at end of frame
 }
 
@@ -258,45 +292,58 @@ export function burst(x, y, z, kind, n, spread = 8) {
 }
 
 // ---------------------------------------------------------------- waves
-export function startWave() {
-  if (state.waveActive || state.gameOver) return;
+// force (debug): pile the next wave on top of whatever is still coming.
+export function startWave(force = false) {
+  if ((state.waveActive && force !== true) || state.gameOver) return;
+  const carry = state.waveActive ? { q: state.spawnQueue, w: state.walkQueue } : null;
+  for (const m of state.markers) state.scene.remove(m);
+  state.markers.length = 0;
   state.wave++;
   const n = state.wave;
   state.waveActive = true;
-  state.hpMul = 1 + 0.12 * (n - 1);
   const q = [];
   const count = 6 + n * 3 + Math.floor(n * n * 0.6);       // 9, 14, 20 ... wave 10: 96, wave 20: 306, wave 30: 666
   for (let k = 0; k < count; k++) q.push('skitter');
   if (n >= 3) for (let k = 0; k < Math.floor((n - 2) * 1.5 + n * n * 0.08); k++) q.push('brute');
   for (let k = q.length - 1; k > 0; k--) { const r = Math.floor(Math.random() * (k + 1)); [q[k], q[r]] = [q[r], q[k]]; }
   state.spawnQueue = q;
+  // Canyon: on top of the nests, a horde walks in across the whole width of the open end.
+  state.walkQueue = [];
+  if (MAP === 'canyon') {
+    const extra = Math.ceil(q.length * 0.6);
+    for (let k = 0; k < extra; k++) state.walkQueue.push(n >= 3 && k % 9 === 8 ? 'brute' : 'skitter');
+  }
   state.spawnTimer = 1.5;
-  state.spawnAngles = [];
+  state.nests = [];
   const nests = Math.min(4, 1 + Math.floor(n / 3));
   const base = Math.random() * Math.PI * 2;
   for (let k = 0; k < nests; k++) {
-    const a = base + (k / nests) * Math.PI * 2 + (Math.random() - 0.5) * 0.8;
-    state.spawnAngles.push(a);
+    const { x, z } = nestPosition(k, nests, base, SPAWN_RADIUS);
+    state.nests.push({ x, z });
     const m = makeSpawnMarker();
-    const x = Math.cos(a) * SPAWN_RADIUS, z = Math.sin(a) * SPAWN_RADIUS;
     m.position.set(x, heightAt(x, z) + 0.15, z);
     state.scene.add(m);
     state.markers.push(m);
   }
-  log(`Wave ${n}: ${q.length} bugs incoming from ${nests} nest${nests > 1 ? 's' : ''}!`, true);
+  if (n % BOSS_EVERY === 0) { const at = state.nests[0]; spawnEnemy('colossus', at.x, at.z); }
+  listeners.wave.forEach((f) => f(n, n % BOSS_EVERY === 0));
+  if (carry) { state.spawnQueue = carry.q.concat(state.spawnQueue); state.walkQueue = carry.w.concat(state.walkQueue); }
+  log(`Wave ${n}: ${q.length} bugs incoming from ${nests} nest${nests > 1 ? 's' : ''}${state.walkQueue.length ? `, ${state.walkQueue.length} more marching up the canyon` : ''}!`, true);
 }
 
 function updateWave(dt) {
   if (!state.waveActive) return;
-  if (state.spawnQueue.length) {
+  if (state.spawnQueue.length || state.walkQueue.length) {
     state.spawnTimer -= dt;
     if (state.spawnTimer <= 0) {
       state.spawnTimer = 0.3;
+      const walkers = Math.min(state.walkQueue.length, Math.ceil(state.walkQueue.length / 40));
+      for (let k = 0; k < walkers; k++) { const p = walkInPoint(); spawnEnemy(state.walkQueue.pop(), p.x, p.z, true); }
       const batch = Math.min(state.spawnQueue.length, Math.ceil(state.spawnQueue.length / 60));   // big waves pour out faster
       for (let k = 0; k < batch; k++) {
-        const a = state.spawnAngles[Math.floor(Math.random() * state.spawnAngles.length)] + (Math.random() - 0.5) * 0.25;
-        const r = SPAWN_RADIUS - Math.random() * 3;
-        spawnEnemy(state.spawnQueue.pop(), Math.cos(a) * r, Math.sin(a) * r);
+        const nest = state.nests[Math.floor(Math.random() * state.nests.length)];
+        const a = Math.random() * Math.PI * 2, r = Math.random() * 5;
+        spawnEnemy(state.spawnQueue.pop(), nest.x + Math.cos(a) * r, nest.z + Math.sin(a) * r);
       }
     }
   } else if (state.enemies.length === 0) {
@@ -306,6 +353,7 @@ function updateWave(dt) {
     for (const m of state.markers) state.scene.remove(m);
     state.markers.length = 0;
     log(`Wave ${state.wave} cleared! +${bonus} credit bonus`);
+    startWave();                                           // only the first wave waits for the button
   }
   for (const m of state.markers) m.scale.setScalar(1 + 0.15 * Math.sin(state.time * 6));
 }
@@ -329,34 +377,56 @@ function clusterTarget(x, z, range) {
   return best;
 }
 
+// Turn a tower head toward its target at def.turn rad/s (no snapping). Returns true once it is on target.
+function traverse(s, t, dt, tol = 0.07) {
+  const head = s.mesh.userData.head;
+  if (!head) return true;
+  s.yaw = s.yaw ?? head.rotation.y;
+  let diff = Math.atan2(t.x - s.x, t.z - s.z) - s.yaw;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+  const step = (s.def.turn ?? 3) * dt;
+  s.yaw += Math.max(-step, Math.min(step, diff));
+  // elevation: level for ground bugs, tilting up when the target's body is well overhead (the Colossus)
+  let pitch = 0;
+  if (!s.mesh.userData.pitch && s.def.kind !== 'mortar') {
+    const dy = aimY(t) - (s.mesh.position.y + head.position.y + 0.3);
+    if (dy > 1.5) pitch = -Math.min(1.15, Math.atan2(dy, Math.hypot(t.x - s.x, t.z - s.z)));
+  }
+  s.elev = (s.elev ?? 0) + (pitch - (s.elev ?? 0)) * Math.min(1, dt * 5);
+  if (head.rotation.order !== 'YXZ') head.rotation.order = 'YXZ';
+  head.rotation.set(s.elev, s.yaw, 0);
+  return Math.abs(diff) <= step + tol && Math.abs(pitch - s.elev) < 0.12;
+}
+
 function updateTower(s, dt) {
   if (s.rise < 1) return;                 // still rising out of the ground
   const def = s.def;
   if (def.kind === 'mortar') return updateMortar(s, dt);
   if (def.kind === 'missile') return updateSilo(s, dt);
   if (def.kind === 'rail') return updateRailgun(s, dt);
+  if (def.kind === 'heli') return updateHeli(s, dt);
+  if (def.kind === 'airship') return updateAirship(s, dt);
   s.cooldown -= dt;
   if (s.target && (s.target.dead || Math.hypot(s.target.x - s.x, s.target.z - s.z) > def.range)) s.target = null;
   if (!s.target) s.target = nearestEnemy(s.x, s.z, def.range);
   const t = s.target;
+  const aligned = t ? traverse(s, t, dt, def.kind === 'flame' ? 0.16 : 0.07) : false;
   if (def.kind === 'hitscan') {
-    if (t && !s.snd) s.snd = audio.loop('laser_beam', { x: s.x, z: s.z });
-    if (!t && s.snd) { s.snd.stop(); s.snd = null; }
+    if (aligned && !s.snd) s.snd = audio.loop('laser_beam', { x: s.x, z: s.z });
+    if (!aligned && s.snd) { s.snd.stop(); s.snd = null; }
   }
   if (def.kind === 'flame') {
-    if (t && !s.snd) s.snd = audio.loop('flame_loop', { x: s.x, z: s.z });
-    if (!t && s.snd) { s.snd.stop(); s.snd = null; }
+    if (aligned && !s.snd) s.snd = audio.loop('flame_loop', { x: s.x, z: s.z });
+    if (!aligned && s.snd) { s.snd.stop(); s.snd = null; }
     const ud = s.mesh.userData;
     ud.pilot.scale.setScalar(0.25 + Math.random() * 0.12);
-    if (t) { ud.head.lookAt(t.x, s.mesh.position.y + ud.head.position.y, t.z); flameStream(s, dt); }
+    if (aligned) flameStream(s, dt);
     return;
   }
   if (!t) return;
 
-  const head = s.mesh.userData.head;
-  if (head) head.lookAt(t.x, s.mesh.position.y + head.position.y, t.z);
   aimPitch(s, t, dt);
-  if (s.cooldown > 0) return;
+  if (s.cooldown > 0 || !aligned) return;
   s.cooldown = 1 / def.rate;
 
   const ud = s.mesh.userData;
@@ -369,13 +439,13 @@ function updateTower(s, dt) {
       state.projectiles.push({ mesh: m, target: t, speed: 30, damage: def.damage, life: 3 });
       ejectCasing(s, gp);
     }
-    audio.play('autocannon_fire', { x: s.x, z: s.z, vol: 0.8 });
-    if (ud.guns.length > 1) audio.play('autocannon_fire', { x: s.x, z: s.z, vol: 0.7, delay: 0.05 });
+    audio.play('autocannon_fire', { x: s.x, z: s.z, vol: 0.4 });
+    if (ud.guns.length > 1) audio.play('autocannon_fire', { x: s.x, z: s.z, vol: 0.35, delay: 0.05 });
     s.recoilT = 0;
   } else if (def.kind === 'tracer') {
     for (const gp of ud.guns) {
       gp.muzzle.getWorldPosition(_a);
-      _b.set(t.x + (Math.random() - 0.5) * 0.5, heightAt(t.x, t.z) + (0.3 + Math.random() * 0.4) * t.def.scale, t.z + (Math.random() - 0.5) * 0.5);
+      _b.set(t.x + (Math.random() - 0.5) * 0.5, aimY(t) + (Math.random() - 0.5) * 0.4 * t.def.scale, t.z + (Math.random() - 0.5) * 0.5);
       const tr = makeTracer(_a, _b);
       state.scene.add(tr);
       state.beams.push({ mesh: tr, life: 0.05, max: 0.05 });
@@ -387,7 +457,7 @@ function updateTower(s, dt) {
     s.recoilT = 0;
   } else {
     ud.muzzle.getWorldPosition(_a);
-    _b.set(t.x, heightAt(t.x, t.z) + 0.5 * t.def.scale, t.z);
+    _b.set(t.x, aimY(t), t.z);
     const beam = makeBeam(_a, _b);
     state.scene.add(beam);
     state.beams.push({ mesh: beam, life: 0.12 });
@@ -402,7 +472,7 @@ function updateProjectiles(dt) {
     p.life -= dt;
     const t = p.target;
     if (t.dead || p.life <= 0) { state.scene.remove(p.mesh); list.splice(k, 1); continue; }
-    _b.set(t.x, heightAt(t.x, t.z) + 0.5 * t.def.scale, t.z);
+    _b.set(t.x, aimY(t), t.z);
     _a.subVectors(_b, p.mesh.position);
     const dist = _a.length();
     const step = p.speed * dt;
@@ -427,7 +497,7 @@ function aimPitch(s, t, dt) {
   let goal = ud.idlePitch;
   if (t) {
     ud.pitch.getWorldPosition(_c);
-    const dy = heightAt(t.x, t.z) + 0.5 * t.def.scale - _c.y;
+    const dy = aimY(t) - _c.y;
     const dist = Math.hypot(t.x - _c.x, t.z - _c.z);
     goal = -Math.atan2(dy, dist);
   }
@@ -452,8 +522,7 @@ function updateMortar(s, dt) {
   if (!s.target) s.target = nearestEnemy(s.x, s.z, def.range, def.minRange);
   const t = s.target;
   if (!t) return;
-  ud.head.lookAt(t.x, s.mesh.position.y + ud.head.position.y, t.z);
-  if (s.cooldown > 0) return;
+  if (!traverse(s, t, dt) || s.cooldown > 0) return;
   s.cooldown = 1 / def.rate;
   s.recoilT = 0;
   // lead the target along its heading for the flight time
@@ -469,7 +538,6 @@ function updateMortar(s, dt) {
   state.shells.push({ mesh: shell, start: _a.clone(), end: new THREE.Vector3(ex, heightAt(ex, ez), ez), t: 0, dur, h: 9 + dist * 0.28, dmg: def.damage, splash: def.splash, whistled: false });
   for (let q = 0; q < 3; q++) puff(_a.x, _a.y, _a.z, { color: 0xd8d0c8, size: 0.8, grow: 2, life: 0.9, opacity: 0.5, vy: 2 + Math.random() * 2, vx: (Math.random() - 0.5) * 2, vz: (Math.random() - 0.5) * 2 });
   audio.play('mortar_fire', { x: s.x, z: s.z });
-  state.shake += 0.08;
 }
 
 function updateShells(dt) {
@@ -485,7 +553,7 @@ function updateShells(dt) {
     m.position.copy(_b);
     if (!sh.whistled && sh.dur - sh.t < 0.9) { sh.whistled = true; audio.play('artillery_whistle', { x: sh.end.x, z: sh.end.z, vol: 0.5 }); }
     if (u >= 1) {
-      explode(sh.end.x, sh.end.z, 1.9, sh.dmg, sh.splash, { shake: 0.25, smoke: 8 });
+      explode(sh.end.x, sh.end.z, 1.9, sh.dmg, sh.splash, { shake: 0, smoke: 8 });
       state.scene.remove(m);
       state.shells.splice(k, 1);
     }
@@ -537,7 +605,7 @@ function updateMissiles(dt) {
     ms.t += dt;
     const m = ms.mesh;
     if (ms.target && ms.target.dead) ms.target = nearestEnemy(ms.pos.x, ms.pos.z, 14);
-    if (ms.target) ms.last.set(ms.target.x, heightAt(ms.target.x, ms.target.z) + 0.5 * ms.target.def.scale, ms.target.z);
+    if (ms.target) ms.last.set(ms.target.x, aimY(ms.target), ms.target.z);
     if (ms.t > 0.45) {
       _des.subVectors(ms.last, ms.pos).normalize();
       _perp.crossVectors(_des, _up).normalize();
@@ -553,7 +621,7 @@ function updateMissiles(dt) {
     if (ms.trail > 0.03) { ms.trail = 0; puff(ms.pos.x, ms.pos.y, ms.pos.z, { color: 0xe0d8d0, size: 0.45, grow: 1.4, life: 1.0, opacity: 0.45, drag: 0.5 }); }
     const ground = heightAt(ms.pos.x, ms.pos.z);
     if ((ms.t > 0.5 && ms.pos.distanceTo(ms.last) < 1.0) || ms.pos.y <= ground + 0.15 || ms.t > 8) {
-      explode(ms.pos.x, ms.pos.z, 1.3, ms.dmg, ms.splash, { shake: 0.08, smoke: 5 });
+      explode(ms.pos.x, ms.pos.z, 1.3, ms.dmg, ms.splash, { shake: 0, smoke: 5 });
       state.scene.remove(m);
       state.missiles.splice(k, 1);
     }
@@ -567,24 +635,34 @@ function updateRailgun(s, dt) {
   if (!s.target) s.target = nearestEnemy(s.x, s.z, def.range);
   const t = s.target;
   s.charge = s.charge ?? 0;
+  s.yaw = s.yaw ?? ud.head.rotation.y;
+  const showCharge = () => {
+    const frac = Math.min(1, s.charge / def.charge);
+    ud.gauge.scale.z = Math.max(0.001, frac);
+    ud.gauge.material.emissiveIntensity = 1.8 + frac * 1.6 + (frac >= 1 ? Math.sin(state.time * 18) * 0.8 : 0);
+    ud.caps.emissiveIntensity = 0.3 + frac * 3.5 + (frac > 0.85 ? Math.random() * 1.5 : 0);
+  };
   if (!t) {
     s.charge = Math.max(0, s.charge - dt * 2);
-    ud.caps.emissiveIntensity = 0.3 + s.charge * 1.2;
+    showCharge();
     return;
   }
-  ud.head.lookAt(t.x, s.mesh.position.y + ud.head.position.y, t.z);
+  // Traverse toward the target at a fixed rate; the heavy mount cannot snap between targets.
+  const aligned = traverse(s, t, dt, 0.015);
   if (s.charge === 0) audio.play('railgun_charge', { x: s.x, z: s.z });
-  s.charge += dt;
-  ud.caps.emissiveIntensity = 0.3 + (s.charge / def.charge) * 3.5 + (s.charge > def.charge - 0.5 ? Math.random() * 1.5 : 0);
-  if (s.charge < def.charge) return;
+  s.charge = Math.min(def.charge, s.charge + dt);
+  showCharge();
+  if (s.charge < def.charge || !aligned) return;          // holds a full charge until the rails are on target
   s.charge = 0;
-  ud.caps.emissiveIntensity = 0.3;
+  showCharge();
   ud.guns[0].muzzle.getWorldPosition(_a);
   ud.head.getWorldDirection(_c);
-  _c.y = 0; _c.normalize();
+  const raised = (s.elev ?? 0) < -0.05;                   // elevated at a Colossus: the bolt follows the rails upward
+  if (!raised) _c.y = 0;
+  _c.normalize();
   const reach = def.range * 1.5;
   _b.copy(_a).addScaledVector(_c, reach);
-  _b.y = Math.max(_b.y, heightAt(_b.x, _b.z) + 1);
+  if (!raised) _b.y = Math.max(_b.y, heightAt(_b.x, _b.z) + 1);
   railBeam(_a, _b);
   for (const e of state.enemies) {
     if (e.dead) continue;
@@ -596,7 +674,6 @@ function updateRailgun(s, dt) {
   }
   s.recoilT = 0;
   audio.play('railgun_fire', { x: s.x, z: s.z });
-  state.shake += 0.45;
 }
 
 // Flamethrower: gravity-arced stream of fire from the nozzle; every bug inside the cone starts burning.
@@ -613,18 +690,18 @@ function flameStream(s, dt) {
     if (d < 0.01 || (dx * fx + dz * fz) / d < cosCone) return;
     e.burn = { dps: def.damage, t: def.burn };
   });
-  s.flameAcc = (s.flameAcc || 0) + dt * 42;
+  s.flameAcc = (s.flameAcc || 0) + dt * 64;
   while (s.flameAcc >= 1) {
     s.flameAcc--;
-    const spread = 0.12, speed = 13 + Math.random() * 3;
-    puff(_nz.x, _nz.y, _nz.z, {
-      color: 0xffe080, color2: 0xff3a10, size: 0.45, grow: 3.2, life: 0.5, opacity: 0.55, additive: true, fadeIn: 0.03,
-      vx: fx * speed + (Math.random() - 0.5) * spread * speed, vy: 2.2 + Math.random() * 1.2, vz: fz * speed + (Math.random() - 0.5) * spread * speed,
-      grav: 11, drag: 1.2,
+    const spread = 0.16, speed = 10 + Math.random() * 2.5;
+    const ahead = Math.random() * 0.6;                           // stagger along the stream so it reads as continuous
+    flame.emit(_nz.x + fx * ahead, _nz.y, _nz.z + fz * ahead, {
+      vx: fx * speed + (Math.random() - 0.5) * spread * speed, vy: 1.6 + Math.random() * 1.8, vz: fz * speed + (Math.random() - 0.5) * spread * speed,
+      life: 0.42 + Math.random() * 0.18, size: 0.55, grow: 2.1, grav: 10, drag: 1.1, heat: 1,
     });
   }
-  if (Math.random() < dt * 8) {
-    puff(_nz.x + fx * 4.5, _nz.y + 0.5, _nz.z + fz * 4.5, { color: 0x2a2622, size: 1.2, grow: 2.2, life: 1.2, opacity: 0.35, vy: 2.5, vx: fx * 3, vz: fz * 3, drag: 1.2 });
+  if (Math.random() < dt * 10) {
+    puff(_nz.x + fx * 5, _nz.y + 0.6, _nz.z + fz * 5, { color: 0x2a2622, size: 1.4, grow: 2.4, life: 1.4, opacity: 0.3, vy: 2.5, vx: fx * 3, vz: fz * 3, drag: 1.2 });
   }
 }
 
@@ -638,11 +715,11 @@ function updateBurning(dt) {
     const e = en[i];
     if (!e.burn || e.dead) continue;
     e.burn.t -= dt;
-    const y = heightAt(e.x, e.z);
+    const y = heightAt(e.x, e.z) + (e.boss ? e.aimH - 1 : 0);
     const sc = e.def.scale;
-    if (Math.random() < dt * 14 * fxScale) {
-      puff(e.x + (Math.random() - 0.5) * 0.9 * sc, y + (0.2 + Math.random() * 0.7) * sc, e.z + (Math.random() - 0.5) * 0.9 * sc,
-        { color: 0xffd070, color2: 0xff3010, size: 0.4 * sc + 0.2, grow: 1.4, life: 0.4, opacity: 0.9, additive: true, vy: 2.5, drag: 1 });
+    if (Math.random() < dt * 7 * fxScale) {
+      flame.emit(e.x + (Math.random() - 0.5) * 0.9 * sc, y + (0.2 + Math.random() * 0.6) * sc, e.z + (Math.random() - 0.5) * 0.9 * sc,
+        { size: 0.22 * sc + 0.14, grow: 0.7, life: 0.4 + Math.random() * 0.2, vy: 2.2 + Math.random(), vx: (Math.random() - 0.5), vz: (Math.random() - 0.5), drag: 1, heat: 0.7 });
     }
     if (Math.random() < dt * 4 * fxScale) puff(e.x, y + 0.8 * sc, e.z, { color: 0x2a2622, size: 0.5, grow: 1.4, life: 1.0, opacity: 0.35, vy: 2 });
     damageEnemy(e, e.burn.dps * dt);
@@ -705,6 +782,7 @@ function updateCasings(dt) {
 
 // ---------------------------------------------------------------- enemy AI
 const _dir = { x: 0, z: 0 };
+const PREY_RANGE = 16;                 // bugs this close to a trooper go for it before anything else
 function updateEnemies(dt) {
   if (state.flowDirty || state.time - state.flowBuilt > 1.5) {
     flow.build(state.structures, state.core);
@@ -713,13 +791,40 @@ function updateEnemies(dt) {
   }
   const en = state.enemies;
   spatial.build(en);
-  const lim = FLAT - 1;
+  const lim = FLAT - 1, canyon = MAP === 'canyon', limX = canyon ? FLAT + 50 : lim, minZ = canyon ? -(FLAT + 50) : -lim;
   for (let idx = 0; idx < en.length; idx++) {
     const e = en[idx];
     if (e.dead) continue;
+    if (e.boss) { boss.update(e, dt); continue; }
     if (e.emerge < 1) { e.emerge = Math.min(1, e.emerge + dt / 0.6); continue; }
     e.attackCd -= dt;
     e.lunge = Math.max(0, e.lunge - dt * 4);
+
+    // Troopers are the bugs' top priority: anything within PREY_RANGE drops what it is doing and hunts the nearest
+    // one (a skitter bite costs 1 HP, a brute takes 2), only chewing a structure when it is actually in the way.
+    let prey = null, pd = PREY_RANGE * PREY_RANGE;
+    for (let k = 0; k < state.troopers.length; k++) {
+      const tr = state.troopers[k];
+      if (tr.hp <= 0) continue;
+      const d = (tr.x - e.x) ** 2 + (tr.z - e.z) ** 2;
+      if (d < pd) { pd = d; prey = tr; }
+    }
+    if (prey) {
+      const reach = 0.55 + 0.5 * e.def.scale;
+      if (pd < reach * reach) {
+        e.target = null;
+        e.fx = prey.x - e.x; e.fz = prey.z - e.z;
+        if (e.attackCd <= 0) { e.attackCd = 1 / e.def.attackRate; e.lunge = 1; prey.hp -= e.type === 'brute' ? 2 : 1; }
+        continue;
+      }
+      const l = Math.sqrt(pd) || 1;
+      _dir.x = (prey.x - e.x) / l; _dir.z = (prey.z - e.z) / l;
+      // Only charge straight at the trooper when the way is open. Behind a wall, keep following the normal route in
+      // (or keep chewing) instead of piling up against the nearest structure.
+      const pc = worldToCell(e.x + _dir.x * 0.9, e.z + _dir.z * 0.9), here = worldToCell(e.x, e.z);
+      if (state.occ.has(cellKey(pc.i, pc.j)) || state.occ.has(cellKey(here.i, here.j))) prey = null;
+      else e.target = null;
+    }
 
     if (e.target && e.target.hp > 0) {
       e.fx = e.target.x - e.x; e.fz = e.target.z - e.z;
@@ -732,7 +837,7 @@ function updateEnemies(dt) {
     }
     e.target = null;
 
-    flow.sample(e.x, e.z, _dir);
+    if (!prey) { if (canyon && e.z < -lim) approachDir(e.x, e.z, _dir); else flow.sample(e.x, e.z, _dir); }
     // per-bug lateral bias so a column fans out instead of walking a single line
     const cj = Math.cos(e.jit), sj = Math.sin(e.jit);
     const dx = _dir.x * cj - _dir.z * sj, dz = _dir.x * sj + _dir.z * cj;
@@ -743,14 +848,16 @@ function updateEnemies(dt) {
     if (!st) { c = worldToCell(e.x, e.z); st = state.occ.get(cellKey(c.i, c.j)); }
     if (st) { e.target = st; continue; }
 
-    e.x = Math.max(-lim, Math.min(lim, e.x + dx * e.speed * dt));
-    e.z = Math.max(-lim, Math.min(lim, e.z + dz * e.speed * dt));
+    e.x = Math.max(-limX, Math.min(limX, e.x + dx * e.speed * dt));
+    e.z = Math.max(minZ, Math.min(lim, e.z + dz * e.speed * dt));
     e.walk += e.speed * dt;
     e.fx = dx; e.fz = dz;
+    confine(e);
   }
 
   // Soft separation so bugs swarm instead of stacking (spatial hash: each nearby pair once).
   spatial.pairs(2.4, (a, b) => {
+    if (a.boss || b.boss) return;                           // the swarm runs between the Colossus's legs
     const r = 0.75 * (a.def.scale + b.def.scale);
     let dx = b.x - a.x, dz = b.z - a.z;
     const d2 = dx * dx + dz * dz;
@@ -803,11 +910,15 @@ export function update(dt) {
     if (s.def?.kind) updateTower(s, dt);
     if (s.mesh.userData.guns) updateRecoil(s, dt);
     if (s.mesh.userData.pitch && !s.target) aimPitch(s, null, dt);
+    if (s.elev && !s.target) { s.elev *= Math.exp(-3 * dt); const hd = s.mesh.userData.head; if (hd) hd.rotation.x = s.elev; }   // guns settle back level
     if (s.def?.income) state.credits += s.def.income * dt;
     const spin = s.mesh.userData.spin;
     if (spin) spin.rotation.y += dt * (s.type === 'refinery' ? 6 : 1.2);
   }
   updateProjectiles(dt);
+  updateHeliRockets(dt);
+  updateAirshipOrdnance(dt);
+  boss.updateDying(dt);
   updateShells(dt);
   updateMissiles(dt);
   updateEnemies(dt);
@@ -819,5 +930,7 @@ export function update(dt) {
     state.enemies = state.enemies.filter((e) => !e.dead);
     state.deadCount = 0;
   }
+  gore.update(dt);
+  flame.update(dt, state.time);
   swarm.update(state.enemies, state.corpses, state.time, heightAt);
 }

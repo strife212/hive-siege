@@ -1,15 +1,19 @@
 import * as THREE from 'three';
 import { heightAt } from './terrain.js';
+import { audio } from './audio.js';
+import { MAP, MAPS } from './config.js';
 
 // Opening cinematic: the Core drops from orbit on thrusters, deploys its legs, lands in a cloud of dust,
-// plants itself, then the camera flies to the gameplay view and the UI slides in.
+// plants itself, blows off its re-entry fairing, then the camera flies to the gameplay view and the UI slides in.
 const T_LAND = 6.0;         // touchdown
 const T_SETTLE = 0.8;       // bounce + plant duration
-const T_FLY = 7.2;          // camera starts flying to the gameplay view
+const T_BLAST = 7.1;        // explosive bolts fire, fairing petals are thrown clear
+const T_FLY = 9.0;          // camera starts flying to the gameplay view
 const FLY_DUR = 2.0;
 const T_END = T_FLY + FLY_DUR;
 const START_Y = 95;
-const GAME_CAM = new THREE.Vector3(0, 26, 28);
+const GAME_CAM = new THREE.Vector3(...MAPS[MAP].cam);
+const ORBIT = MAP === 'canyon' ? Math.PI + 0.3 : 0.95;      // canyon: watch the landing from inside the gorge
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const easeOutCubic = (p) => 1 - Math.pow(1 - p, 3);
@@ -32,11 +36,18 @@ export function playIntro({ scene, camera, controls, core, onDone }) {
   const mesh = core.mesh;
   const restY = mesh.position.y;
   const pylons = mesh.userData.pylons || [];
+  const petals = mesh.userData.fairing || [];
   const fade = document.getElementById('fade');
   document.body.classList.add('intro');
   controls.enabled = false;
 
-  let t = 0, finished = false, burstDone = false, shake = 0, flyStart = null, uiShown = false;
+  let engine = null;
+  // Browsers keep audio locked until a gesture, so the descent waits for one: the first press deploys, later ones skip.
+  let armed = true;                                      // the title screen (demo.js) has already taken the first gesture
+  const prompt = document.getElementById('deploy');
+  const arm = () => { armed = true; if (prompt) prompt.hidden = true; };
+  arm();
+  let t = 0, finished = false, burstDone = false, blastDone = false, shake = 0, flyStart = null, uiShown = false;
   const lookTarget = new THREE.Vector3(0, core.y + 2, 0);
   const flyFrom = new THREE.Vector3(), lookFrom = new THREE.Vector3();
 
@@ -79,6 +90,82 @@ export function playIntro({ scene, camera, controls, core, onDone }) {
     }
   }
 
+  // ---- fairing jettison
+  const pop = new THREE.PointLight(0xffc070, 0, 40, 2);
+  pop.position.set(0, restY + 7, 0);
+  scene.add(pop);
+  const debris = [];
+  function spark(x, y, z, vx, vy, vz, size, life, color, additive) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: dustTex, color, transparent: true, opacity: 0.8, depthWrite: false,
+      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending }));
+    s.position.set(x, y, z);
+    s.scale.setScalar(size);
+    scene.add(s);
+    dust.push({ s, vx, vy, vz, life, max: life, grow: size * (additive ? 0.5 : 1.4), op: additive ? 1 : 0.5 });
+  }
+  function removeFairing() {
+    for (const q of petals) q.removeFromParent();
+    for (const d of debris) { scene.remove(d.q); for (const m of d.mats) m.dispose(); }
+    debris.length = 0;
+  }
+  function blast() {
+    blastDone = true;
+    audio.play('explosion', { x: 0, z: 0, vol: 0.9 });
+    shake = 0.45;
+    pop.intensity = 900;
+    for (const q of petals) {
+      const am = q.userData.am, ox = Math.sin(am), oz = Math.cos(am);
+      scene.attach(q);
+      const mats = [];
+      q.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; mats.push(o.material); } });
+      const sp = 7 + Math.random() * 3;
+      debris.push({ q, mats, vx: ox * sp, vy: 6 + Math.random() * 3, vz: oz * sp, axis: new THREE.Vector3(oz, 0, -ox),
+        w: 2.2 + Math.random() * 1.6, age: 0, rest: false });
+    }
+    // bolt flashes around the separation ring and up the four seams, then a collar of smoke
+    for (let k = 0; k < 40; k++) {
+      const a = Math.random() * Math.PI * 2, v = 6 + Math.random() * 9;
+      spark(Math.sin(a) * 2.3, restY + 5.8 + Math.random() * 0.3, Math.cos(a) * 2.3, Math.sin(a) * v, 1 + Math.random() * 4, Math.cos(a) * v,
+        0.5 + Math.random() * 0.7, 0.35 + Math.random() * 0.4, k % 3 ? 0xffb040 : 0xfff0c0, true);
+    }
+    for (let k = 0; k < 4; k++) for (let j = 0; j < 7; j++) {
+      const a = k * Math.PI / 2, u = j / 6, r = 2.3 * (1 - Math.pow(Math.max(0, u - 0.35) / 0.65, 1.45));
+      spark(Math.sin(a) * r, restY + 6 + u * 6.8, Math.cos(a) * r, Math.sin(a) * 5, 1, Math.cos(a) * 5, 0.9, 0.3 + Math.random() * 0.25, 0xffd080, true);
+    }
+    for (let k = 0; k < 26; k++) {
+      const a = Math.random() * Math.PI * 2, v = 2 + Math.random() * 4;
+      spark(Math.sin(a) * 2.2, restY + 5.6 + Math.random() * 3, Math.cos(a) * 2.2, Math.sin(a) * v, 1.5 + Math.random() * 2, Math.cos(a) * v,
+        1.6 + Math.random() * 1.6, 1.2 + Math.random() * 1.0, 0xc9c4ba, false);
+    }
+  }
+  function updateDebris(dt) {
+    pop.intensity *= Math.exp(-9 * dt);
+    for (let k = debris.length - 1; k >= 0; k--) {
+      const d = debris[k], q = d.q;
+      d.age += dt;
+      if (!d.rest) {
+        d.vy -= 16 * dt;
+        q.position.x += d.vx * dt; q.position.y += d.vy * dt; q.position.z += d.vz * dt;
+        q.rotateOnWorldAxis(d.axis, d.w * dt);
+        const ground = heightAt(q.position.x, q.position.z) + 0.75;
+        if (q.position.y < ground && d.vy < 0) {
+          q.position.y = ground;
+          ring2(q.position.x, q.position.z, Math.min(8, 2 + Math.abs(d.vy)));
+          if (Math.abs(d.vy) < 2.5) { d.rest = true; } else { d.vy *= -0.3; d.vx *= 0.55; d.vz *= 0.55; d.w *= 0.45; shake = Math.max(shake, 0.18); }
+        }
+      }
+      const fade = 1 - clamp01((d.age - 2.7) / 0.8);
+      for (const m of d.mats) m.opacity = fade;
+      if (fade <= 0) { scene.remove(q); for (const m of d.mats) m.dispose(); debris.splice(k, 1); }
+    }
+  }
+  function ring2(x, z, count) {
+    for (let k = 0; k < count; k++) {
+      const a = Math.random() * Math.PI * 2;
+      puff(x + Math.cos(a) * 1.2, z + Math.sin(a) * 1.2, 2 + Math.random() * 3, 1.5 + Math.random() * 1.5, 1 + Math.random() * 0.8);
+    }
+  }
+
   function coreHeight() {
     if (t < T_LAND) return START_Y + (restY + 0.3 - START_Y) * easeOutCubic(t / T_LAND);
     const s = clamp01((t - T_LAND) / T_SETTLE);
@@ -86,7 +173,7 @@ export function playIntro({ scene, camera, controls, core, onDone }) {
   }
 
   function update(dt) {
-    if (finished) return;
+    if (finished || !armed) return;
     t += dt;
     const p = clamp01(t / T_LAND);
     const y = coreHeight();
@@ -108,6 +195,12 @@ export function playIntro({ scene, camera, controls, core, onDone }) {
       f.scale.set(0.9 + Math.random() * 0.2, (0.75 + Math.random() * 0.5) * throttle, 0.9 + Math.random() * 0.2);
     }
     light.intensity = 380 * throttle * (0.8 + Math.random() * 0.4);
+    // engine roar swells as the Core nears the camera (audio only starts once the browser has seen a user gesture)
+    if (throttle > 0 && !engine) engine = audio.loop('hub_thruster');
+    if (engine) {
+      if (throttle > 0) engine.setVol(throttle * (0.3 + 0.7 * p * p));
+      else { engine.stop(); engine = null; }
+    }
 
     // Dust: build-up on approach, burst at touchdown.
     if (t > T_LAND - 1.6 && t < T_LAND) {
@@ -116,9 +209,12 @@ export function playIntro({ scene, camera, controls, core, onDone }) {
     }
     if (t >= T_LAND && !burstDone) {
       burstDone = true;
+      audio.play('hub_land', { vol: 1 });
       ring(55, 1.8, 3.2, 8, 15, 2, 4.5);
       shake = 0.6;
     }
+    if (t >= T_BLAST && !blastDone) blast();
+    updateDebris(dt);
     for (let k = dust.length - 1; k >= 0; k--) {
       const d = dust[k];
       d.life -= dt;
@@ -127,14 +223,14 @@ export function playIntro({ scene, camera, controls, core, onDone }) {
       d.vx *= damp; d.vz *= damp; d.vy -= 1.5 * dt;
       d.s.position.x += d.vx * dt; d.s.position.y += d.vy * dt; d.s.position.z += d.vz * dt;
       d.s.scale.addScalar(d.grow * dt);
-      d.s.material.opacity = 0.55 * (d.life / d.max);
+      d.s.material.opacity = (d.op ?? 0.55) * (d.life / d.max);
     }
 
     // Camera: slow orbit tracking the descent, then fly to the gameplay view.
     if (t < T_FLY) {
-      const ang = 0.95 - 0.5 * clamp01(t / T_FLY);
+      const ang = ORBIT - 0.5 * clamp01(t / T_FLY);
       camera.position.set(Math.sin(ang) * 30, 11, Math.cos(ang) * 30);
-      lookTarget.set(0, core.y + 2 + (y - restY) * 0.35, 0);
+      lookTarget.set(0, core.y + 4.5 + (y - restY) * 0.35, 0);
       if (shake > 0) {
         shake = Math.max(0, shake - dt);
         camera.position.x += (Math.random() - 0.5) * shake * 0.7;
@@ -144,7 +240,12 @@ export function playIntro({ scene, camera, controls, core, onDone }) {
     } else {
       if (!flyStart) { flyStart = true; flyFrom.copy(camera.position); lookFrom.copy(lookTarget); }
       const f = easeInOut(clamp01((t - T_FLY) / FLY_DUR));
-      camera.position.lerpVectors(flyFrom, GAME_CAM, f);
+      // swing around the Core on an arc (and up over the canyon rim) rather than cutting straight across it
+      const a0 = Math.atan2(flyFrom.x, flyFrom.z), a1 = Math.atan2(GAME_CAM.x, GAME_CAM.z);
+      const da = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)), ang = a0 + da * f;
+      const rad = THREE.MathUtils.lerp(Math.hypot(flyFrom.x, flyFrom.z), Math.hypot(GAME_CAM.x, GAME_CAM.z), f);
+      const lift = Math.abs(da) > 1.5 ? 12 * Math.sin(Math.PI * f) : 0;
+      camera.position.set(Math.sin(ang) * rad, THREE.MathUtils.lerp(flyFrom.y, GAME_CAM.y, f) + lift, Math.cos(ang) * rad);
       lookTarget.lerpVectors(lookFrom, new THREE.Vector3(0, 0, 0), f);
       camera.lookAt(lookTarget);
       if (!uiShown && t > T_FLY + 0.5) { uiShown = true; document.body.classList.remove('intro'); }
@@ -157,8 +258,12 @@ export function playIntro({ scene, camera, controls, core, onDone }) {
   function finish() {
     if (finished) return;
     finished = true;
+    if (engine) { engine.stop(); engine = null; }
     for (const f of flames) mesh.remove(f);
     mesh.remove(light);
+    scene.remove(pop);
+    blastDone = true;
+    removeFairing();
     for (const d of dust) { scene.remove(d.s); d.s.material.dispose(); }
     dust.length = 0;
     flameMat.dispose(); flameCoreMat.dispose(); dustTex.dispose();
@@ -176,8 +281,10 @@ export function playIntro({ scene, camera, controls, core, onDone }) {
     onDone();
   }
 
-  function skip() {
+  function skip(e) {
     if (finished) return;
+    if (!armed) { arm(); if (e) return; }               // a real key/click only starts the descent; skip() from code skips too
+    if (!blastDone) { blastDone = true; removeFairing(); }
     if (t < T_FLY) { burstDone = true; t = T_FLY; }
   }
   addEventListener('keydown', skip);

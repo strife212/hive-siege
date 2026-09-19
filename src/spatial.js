@@ -2,9 +2,9 @@ import { FLAT } from './config.js';
 
 // Uniform spatial hash over the basin for enemies. Rebuilt every frame (counting sort into linked lists),
 // then queried by circle for separation, tower targeting and area damage. No allocations after init.
-const SIZE = 2, EXT = FLAT + 6;
+const SIZE = 2, EXT = FLAT + 46;      // covers the canyon approach beyond the basin too
 const N = Math.ceil((2 * EXT) / SIZE);
-const head = new Int32Array(N * N);
+const head = new Int32Array(N * N).fill(-1);      // empty until the first build()
 let next = new Int32Array(4096);
 let items = [];
 

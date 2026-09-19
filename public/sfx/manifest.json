@@ -1,2 +1,6 @@
 {
+  "explosion": "explosion.mp3",
+  "hmg_fire": "hmg_fire.mp3",
+  "autocannon_fire": "autocannon_fire.mp3",
+  "nuke_beep": "nuke_beep.mp3"
 }

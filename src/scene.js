@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { FLAT } from './config.js';
+import { FLAT, MAP, MAPS, RECORD } from './config.js';
 import { createSky, HORIZON } from './sky.js';
 
 export function createScene(container) {
@@ -25,7 +25,7 @@ export function createScene(container) {
   pmrem.dispose();
 
   const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 1500);
-  camera.position.set(0, 26, 28);
+  camera.position.set(...MAPS[MAP].cam);
 
   scene.add(new THREE.HemisphereLight(0x7a6aa8, 0x2a1c14, 0.75));
   const sun = new THREE.DirectionalLight(0xffdcb0, 2.4);
@@ -89,6 +89,7 @@ export function createScene(container) {
   }
 
   addEventListener('resize', () => {
+    if (RECORD) return;                                   // the recorder owns the canvas size
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);

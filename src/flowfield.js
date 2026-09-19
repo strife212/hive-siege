@@ -18,7 +18,7 @@ for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
   const x0 = i * CELL - FLAT, z0 = j * CELL - FLAT;
   const hs = [heightAt(x0, z0), heightAt(x0 + CELL, z0), heightAt(x0, z0 + CELL), heightAt(x0 + CELL, z0 + CELL)];
   const slope = Math.max(...hs) - Math.min(...hs);
-  baseCost[j * N + i] = 1 + Math.min(6, Math.max(0, (slope - 1.2) * 2.5));
+  baseCost[j * N + i] = slope > 3.2 ? 400 : 1 + Math.min(6, Math.max(0, (slope - 1.2) * 2.5));   // cliffs: effectively walls
 }
 
 // Binary heap of (dist, cell) pairs.

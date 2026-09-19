@@ -240,7 +240,7 @@ varying vec3 vEmissive; varying float vBurn;`)
     .replace('#include <common>', `#include <common>
 varying vec3 vEmissive; varying float vBurn;`)
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-totalEmissiveRadiance += vEmissive + vec3(1.0, 0.32, 0.04) * vBurn * 0.9;`);
+totalEmissiveRadiance += vEmissive + vec3(1.0, 0.30, 0.03) * vBurn * 0.28;`);
 }
 const uTime = { value: 0 };
 
@@ -293,6 +293,7 @@ export const swarm = {
   init(s) {
     scene = s;
     for (const [key, def] of Object.entries(ENEMIES)) {
+      if (def.boss) continue;                              // bosses bring their own rig (boss.js)
       const geo = bake(def);
       const iAnim = new THREE.InstancedBufferAttribute(new Float32Array(CAPACITY * 4), 4).setUsage(THREE.DynamicDrawUsage);
       const iBurn = new THREE.InstancedBufferAttribute(new Float32Array(CAPACITY), 1).setUsage(THREE.DynamicDrawUsage);

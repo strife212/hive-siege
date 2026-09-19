@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { simplex, fbm, ridged } from './noise.js';
-import { HALF, CELL, CELLS, FLAT } from './config.js';
+import { HALF, CELL, CELLS, FLAT, MAP } from './config.js';
 import { generateTerrainTextures } from './textures.js';
 
 export const EXTENT = FLAT + 60;    // half-size of the rendered world (basin is FLAT, build area is HALF)
@@ -11,8 +11,82 @@ export function smoothstep(a, b, x) {
   return t * t * (3 - 2 * t);
 }
 
+// ---- canyon map: a box canyon with the Core at the closed end, a choke point in front of it and a mouth that
+// flares open to the north (-z), the only way in. Everything outside the canyon is a high mesa.
+const CANYON_BACK = 17;
+export function canyonCenter(z) { return 6 * Math.sin(z * 0.055 + 0.6) * smoothstep(-10, -34, z); }
+function canyonHalfWidth(z) {
+  return 12 + 5 * smoothstep(-14, 0, z) + 18 * smoothstep(-24, -56, z) + 70 * smoothstep(-58, -110, z) + 1.6 * simplex(z * 0.09 + 3.1, 1.7);
+}
+// Signed distance to the canyon wall: negative on the floor, positive inside the rock.
+export function canyonDist(x, z) {
+  const R = 10;
+  const ax = Math.abs(x - canyonCenter(z)) - canyonHalfWidth(z) + R, az = z - CANYON_BACK + R;
+  const d = Math.hypot(Math.max(ax, 0), Math.max(az, 0)) + Math.min(Math.max(ax, az), 0) - R;
+  return d + 2.0 * fbm(x * 0.08 + 11, z * 0.08 - 7, 3);
+}
+function canyonHeight(x, z) {
+  const r = Math.hypot(x, z);
+  const wx = x + 7 * simplex(x * 0.03 + 5.2, z * 0.03 + 1.3);
+  const wz = z + 7 * simplex(x * 0.03 - 3.1, z * 0.03 + 7.7);
+  let h = fbm(wx * 0.045, wz * 0.045, 5) * 2.4;
+  h += fbm(x * 0.35, z * 0.35, 2) * 0.2;
+  h *= 0.2 + 0.8 * smoothstep(8, 26, r);
+  const d = canyonDist(x, z);
+  h += 0.9 * smoothstep(-6, 0, d);                              // scree banked against the walls
+  const cliff = smoothstep(0, 3.6, d);
+  if (cliff > 0) {
+    const bench = smoothstep(8, 14, d);                         // second tier set back from the rim
+    h += cliff * (11 + ridged(x * 0.03, z * 0.03, 4) * 7 + fbm(x * 0.13, z * 0.13, 3) * 1.3) + bench * 5;
+  }
+  return h;
+}
+
+// True where the ground is scenery rather than somewhere bugs or buildings can be.
+export function isScenery(x, z) {
+  if (Math.max(Math.abs(x), Math.abs(z)) > FLAT + 3) return true;
+  return MAP === 'canyon' && canyonDist(x, z) > 1;
+}
+
+// Keep a walker off the cliffs (canyon only): slide it back toward the canyon centre line.
+export function confine(e) {
+  if (MAP !== 'canyon') return;
+  const d = canyonDist(e.x, e.z) + 1;
+  if (d <= 0) return;
+  const back = e.z - CANYON_BACK + 1;
+  if (back > 0) e.z -= Math.min(back, d);
+  e.x += Math.sign(canyonCenter(e.z) - e.x) * d;
+}
+
+// Canyon only: the open ground beyond the mouth that the walk-in horde crosses. Returns a random start point on a
+// line well outside the basin, spread over the full width of the opening (null on maps without an open side).
+export const WALK_IN_Z = -(FLAT + 34);
+export function walkInPoint() {
+  if (MAP !== 'canyon') return null;
+  const z = WALK_IN_Z - Math.random() * 10, w = Math.min(canyonHalfWidth(z) - 5, EXTENT - 14);
+  return { x: canyonCenter(z) + (Math.random() * 2 - 1) * w, z };
+}
+// Heading for a bug still outside the flow field: straight up the approach, slanting in if it is wide of the mouth.
+export function approachDir(x, z, out) {
+  const tz = -FLAT + 8, c = canyonCenter(tz), w = canyonHalfWidth(tz) - 5;
+  const dx = Math.max(c - w, Math.min(c + w, x)) - x, dz = tz - z, l = Math.hypot(dx, dz) || 1;
+  out.x = dx / l; out.z = dz / l;
+  return out;
+}
+
+// Where wave nests sit. k of n nests; basin = anywhere on the rim, canyon = spread across the mouth.
+export function nestPosition(k, n, base, radius) {
+  if (MAP === 'canyon') {
+    const z = -radius + 2, w = canyonHalfWidth(z) - 6;
+    return { x: canyonCenter(z) + ((k + 0.5) / n * 2 - 1) * w + (Math.random() - 0.5) * 3, z };
+  }
+  const a = base + (k / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.8;
+  return { x: Math.cos(a) * radius, z: Math.sin(a) * radius };
+}
+
 // Analytic height so entities never need to raycast the mesh.
 export function heightAt(x, z) {
+  if (MAP === 'canyon') return canyonHeight(x, z);
   const d = Math.max(Math.abs(x), Math.abs(z));
   const r = Math.hypot(x, z);
   // Domain-warped rolling hills
@@ -150,6 +224,7 @@ function createTerrainMaterial(renderer) {
       uBound: { value: HALF },
       uFlat: { value: FLAT },
       uGrid: { value: 0 },
+      uCanyon: { value: MAP === 'canyon' ? 1 : 0 },
     });
     mat.userData.setGrid = (v) => { shader.uniforms.uGrid.value = v; };
     shader.vertexShader = shader.vertexShader
@@ -163,14 +238,25 @@ function createTerrainMaterial(renderer) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform sampler2D tSoil, tSoilN, tRock, tRockN, tMoss, tMossN;
-        uniform float uBound; uniform float uFlat; uniform float uGrid;
+        uniform float uBound; uniform float uFlat; uniform float uGrid; uniform float uCanyon;
         varying vec3 vSplat; varying vec3 vWorldPos; varying vec3 vWNormal;
         vec3 sample2(sampler2D t, vec2 a, vec2 b) { return mix(texture2D(t, a).rgb, texture2D(t, b).rgb, 0.5); }`)
       .replace('#include <map_fragment>', `
         vec2 uvA = vWorldPos.xz * 0.22;
         vec2 uvB = vWorldPos.xz * 0.071 + vec2(0.37, 0.71);
         vec3 w = vSplat / max(0.001, vSplat.x + vSplat.y + vSplat.z);
-        vec3 albedo = sample2(tSoil, uvA, uvB) * w.x + sample2(tRock, uvA, uvB) * w.y + sample2(tMoss, uvA, uvB) * w.z;
+        // rock is triplanar so cliff faces don't smear the top-down projection
+        vec3 tn = abs(normalize(vWNormal));
+        vec3 tw = pow(tn, vec3(4.0)); tw /= (tw.x + tw.y + tw.z);
+        vec3 rockC = sample2(tRock, uvA, uvB) * tw.y;
+        if (tw.x > 0.02) rockC += sample2(tRock, vWorldPos.zy * 0.22, vWorldPos.zy * 0.071 + 0.37) * tw.x;
+        if (tw.z > 0.02) rockC += sample2(tRock, vWorldPos.xy * 0.22, vWorldPos.xy * 0.071 + 0.71) * tw.z;
+        // canyon: sandstone tint with sedimentary banding up the walls
+        float band = sin(vWorldPos.y * 2.6 + sin(vWorldPos.x * 0.11 + vWorldPos.z * 0.07) * 2.0) * 0.5 + 0.5;
+        band = mix(band, sin(vWorldPos.y * 0.9 + 1.3) * 0.5 + 0.5, 0.45);
+        vec3 strata = mix(vec3(1.18, 0.78, 0.55), vec3(1.5, 1.12, 0.82), band) * (0.8 + 0.2 * (1.0 - tn.y));
+        rockC *= mix(vec3(1.0), strata, uCanyon);
+        vec3 albedo = sample2(tSoil, uvA, uvB) * w.x + rockC * w.y + sample2(tMoss, uvA, uvB) * w.z;
         float bd = max(abs(vWorldPos.x), abs(vWorldPos.z));
         albedo *= mix(1.0, 0.86, smoothstep(uBound, uBound + 6.0, bd));
         albedo *= mix(1.0, 0.6, smoothstep(uFlat, uFlat + 12.0, bd));
@@ -184,6 +270,7 @@ function createTerrainMaterial(renderer) {
         normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         float edge = smoothstep(0.35, 0.0, abs(bd - uBound));
+        edge *= 1.0 - uCanyon * smoothstep(2.5, 6.0, vWorldPos.y);      // no build-limit line up on the mesa
         totalEmissiveRadiance += vec3(0.15, 0.55, 0.85) * edge * 0.7;
         vec2 gf = fract((vWorldPos.xz + uBound) * 0.5);
         float gd = min(min(gf.x, 1.0 - gf.x), min(gf.y, 1.0 - gf.y)) * 2.0;

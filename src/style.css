@@ -112,3 +112,65 @@ body.intro #abilities { opacity: 0; pointer-events: none; }
 .ability .cd { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: rgba(0,0,0,.65); pointer-events: none; }
 .ability .cdtext { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; color: #fff; text-shadow: 0 0 6px #000; pointer-events: none; }
 #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 15; }
+
+/* debug menu (Z) */
+#debug { position: fixed; left: 12px; bottom: 64px; z-index: 20; display: flex; flex-direction: column; gap: 6px; width: 170px; padding: 10px;
+  background: linear-gradient(180deg, var(--panel), #0f1115); border: 1px solid var(--accent2); border-radius: 4px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+#debug h4 { margin: 0; font-size: 10px; letter-spacing: 2px; color: var(--accent2); }
+#debug button { padding: 7px 8px; background: var(--panel2); color: var(--text); border: 1px solid var(--edge); border-radius: 3px; cursor: pointer; font-weight: 600; text-align: left; }
+#debug button:hover { border-color: var(--accent); color: var(--accent); }
+#debug small { font-size: 10px; color: var(--muted); }
+body.intro #debug { display: none; }
+body:has(#debug:not([hidden])) #log { bottom: 190px; }
+
+/* pre-intro gate (also unlocks audio) */
+#deploy { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  pointer-events: none; color: var(--text); text-align: center; }
+#deploy b { font-size: 44px; letter-spacing: 12px; color: var(--accent); text-shadow: 0 0 24px rgba(224,166,58,.45); }
+#deploy span { font-size: 12px; letter-spacing: 4px; color: var(--muted); animation: deployPulse 1.6s ease-in-out infinite; }
+@keyframes deployPulse { 50% { opacity: .35; } }
+
+/* title-screen demo */
+body.demo #overlay, body.demo #skip { display: none !important; }
+body.demo #deploy b { text-shadow: 0 0 28px rgba(0,0,0,.9), 0 0 24px rgba(224,166,58,.45); }
+body.demo #deploy span { color: var(--text); text-shadow: 0 0 10px #000; }
+body.demo #deploy { justify-content: flex-start; padding-top: 9vh; }
+
+/* mute toggle: top right, just left of the build sidebar */
+#mute { position: fixed; top: 10px; right: 264px; z-index: 25; width: 30px; height: 30px; padding: 0; font-size: 15px; line-height: 1; cursor: pointer;
+  background: rgba(20,23,28,.8); color: var(--text); border: 1px solid var(--edge); border-radius: 4px; transition: right .9s cubic-bezier(.2,.8,.2,1), border-color .15s; }
+#mute:hover { border-color: var(--accent); }
+#mute.off { opacity: .7; }
+body.intro #mute { right: 12px; }
+body.demo #mute { display: none; }
+
+/* pixel-art icons (src/icons.js) */
+.pxicon { image-rendering: pixelated; image-rendering: crisp-edges; display: block; margin: 0 auto; pointer-events: none; user-select: none; }
+.card .icon, .ability .icon { height: 32px; }
+.card.locked .pxicon, .ability.cooling .pxicon { filter: grayscale(.8) brightness(.7); }
+#mute { display: flex; align-items: center; justify-content: center; }
+
+/* trooper drag-select box */
+#selbox { position: fixed; display: none; z-index: 12; pointer-events: none; border: 1px solid #5dff8a; background: rgba(93,255,138,.12); box-shadow: 0 0 8px rgba(93,255,138,.35); }
+
+/* boss health bar */
+#bossbar { position: fixed; top: 14px; left: calc(50% - 125px); transform: translateX(-50%); width: min(520px, 44vw); z-index: 8; text-align: center; pointer-events: none; }
+#bossbar span { display: block; font-size: 12px; letter-spacing: 6px; font-weight: 700; color: #ff7a4a; text-shadow: 0 0 10px rgba(0,0,0,.9); margin-bottom: 4px; }
+#bossbar .track { height: 12px; background: rgba(8,10,14,.8); border: 1px solid #5a2a20; border-radius: 2px; overflow: hidden; }
+#bossfill { height: 100%; width: 100%; background: linear-gradient(90deg, #b3261a, #ff7a3a); transition: width .15s; }
+body.intro #bossbar { display: none; }
+#debug { width: 170px; }
+body:has(#debug:not([hidden])) #log { bottom: 304px; }
+
+/* wave announcement */
+#wavebanner { position: fixed; left: 50%; top: 24%; transform: translateX(-50%); z-index: 9; text-align: center; pointer-events: none; opacity: 0; white-space: nowrap; }
+#wavebanner b { display: block; font-size: clamp(44px, 7vw, 96px); font-weight: 900; letter-spacing: .14em; line-height: 1; color: var(--accent);
+  text-shadow: 0 0 28px rgba(224,166,58,.55), 0 4px 0 rgba(0,0,0,.65), 0 0 3px #000; }
+#wavebanner span { display: block; margin-top: 12px; font-size: clamp(18px, 2.6vw, 36px); font-weight: 800; letter-spacing: .42em; color: #ff6a4a;
+  text-shadow: 0 0 18px rgba(255,80,50,.5), 0 3px 0 rgba(0,0,0,.65), 0 0 3px #000; }
+#wavebanner.boss span { color: #ff3a2a; }
+body.intro #wavebanner { display: none; }
+
+.card.maxed { opacity: .4; cursor: not-allowed; }
+.card.maxed::after { content: "BUILT"; position: absolute; top: 4px; right: 6px; font-size: 9px; letter-spacing: 1px; color: var(--accent2); }
+.card.maxed .pxicon { filter: grayscale(.8) brightness(.7); }

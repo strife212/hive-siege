@@ -1,13 +1,14 @@
 import { BUILDINGS, RESEARCH } from './config.js';
-import { state, on, startWave, doResearch, sellStructure, hasBuilding, log } from './game.js';
+import { state, on, startWave, doResearch, sellStructure, hasBuilding, countBuildings, log } from './game.js';
 import { abilities } from './abilities.js';
+import { iconImg } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
 
-function card(icon, name, cost) {
+function card(key, name, cost) {
   const el = document.createElement('div');
   el.className = 'card';
-  el.innerHTML = `<div class="icon">${icon}</div><div class="name">${name}</div><div class="cost">$${cost}</div>`;
+  el.innerHTML = `<div class="icon">${iconImg(key)}</div><div class="name">${name}</div><div class="cost">$${cost}</div>`;
   return el;
 }
 
@@ -26,8 +27,9 @@ export function createUI({ onSelectBuild }) {
     buildList.appendChild(h);
     for (const [key, def] of Object.entries(BUILDINGS)) {
       if (def.cat !== cat) continue;
-      const el = card(def.icon, def.name, def.cost);
+      const el = card(key, def.name, def.cost);
       el.addEventListener('click', () => {
+        if (el.classList.contains('maxed')) return log(`Only ${def.limit} ${def.name} allowed`, true);
         if (el.classList.contains('locked')) return log(`${def.name} requires a ${BUILDINGS[def.requires].name}`, true);
         setActive(activeBuild === key ? null : key);
       });
@@ -39,7 +41,7 @@ export function createUI({ onSelectBuild }) {
 
   const techCards = {};
   for (const [key, r] of Object.entries(RESEARCH)) {
-    const el = card(r.icon, r.name, r.cost);
+    const el = card(key, r.name, r.cost);
     el.addEventListener('click', () => doResearch(key));
     el.addEventListener('mouseenter', () => { desc.textContent = r.desc; });
     techList.appendChild(el);
@@ -81,6 +83,8 @@ export function createUI({ onSelectBuild }) {
       ? `Range ${d.range} · Burns ${d.damage}/s for ${d.burn} s · ${d.cone}° cone`
       : d.kind === 'mortar' ? `Range ${d.minRange}-${d.range} · ${d.damage} dmg, ${d.splash} splash · ${d.rate}/s`
       : d.kind === 'missile' ? `Range ${d.range} · ${d.salvo} x ${d.damage} rockets every ${d.interval} s`
+      : d.kind === 'airship' ? `Patrols ${d.range} · 2x${d.gatRounds} gatling · 2x${d.hmgRounds} HMG · ${d.shells} shells (${d.artDamage}) · ${d.bombs} bombs (${d.bombDamage}) · ${d.rearm} s rearm`
+      : d.kind === 'heli' ? `Patrols ${d.range} · ${d.rounds} x ${d.damage} gatling + ${d.rockets} x ${d.rocketDamage} rockets · ${d.rearm} s rearm`
       : d.kind === 'rail' ? `Range ${d.range} · ${d.damage} piercing bolt · ${d.charge} s charge`
       : d.kind
       ? `Range ${d.range} · Damage ${d.damage} · ${d.rate}/s ${d.kind}`
@@ -97,6 +101,25 @@ export function createUI({ onSelectBuild }) {
     setTimeout(() => div.remove(), 4000);
   });
 
+  // Big two-line announcement at the start of every wave; re-triggering restarts the 3 s animation.
+  const banner = $('wavebanner');
+  on('wave', (n, boss) => {
+    banner.querySelector('b').textContent = `WAVE ${n}`;
+    banner.querySelector('span').textContent = boss ? 'COLOSSUS INCOMING' : 'ENEMIES INCOMING';
+    banner.classList.toggle('boss', boss);
+    bannerStart = state.time;
+  });
+  // Driven by the game clock (not a CSS animation): slam in over 0.27 s, hold, fade out by 3 s.
+  let bannerStart = -10;
+  function updateBanner() {
+    const u = (state.time - bannerStart) / 3;
+    if (u < 0 || u >= 1) { if (banner.style.opacity !== '0') banner.style.opacity = '0'; return; }
+    const inn = Math.min(1, u / 0.09), out = Math.max(0, (u - 0.8) / 0.2);
+    const e = 1 - (1 - inn) ** 3;
+    banner.style.opacity = String(e * (1 - out));
+    banner.style.transform = `translateX(-50%) translateY(${-10 * out}px) scale(${1.35 - 0.35 * e - 0.04 * out})`;
+  }
+
   on('gameover', () => {
     $('overlay').hidden = false;
     $('overlayStats').textContent = `Survived ${state.wave} waves · ${state.kills} bugs exterminated`;
@@ -107,19 +130,21 @@ export function createUI({ onSelectBuild }) {
   const setText = (key, v) => { if (cache[key] !== v) { cache[key] = v; els[key].textContent = v; } };
 
   function refresh() {
+    updateBanner();
     setText('credits', Math.floor(state.credits));
     setText('wave', state.wave);
     setText('kills', state.kills);
     els.corehp.style.width = `${Math.max(0, (state.core.hp / state.core.maxHp) * 100)}%`;
     els.start.disabled = state.waveActive || state.gameOver;
     setText('start', state.waveActive
-      ? `WAVE ${state.wave} — ${state.enemies.length + state.spawnQueue.length} BUGS LEFT`
+      ? `WAVE ${state.wave} — ${state.enemies.length + state.spawnQueue.length + state.walkQueue.length} BUGS LEFT`
       : `START WAVE ${state.wave + 1}`);
 
     const labBuilt = hasBuilding('lab');
     for (const [key, el] of Object.entries(cards)) {
       const def = BUILDINGS[key];
       el.classList.toggle('locked', !!def.requires && !hasBuilding(def.requires));
+      el.classList.toggle('maxed', !!def.limit && countBuildings(key) >= def.limit);
       el.classList.toggle('poor', state.credits < def.cost);
     }
     for (const [key, el] of Object.entries(techCards)) {

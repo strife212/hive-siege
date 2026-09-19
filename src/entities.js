@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { makeHelipad } from './heli.js';
+import { makeAirshipPad } from './airship.js';
 
 // Shared materials
 const M = {
@@ -14,6 +16,12 @@ const M = {
   sandbag: new THREE.MeshStandardMaterial({ color: 0x8a7a58, roughness: 0.95, metalness: 0 }),
   concrete: new THREE.MeshStandardMaterial({ color: 0x8b8f94, roughness: 0.9, metalness: 0.05 }),
   capIdle: new THREE.MeshStandardMaterial({ color: 0x4fd1ff, emissive: 0x2aa8dd, emissiveIntensity: 0.3, roughness: 0.3 }),
+  fairing: new THREE.MeshStandardMaterial({ color: 0xd9dcd6, roughness: 0.45, metalness: 0.35, side: THREE.DoubleSide }),
+  fairingTip: new THREE.MeshStandardMaterial({ color: 0x23262a, roughness: 0.7, metalness: 0.4, side: THREE.DoubleSide }),
+  fairingStripe: new THREE.MeshStandardMaterial({ color: 0xd98a1c, roughness: 0.5, metalness: 0.3, side: THREE.DoubleSide }),
+  window: new THREE.MeshStandardMaterial({ color: 0x8fd8ff, emissive: 0x4fb8ff, emissiveIntensity: 1.5, roughness: 0.15, metalness: 0.3 }),
+  gaugeBack: new THREE.MeshStandardMaterial({ color: 0x0c2238, emissive: 0x0a2a55, emissiveIntensity: 0.6, roughness: 0.4 }),
+  gaugeFill: new THREE.MeshStandardMaterial({ color: 0x66ccff, emissive: 0x3aa8ff, emissiveIntensity: 2.4, roughness: 0.3 }),
   white: new THREE.MeshStandardMaterial({ color: 0xdfe4e8, roughness: 0.45, metalness: 0.15 }),
   trim: new THREE.MeshStandardMaterial({ color: 0x6d737b, roughness: 0.55, metalness: 0.5 }),
   cable: new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.8, metalness: 0.1 }),
@@ -325,51 +333,283 @@ function missileSilo(g) {
   Object.assign(g.userData, { doors, rack, tubes, noses, hatch: 0, rackDown: -1.6, rackUp: -0.45 });
 }
 
-// Railgun Battery (2x2): concrete pad, turntable, cradle with capacitor banks, twin rails on a recoil sled.
+// Railgun Battery (2x2): hazard-striped pad, bolted turntable, armoured cradle with capacitor banks and power
+// conduits, finned breech with a charge gauge on top, and twin conductor rails on a recoil sled.
 function railgun(g) {
-  g.add(mesh(new THREE.BoxGeometry(3.6, 0.3, 3.6), M.concrete, 0, 0.15, 0));
-  g.add(mesh(new THREE.CylinderGeometry(1.5, 1.6, 0.4, 16), M.dark, 0, 0.5, 0));
-  g.add(mesh(new THREE.TorusGeometry(1.45, 0.05, 6, 32), M.amber, 0, 0.72, 0).rotateX(Math.PI / 2));
-  const head = new THREE.Group();
-  head.position.y = 0.7;
-  g.add(head);
-  head.add(mesh(new THREE.BoxGeometry(1.6, 0.5, 1.6), M.metal, 0, 0.25, -0.2));
-  for (const sx of [-1, 1]) {
-    head.add(mesh(new THREE.BoxGeometry(0.1, 0.95, 1.7), M.dark, sx * 0.85, 0.55, -0.2));   // armour plates
+  g.add(mesh(new THREE.BoxGeometry(3.8, 0.12, 3.8), M.dark, 0, 0.06, 0));
+  g.add(mesh(new THREE.BoxGeometry(3.6, 0.3, 3.6), M.concrete, 0, 0.18, 0));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    g.add(mesh(new THREE.BoxGeometry(0.5, 0.05, 0.5), M.amber, sx * 1.5, 0.345, sz * 1.5));
+    g.add(mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.12, 8), M.black, sx * 1.5, 0.39, sz * 1.5));
   }
+  g.add(mesh(new THREE.CylinderGeometry(1.5, 1.62, 0.4, 20), M.dark, 0, 0.53, 0));
+  g.add(mesh(new THREE.TorusGeometry(1.45, 0.05, 6, 32), M.amber, 0, 0.74, 0).rotateX(Math.PI / 2));
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
+    g.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 6), M.black, Math.cos(a) * 1.28, 0.76, Math.sin(a) * 1.28));
+  }
+
+  const head = new THREE.Group();
+  head.position.y = 0.72;
+  g.add(head);
+  head.add(mesh(new THREE.CylinderGeometry(1.15, 1.25, 0.18, 16), M.metal, 0, 0.09, 0));
+  head.add(mesh(new THREE.BoxGeometry(1.7, 0.5, 2.0), M.metal, 0, 0.4, -0.25));          // chassis
+  head.add(mesh(new THREE.BoxGeometry(1.2, 0.3, 0.9), M.dark, 0, 0.35, 0.95));           // front glacis
+  for (const sx of [-1, 1]) {                                                              // sloped side armour
+    const plate = mesh(new THREE.BoxGeometry(0.1, 1.0, 2.1), M.dark, sx * 0.98, 0.7, -0.25);
+    plate.rotation.z = -sx * 0.16;
+    head.add(plate);
+    head.add(mesh(new THREE.BoxGeometry(0.04, 0.12, 1.9), M.amber, sx * 1.06, 0.32, -0.25));
+  }
+
+  // Capacitor banks and the conductor strips share one material whose glow follows the charge.
   const caps = M.capIdle.clone();
-  for (const sx of [-1, 1]) for (const z of [-0.7, -0.2, 0.3]) {
-    const c = mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.5, 10), caps, sx * 0.6, 0.85, z);
+  for (const sx of [-1, 1]) for (const z of [-0.95, -0.45, 0.05]) {
+    const c = mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.42, 12), caps, sx * 0.62, 0.92, z);
     c.rotation.x = Math.PI / 2;
     head.add(c);
-    head.add(mesh(new THREE.TorusGeometry(0.18, 0.03, 6, 12), M.black, sx * 0.6, 0.85, z));
+    for (const dz of [-0.17, 0.17]) head.add(mesh(new THREE.TorusGeometry(0.19, 0.03, 6, 14), M.black, sx * 0.62, 0.92, z + dz));
+    const conduit = mesh(new THREE.TorusGeometry(0.2, 0.035, 6, 10, Math.PI), M.cable, sx * 0.42, 1.08, z);
+    head.add(conduit);
   }
-  head.add(mesh(new THREE.BoxGeometry(0.7, 0.5, 0.9), M.dark, 0, 0.85, -0.7));       // breech
+
+  // Breech with heat-sink fins and the charge gauge on top.
+  head.add(mesh(new THREE.BoxGeometry(0.62, 0.62, 1.7), M.dark, 0, 0.98, -0.5));
+  for (let k = 0; k < 6; k++) head.add(mesh(new THREE.BoxGeometry(0.8, 0.5, 0.05), M.gunmetal, 0, 0.98, -1.42 - k * 0.09));
+  head.add(mesh(new THREE.BoxGeometry(0.46, 0.04, 1.1), M.black, 0, 1.3, -0.5));          // gauge bezel
+  head.add(mesh(new THREE.BoxGeometry(0.34, 0.02, 0.98), M.gaugeBack, 0, 1.325, -0.5));   // dim blue track
+  const gaugeGeo = new THREE.BoxGeometry(0.3, 0.03, 0.94);
+  gaugeGeo.translate(0, 0, 0.47);                                                         // origin at the rear end
+  const gauge = mesh(gaugeGeo, M.gaugeFill.clone(), 0, 1.335, -0.97);
+  gauge.scale.z = 0.001;
+  gauge.castShadow = false;
+  head.add(gauge);
+  for (const z of [-0.735, -0.5, -0.265]) head.add(mesh(new THREE.BoxGeometry(0.34, 0.035, 0.015), M.black, 0, 1.34, z));   // quarter ticks
+
+  // Sensor mast.
+  head.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 6), M.dark, 0.78, 1.45, -1.0));
+  head.add(mesh(new THREE.BoxGeometry(0.2, 0.16, 0.26), M.white, 0.78, 1.85, -1.0));
+  const eye = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 10), M.lens, 0.78, 1.85, -0.86);
+  eye.rotation.x = Math.PI / 2;
+  head.add(eye);
+
+  // Recoil sled: rails, inner conductor strips, brackets, under-rail brace and emitter prongs at the muzzle.
   const gun = new THREE.Group();
-  gun.position.set(0, 0.9, 0.6);
+  gun.position.set(0, 0.98, 0.6);
   head.add(gun);
-  for (const sx of [-1, 1]) gun.add(mesh(new THREE.BoxGeometry(0.12, 0.18, 4.4), M.gunmetal, sx * 0.2, 0, 1.6));
-  for (const z of [0.1, 1.2, 2.3, 3.4]) gun.add(mesh(new THREE.BoxGeometry(0.62, 0.34, 0.14), M.dark, 0, 0, z));
-  gun.add(mesh(new THREE.BoxGeometry(0.34, 0.1, 4.2), M.black, 0, -0.14, 1.6));
+  for (const sx of [-1, 1]) {
+    gun.add(mesh(new THREE.BoxGeometry(0.14, 0.24, 4.6), M.gunmetal, sx * 0.23, 0, 1.7));
+    gun.add(mesh(new THREE.BoxGeometry(0.03, 0.1, 4.3), caps, sx * 0.15, 0, 1.75));
+    const prong = mesh(new THREE.BoxGeometry(0.1, 0.16, 0.5), M.black, sx * 0.23, 0, 4.2);
+    gun.add(prong);
+    gun.add(mesh(new THREE.BoxGeometry(0.06, 0.34, 3.2), M.dark, sx * 0.34, 0, 1.4));
+  }
+  for (const z of [0.0, 0.9, 1.8, 2.7, 3.6]) {
+    gun.add(mesh(new THREE.BoxGeometry(0.78, 0.1, 0.16), M.dark, 0, 0.17, z));
+    gun.add(mesh(new THREE.BoxGeometry(0.78, 0.1, 0.16), M.dark, 0, -0.17, z));
+  }
+  gun.add(mesh(new THREE.BoxGeometry(0.2, 0.12, 3.6), M.black, 0, -0.26, 1.5));
   const muzzle = new THREE.Object3D();
-  muzzle.position.set(0, 0, 3.9);
+  muzzle.position.set(0, 0, 4.3);
   gun.add(muzzle);
   const flash = new THREE.Sprite(M.flash);
-  flash.position.set(0, 0, 4.1);
-  flash.scale.set(1.6, 1.6, 1);
+  flash.position.set(0, 0, 4.5);
+  flash.scale.set(1.8, 1.8, 1);
   flash.visible = false;
   gun.add(flash);
-  Object.assign(g.userData, { head, guns: [{ gun, muzzle, flash, port: null, side: 1 }], gunRest: 0.6, recoilAmp: 1.3, recoilReturn: 0.7, caps });
+  Object.assign(g.userData, { head, guns: [{ gun, muzzle, flash, port: null, side: 1 }], gunRest: 0.6, recoilAmp: 1.3, recoilReturn: 0.7, caps, gauge });
+}
+
+// Command tower (the Core, 2x2): armoured plinth on four landing pylons, bunker block with reactor vents, tapered
+// shaft, a cantilevered control room with a lit window band and walkway, and a sensor deck with a rotating radar.
+function commandTower(g) {
+  const oct = (rt, rb, h, mat, y) => g.add(mesh(new THREE.CylinderGeometry(rt, rb, h, 8), mat, 0, y, 0));
+  // plinth and landing pylons (the intro animates pylon.scale.y, origin at the top)
+  oct(2.3, 2.55, 0.5, M.dark, 0.25);
+  oct(2.1, 2.3, 0.35, M.gunmetal, 0.67);
+  const pylons = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const geo = new THREE.BoxGeometry(0.34, 2.6, 0.34);
+    geo.translate(0, -1.3, 0);
+    const py = mesh(geo, M.metal, sx * 1.6, 2.6, sz * 1.6);
+    g.add(py);
+    pylons.push(py);
+    g.add(mesh(new THREE.BoxGeometry(0.5, 0.3, 0.5), M.dark, sx * 1.6, 2.6, sz * 1.6));          // pylon housing
+    const strut = mesh(new THREE.BoxGeometry(0.16, 0.16, 1.1), M.gunmetal, sx * 1.22, 2.3, sz * 1.22);
+    strut.rotation.y = Math.atan2(sx, sz);
+    g.add(strut);
+  }
+
+  // bunker block: sloped armour, blast door, reactor vents glowing through slats, hazard trim
+  oct(1.55, 1.95, 1.7, M.olive, 1.7);
+  oct(1.65, 1.6, 0.18, M.dark, 2.62);
+  for (let k = 0; k < 4; k++) {
+    const a = k * Math.PI / 2;
+    const face = new THREE.Group();
+    face.rotation.y = a;
+    face.add(mesh(new THREE.BoxGeometry(0.9, 0.5, 0.06), M.core, 0, 1.75, 1.66));                 // reactor glow
+    for (let v = 0; v < 4; v++) face.add(mesh(new THREE.BoxGeometry(1.0, 0.06, 0.12), M.black, 0, 1.56 + v * 0.13, 1.7));
+    face.add(mesh(new THREE.BoxGeometry(1.2, 0.08, 0.1), M.amber, 0, 1.2, 1.84));
+    g.add(face);
+  }
+  const door = new THREE.Group();
+  door.rotation.y = Math.PI / 4;
+  door.add(mesh(new THREE.BoxGeometry(0.8, 1.0, 0.14), M.gunmetal, 0, 1.38, 1.78));
+  door.add(mesh(new THREE.BoxGeometry(0.04, 1.0, 0.16), M.black, 0, 1.38, 1.79));
+  door.add(mesh(new THREE.BoxGeometry(0.96, 0.1, 0.2), M.amber, 0, 1.95, 1.76));
+  g.add(door);
+
+  // shaft with panel bands and an external conduit run
+  oct(0.95, 1.2, 3.0, M.metal, 4.2);
+  for (const y of [3.2, 4.2, 5.2]) oct(1.12 - (y - 3.2) * 0.075, 1.14 - (y - 3.2) * 0.075, 0.12, M.dark, y);
+  for (const a of [0.4, 2.5, 4.6]) {
+    g.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.9, 6), M.cable, Math.sin(a) * 1.13, 4.2, Math.cos(a) * 1.13));
+  }
+  for (let k = 0; k < 3; k++) g.add(mesh(new THREE.BoxGeometry(0.22, 0.14, 0.05), M.window, 0, 3.6 + k * 0.7, 1.09 - k * 0.055));   // slit windows
+
+  // control room: cantilevered cab, lit window band with mullions, roof overhang, walkway and railing
+  oct(1.45, 1.0, 0.5, M.dark, 5.9);                                                                // corbel
+  oct(1.85, 1.45, 1.0, M.olive, 6.65);
+  const band = mesh(new THREE.CylinderGeometry(1.8, 1.6, 0.5, 8, 1, true), M.window, 0, 6.72, 0);
+  band.scale.set(1.012, 1, 1.012);
+  g.add(band);
+  const tilt = Math.atan((1.8 - 1.6) / 0.5);
+  for (let k = 0; k < 16; k++) {
+    const a = k * Math.PI / 8, corner = k % 2 === 0;
+    const pivot = new THREE.Group();
+    pivot.rotation.y = a;
+    const r = (corner ? 1.7 : 1.7 * Math.cos(Math.PI / 8)) * 1.015;
+    const bar = mesh(new THREE.BoxGeometry(corner ? 0.12 : 0.05, 0.56, 0.06), M.black, 0, 6.72, r);
+    bar.rotation.x = tilt;
+    pivot.add(bar);
+    g.add(pivot);
+  }
+  oct(2.05, 1.95, 0.16, M.dark, 7.23);                                                             // roof overhang
+  oct(1.7, 1.9, 0.14, M.gunmetal, 7.38);
+  g.add(mesh(new THREE.TorusGeometry(1.75, 0.05, 6, 8), M.gunmetal, 0, 6.18, 0).rotateX(Math.PI / 2));   // walkway
+  g.add(mesh(new THREE.TorusGeometry(1.8, 0.025, 5, 8), M.amber, 0, 6.5, 0).rotateX(Math.PI / 2));       // railing
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4;
+    g.add(mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.34, 5), M.dark, Math.sin(a) * 1.8, 6.34, Math.cos(a) * 1.8));
+  }
+
+  // sensor deck: rotating radar, comms dome, dish, whip antennas with beacons
+  const radar = new THREE.Group();
+  radar.position.set(0, 7.45, 0);
+  radar.add(mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.5, 8), M.gunmetal, 0, 0.25, 0));
+  radar.add(mesh(new THREE.BoxGeometry(0.3, 0.2, 0.3), M.dark, 0, 0.55, 0));
+  const panel = mesh(new THREE.BoxGeometry(2.0, 0.6, 0.08), M.white, 0, 0.85, 0.12);
+  panel.rotation.x = -0.18;
+  radar.add(panel);
+  radar.add(mesh(new THREE.BoxGeometry(2.04, 0.06, 0.12), M.dark, 0, 1.15, 0.07));
+  for (const x of [-0.66, 0, 0.66]) radar.add(mesh(new THREE.BoxGeometry(0.05, 0.62, 0.1), M.dark, x, 0.85, 0.1));
+  radar.add(mesh(new THREE.BoxGeometry(0.1, 0.1, 0.5), M.gunmetal, 0, 0.62, -0.2));
+  g.add(radar);
+  g.add(mesh(new THREE.SphereGeometry(0.34, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.white, -1.0, 7.45, 0.75));   // radome
+  const dish = new THREE.Group();
+  dish.position.set(1.05, 7.75, -0.7);
+  dish.rotation.set(-0.7, 0.9, 0);
+  dish.add(mesh(new THREE.SphereGeometry(0.34, 12, 8, 0, Math.PI * 2, 0, 1.0), M.white).rotateX(Math.PI));
+  dish.add(mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.4, 5), M.dark, 0, -0.15, 0));
+  g.add(dish);
+  g.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4, 6), M.dark, 1.05, 7.6, -0.7));
+  for (const [x, z, h] of [[-0.9, -0.9, 1.9], [0.85, 0.95, 1.3]]) {
+    g.add(mesh(new THREE.CylinderGeometry(0.018, 0.03, h, 5), M.dark, x, 7.45 + h / 2, z));
+    g.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), M.lens, x, 7.45 + h, z));
+  }
+  g.add(mesh(new THREE.BoxGeometry(0.5, 0.26, 0.4), M.gunmetal, -0.2, 7.58, -1.1));                // equipment locker
+
+  Object.assign(g.userData, { pylons, spin: radar, fairing: launchFairing(g) });
+}
+
+// Re-entry fairing: a four-petal aeroshell over the control room and sensor deck so the Core arrives looking like
+// a rocket stage. Each petal is a group pivoted at its own centre of mass; the intro blows them off after landing.
+function launchFairing(g) {
+  const R = 2.32, Y0 = 5.05, Y1 = 5.75, Y2 = 8.3, Y3 = 13.0;
+  const profile = (from, to, off = 0) => {
+    const pts = [];
+    if (from === 0) pts.push(new THREE.Vector2(1.3 + off, Y0), new THREE.Vector2(R + off, Y1));
+    for (let k = Math.max(0, from); k <= to; k++) {
+      const u = k / 14;
+      pts.push(new THREE.Vector2(Math.max(0.001, R * (1 - Math.pow(u, 1.45))) + off, Y2 + (Y3 - Y2) * u));
+    }
+    return pts;
+  };
+  const petals = [];
+  for (let k = 0; k < 4; k++) {
+    const a0 = k * Math.PI / 2 + 0.014, len = Math.PI / 2 - 0.028, am = k * Math.PI / 2 + Math.PI / 4;
+    const c = new THREE.Vector3(Math.sin(am) * 1.35, 8.0, Math.cos(am) * 1.35);
+    const petal = new THREE.Group();
+    petal.position.copy(c);
+    const part = (geo, mat) => { geo.translate(-c.x, -c.y, -c.z); const m = new THREE.Mesh(geo, mat); petal.add(m); return m; };
+    part(new THREE.LatheGeometry(profile(0, 10), 10, a0, len), M.fairing);
+    part(new THREE.LatheGeometry(profile(10, 14), 10, a0, len), M.fairingTip);                       // scorched nose cap
+    const band = (y, h, mat) => {
+      const geo = new THREE.CylinderGeometry(R + 0.02, R + 0.02, h, 10, 1, true, a0, len);
+      geo.translate(0, y, 0);
+      part(geo, mat);
+    };
+    band(5.95, 0.22, M.fairingTip);
+    band(6.35, 0.1, M.fairingStripe);
+    band(8.12, 0.16, M.fairingTip);
+    // separation bolts along the base ring and a hazard chevron plate on the petal face
+    for (const da of [-0.55, 0, 0.55]) {
+      const geo = new THREE.BoxGeometry(0.16, 0.16, 0.1);
+      geo.translate(0, 5.8, R + 0.03);
+      geo.rotateY(am + da);
+      part(geo, M.fairingStripe);
+    }
+    const plate = new THREE.BoxGeometry(0.7, 0.9, 0.06);
+    plate.translate(0, 7.3, R + 0.0);
+    plate.rotateY(am);
+    part(plate, M.fairingTip);
+    petal.userData.am = am;
+    g.add(petal);
+    petals.push(petal);
+  }
+  return petals;
+}
+
+// Wall: a central post plus four thin arms reaching to the tile edges. Only the arms that lead to a neighbouring wall
+// are shown (setWallLinks), so runs, corners, T-junctions and crossings all join up.
+function wallSegment(g) {
+  g.add(mesh(new THREE.BoxGeometry(0.72, 1.7, 0.72), M.metal, 0, 0.85, 0));
+  g.add(mesh(new THREE.BoxGeometry(0.86, 0.16, 0.86), M.dark, 0, 1.76, 0));
+  g.add(mesh(new THREE.BoxGeometry(0.9, 0.22, 0.9), M.dark, 0, 0.11, 0));
+  g.add(mesh(new THREE.BoxGeometry(0.3, 0.06, 0.3), M.amber, 0, 1.86, 0));
+  const arms = {};
+  for (const [key, dx, dz] of [['e', 1, 0], ['w', -1, 0], ['s', 0, 1], ['n', 0, -1]]) {
+    const arm = new THREE.Group();
+    arm.rotation.y = Math.atan2(-dz, dx);                    // local +x points at the neighbour
+    arm.add(mesh(new THREE.BoxGeometry(0.72, 1.35, 0.42), M.metal, 0.68, 0.675, 0));
+    arm.add(mesh(new THREE.BoxGeometry(0.72, 0.14, 0.54), M.dark, 0.68, 1.42, 0));
+    arm.add(mesh(new THREE.BoxGeometry(0.72, 0.2, 0.56), M.dark, 0.68, 0.1, 0));
+    arm.add(mesh(new THREE.BoxGeometry(0.5, 0.5, 0.46), M.gunmetal, 0.66, 0.8, 0));   // recessed armour panel
+    g.add(arm);
+    arms[key] = arm;
+  }
+  g.userData.arms = arms;
+  g.scale.y = 0.75;                                        // low barrier: post tops out around 1.4 units
+  setWallLinks(g, {});
+}
+
+// links: { n, e, s, w } booleans for neighbouring walls. A lone wall or a run's end piece still spans its tile.
+export function setWallLinks(g, links) {
+  const arms = g.userData.arms;
+  if (!arms) return;
+  let { n, e, s, w } = links;
+  const count = !!n + !!e + !!s + !!w;
+  if (count === 0) e = w = true;
+  else if (count === 1) { if (n || s) n = s = true; else e = w = true; }
+  arms.n.visible = !!n; arms.e.visible = !!e; arms.s.visible = !!s; arms.w.visible = !!w;
 }
 
 export function makeBuildingMesh(type) {
   const g = new THREE.Group();
   switch (type) {
-    case 'wall': {
-      g.add(mesh(new THREE.BoxGeometry(1.9, 1.5, 1.9), M.metal, 0, 0.75, 0));
-      g.add(mesh(new THREE.BoxGeometry(2.0, 0.25, 2.0), M.dark, 0, 1.6, 0));
-      break;
-    }
+    case 'wall': wallSegment(g); break;
+    case 'heli': makeHelipad(g); break;
+    case 'airship': makeAirshipPad(g); break;
     case 'hmg': hmg(g); break;
     case 'flame': flamethrower(g); break;
     case 'mortar': mortarPit(g); break;
@@ -463,23 +703,7 @@ export function makeBuildingMesh(type) {
       g.add(mesh(new THREE.SphereGeometry(0.08, 8, 6), M.cyan, 0.7, 2.0, 0.7));
       break;
     }
-    case 'core': {
-      g.add(mesh(new THREE.CylinderGeometry(2.2, 2.5, 0.8, 8), M.dark, 0, 0.4, 0));
-      g.add(mesh(new THREE.CylinderGeometry(1.2, 1.6, 1.4, 8), M.metal, 0, 1.5, 0));
-      const pylons = [];
-      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-        const geo = new THREE.BoxGeometry(0.3, 2.6, 0.3);
-        geo.translate(0, -1.3, 0);                       // origin at the top: scale.y extends it downward
-        const py = mesh(geo, M.metal, sx * 1.6, 2.6, sz * 1.6);
-        g.add(py);
-        pylons.push(py);
-      }
-      g.userData.pylons = pylons;
-      const orb = mesh(new THREE.IcosahedronGeometry(0.8, 1), M.core, 0, 3.0, 0);
-      g.add(orb);
-      g.userData.spin = orb;
-      break;
-    }
+    case 'core': commandTower(g); break;
   }
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   return g;
@@ -629,25 +853,27 @@ export function makeBugMesh(def) {
   return g;
 }
 
-// Billboard HP bars: two sprites, foreground anchored at its left edge so it shrinks from the right.
-const barBg = new THREE.SpriteMaterial({ color: 0x1a0000, depthTest: false, depthWrite: false });
-const barFg = new THREE.SpriteMaterial({ color: 0x44dd44, depthTest: false, depthWrite: false });
+// Billboard HP bars: two sprites at the same position. The fill keeps its left edge on the background's left
+// edge by shifting its centre anchor (evaluated in screen space), so it stays aligned at any camera angle.
+const barBg = new THREE.SpriteMaterial({ color: 0x1a0000, depthTest: false, depthWrite: false, transparent: true });
+const barFg = new THREE.SpriteMaterial({ color: 0x44dd44, depthTest: false, depthWrite: false, transparent: true });
 export function makeHpBar(width = 1.2) {
   const g = new THREE.Group();
   const bg = new THREE.Sprite(barBg);
-  bg.scale.set(width, 0.12, 1);
+  bg.scale.set(width + 0.06, 0.15, 1);
   const fg = new THREE.Sprite(barFg);
-  fg.center.set(0, 0.5);
-  fg.position.x = -width / 2;
   fg.scale.set(width, 0.09, 1);
-  bg.renderOrder = 10;
-  fg.renderOrder = 11;
+  bg.renderOrder = 20;
+  fg.renderOrder = 21;
   g.add(bg, fg);
   g.userData = { fg, width };
   return g;
 }
 export function setHpBar(bar, ratio) {
-  bar.userData.fg.scale.x = Math.max(0.001, bar.userData.width * Math.max(0, ratio));
+  const r = Math.min(1, Math.max(0.001, ratio));
+  const { fg, width } = bar.userData;
+  fg.scale.x = width * r;
+  fg.center.x = 0.5 / r;                    // left edge stays at -width/2 on screen
 }
 
 const shellGeo = new THREE.SphereGeometry(0.16, 6, 5);

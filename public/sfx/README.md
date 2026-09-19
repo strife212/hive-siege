@@ -29,14 +29,22 @@ One-shot sounds (played once per event):
 | silo_hatch          | Missile Silo hatches opening                         |
 | railgun_charge      | Railgun Battery 3 s charge                           |
 | railgun_fire        | Railgun Battery bolt                                 |
+| boss_roar           | Colossus emerging and dying                          |
+| boss_step           | each Colossus footfall                               |
+| hub_land            | Core touchdown in the intro                          |
 | nuke_beep           | countdown tick (`hi` on the last 3 seconds)          |
 | nuke_launch         | ICBM launch                                          |
+| archangel_charge    | Archangel Lance wind-up (~9.5 s rising drone)        |
+| nuke_rumble         | long rolling boom and echoes after the detonation    |
 | nuke_impact         | nuclear detonation                                   |
 
 Looping sounds (started and stopped by the game; files should loop cleanly):
 
 | name           | used by                                  |
 | -------------- | ---------------------------------------- |
+| airship_engine | Titan airship while airborne             |
+| vtol_jet       | Gunship Pad VTOL while airborne          |
+| hub_thruster   | Core descent engines in the intro        |
 | laser_beam     | Laser Tower while it has a target        |
 | orbital_laser  | Orbital Laser for its 6 s duration       |
 | flame_loop     | Flamethrower while it is spraying        |

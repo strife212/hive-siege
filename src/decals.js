@@ -44,8 +44,8 @@ function ensureTextures() {
   return textures;
 }
 
-function patchGeometry(x, z, size, angle) {
-  const geo = new THREE.PlaneGeometry(size, size, 6, 6);
+function patchGeometry(x, z, size, angle, segs = 6) {
+  const geo = new THREE.PlaneGeometry(size, size, segs, segs);
   geo.rotateX(-Math.PI / 2);
   geo.rotateY(angle);
   const p = geo.attributes.position;
@@ -57,19 +57,22 @@ function patchGeometry(x, z, size, angle) {
   return geo;
 }
 
-function addDecal(scene, x, z, size, color) {
-  if (frameBudget <= 0) return;
+// o: hold / fade (seconds), opacity, rough, segs (drape resolution for big marks), glow (ember light that dies away
+// over `glow` seconds), force (skip the per-frame budget)
+function addDecal(scene, x, z, size, color, o = {}) {
+  if (frameBudget <= 0 && !o.force) return;
   frameBudget--;
   const tex = ensureTextures();
   const mat = new THREE.MeshStandardMaterial({
-    color, alphaMap: tex[Math.floor(Math.random() * tex.length)], transparent: true, opacity: 1,
-    roughness: 0.25, metalness: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    color, alphaMap: tex[Math.floor(Math.random() * tex.length)], transparent: true, opacity: o.opacity ?? 1,
+    emissive: o.glow ? 0xff5a18 : 0x000000, emissiveIntensity: o.glow ? (o.glowI ?? 1.6) : 0,
+    roughness: o.rough ?? 0.25, metalness: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   });
-  const mesh = new THREE.Mesh(patchGeometry(x, z, size, Math.random() * Math.PI * 2), mat);
+  const mesh = new THREE.Mesh(patchGeometry(x, z, size, Math.random() * Math.PI * 2, o.segs), mat);
   mesh.position.set(x, 0, z);
   mesh.renderOrder = 1;
   scene.add(mesh);
-  decals.push({ mesh, t: 0 });
+  decals.push({ mesh, t: 0, hold: o.hold ?? HOLD, fade: o.fade ?? FADE, op: o.opacity ?? 1, glow: o.glow ?? 0, glowI: o.glowI ?? 1.6 });
   if (decals.length > MAX_DECALS) removeDecal(scene, decals.shift());
 }
 
@@ -95,12 +98,18 @@ export function spawnScorch(scene, x, z, size) {
   addDecal(scene, x, z, size, new THREE.Color(0x1a1512));
 }
 
+// Long-lived burn scar for the big stuff (nuke): matte, finely draped, optionally glowing like embers at first.
+export function spawnScar(scene, x, z, size, o = {}) {
+  addDecal(scene, x, z, size, new THREE.Color(o.color ?? 0x120e0c), { rough: 0.95, segs: Math.min(28, Math.max(6, Math.round(size / 1.2))), force: true, ...o });
+}
+
 export function updateDecals(scene, dt) {
   frameBudget = PER_FRAME;
   for (let k = decals.length - 1; k >= 0; k--) {
     const d = decals[k];
     d.t += dt;
-    if (d.t >= HOLD + FADE) { removeDecal(scene, d); decals.splice(k, 1); continue; }
-    if (d.t > HOLD) d.mesh.material.opacity = 1 - (d.t - HOLD) / FADE;
+    if (d.t >= d.hold + d.fade) { removeDecal(scene, d); decals.splice(k, 1); continue; }
+    if (d.t > d.hold) d.mesh.material.opacity = d.op * (1 - (d.t - d.hold) / d.fade);
+    if (d.glow) d.mesh.material.emissiveIntensity = d.glowI * Math.max(0, 1 - d.t / d.glow) ** 2;
   }
 }

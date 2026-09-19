@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { sampleTerrain, EXTENT } from './terrain.js';
+import { sampleTerrain, EXTENT, isScenery } from './terrain.js';
 import { HALF, FLAT } from './config.js';
 
 // Instanced decoration: low-poly rocks everywhere (bigger in the mountains) and glowing crystals on moss.
@@ -36,7 +36,7 @@ export function createScatter() {
     if (r < 7) continue;
     const d = Math.max(Math.abs(x), Math.abs(z));
     const t = sampleTerrain(x, z);
-    const outside = d > FLAT + 3;
+    const outside = isScenery(x, z);
     if (rocks.length < 1300 && rnd() < 0.12 + 0.8 * t.rock + (outside ? 0.35 : 0)) {
       const base = outside ? 0.8 + rnd() * 2.6 : d > HALF + 3 ? 0.3 + rnd() * 0.9 : 0.22 + rnd() * 0.55;
       rocks.push({ x, z, y: t.h - base * 0.25, sx: base * (0.7 + rnd() * 0.6), sy: base * (0.5 + rnd() * 0.5), sz: base * (0.7 + rnd() * 0.6), rot: rnd() * Math.PI * 2 });

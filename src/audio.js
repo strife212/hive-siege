@@ -5,8 +5,17 @@
 // Sound names: see SYNTH below (hmg_fire, autocannon_fire, laser_beam, lance_charge, lance_impact,
 // orbital_laser, jet_flyby, rocket_launch, explosion, artillery_whistle, nuke_beep, nuke_launch, nuke_impact).
 
+// Default mute: always on inside the Claude desktop app's browser pane (the automated test environment, detected by
+// its user agent) and never remembered there; everywhere else the player's last choice is kept in localStorage.
+const MUTE_KEY = 'hive-siege-muted';
+const TEST_ENV = typeof navigator !== 'undefined' && /\bClaude\//.test(navigator.userAgent);
+function initialMute() {
+  if (TEST_ENV) return true;
+  try { return localStorage.getItem(MUTE_KEY) === '1'; } catch { return false; }
+}
+
 const state = {
-  ctx: null, master: null, muted: false, volume: 0.8,
+  ctx: null, master: null, muted: initialMute(), volume: 0.8, muteListeners: [],
   assets: {}, last: {}, listener: { x: 0, z: 0 },
   pending: [],
 };
@@ -14,15 +23,41 @@ const state = {
 // ---------------------------------------------------------------- context / assets
 function ensure() {
   if (state.ctx) return state.ctx;
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const ctx = state.offline ? new OfflineAudioContext(2, Math.ceil(48000 * state.offline), 48000) : new (window.AudioContext || window.webkitAudioContext)();
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -12; comp.knee.value = 20; comp.ratio.value = 6; comp.attack.value = 0.003; comp.release.value = 0.2;
   const master = ctx.createGain();
   master.gain.value = state.muted ? 0 : state.volume;
   master.connect(comp).connect(ctx.destination);
   state.ctx = ctx; state.master = master;
-  loadAssets();
+  state.assetsReady = loadAssets();
   return ctx;
+}
+
+// Strip leading silence (encoder padding and slack before the hit would make fast weapons sound late) and any
+// dead air after the tail. Returns a new buffer with a 5 ms fade on the cut end.
+function trimSilence(ctx, buf) {
+  const n = buf.length, chs = buf.numberOfChannels;
+  let peak = 0;
+  for (let c = 0; c < chs; c++) { const d = buf.getChannelData(c); for (let i = 0; i < n; i++) { const v = Math.abs(d[i]); if (v > peak) peak = v; } }
+  if (peak < 1e-4) return buf;
+  let a = n, b = 0;
+  for (let c = 0; c < chs; c++) {
+    const d = buf.getChannelData(c);
+    let i = 0; while (i < n && Math.abs(d[i]) < peak * 0.02) i++;
+    let j = n - 1; while (j > i && Math.abs(d[j]) < peak * 0.004) j--;
+    a = Math.min(a, i); b = Math.max(b, j);
+  }
+  a = Math.max(0, a - Math.round(buf.sampleRate * 0.002));
+  b = Math.min(n, b + Math.round(buf.sampleRate * 0.02));
+  if (a === 0 && b >= n) return buf;
+  const out = ctx.createBuffer(chs, b - a, buf.sampleRate), fade = Math.min(b - a, Math.round(buf.sampleRate * 0.005));
+  for (let c = 0; c < chs; c++) {
+    const d = out.getChannelData(c);
+    d.set(buf.getChannelData(c).subarray(a, b));
+    for (let k = 0; k < fade; k++) d[d.length - 1 - k] *= k / fade;
+  }
+  return out;
 }
 
 async function loadAssets() {
@@ -35,7 +70,7 @@ async function loadAssets() {
       try {
         const r = await fetch(`${base}sfx/${file}`);
         if (!r.ok) continue;
-        state.assets[name] = await state.ctx.decodeAudioData(await r.arrayBuffer());
+        state.assets[name] = trimSilence(state.ctx, await state.ctx.decodeAudioData(await r.arrayBuffer()));
         console.info(`[sfx] using asset for ${name}: ${file}`);
       } catch (e) { console.warn(`[sfx] could not load ${file}`, e); }
     }
@@ -129,6 +164,23 @@ const SYNTH = {
     noise(c, o, t, { dur: 0.6, type: 'bandpass', f0: 1800, f1: 300, q: 0.9, gain: 0.4, a: 0.01 });
     osc(c, o, t, { type: 'sine', f0: 320, f1: 90, dur: 0.3, gain: 0.15 });
   } },
+  boss_roar: { min: 0.5, fn: (c, o, t) => {                 // Colossus: guttural bellow with a shrieking overtone
+    osc(c, o, t, { type: 'sawtooth', f0: 95, f1: 42, dur: 1.9, gain: 0.55, a: 0.12, lp: 420 });
+    osc(c, o, t + 0.05, { type: 'square', f0: 61, f1: 33, dur: 1.8, gain: 0.3, a: 0.2, lp: 260 });
+    osc(c, o, t + 0.15, { type: 'sawtooth', f0: 620, f1: 240, dur: 1.3, gain: 0.09, a: 0.3, lp: 1800 });
+    noise(c, o, t, { dur: 1.8, type: 'bandpass', f0: 900, f1: 260, q: 1.2, gain: 0.35, a: 0.25 });
+  } },
+  boss_step: { min: 0.08, fn: (c, o, t) => {                // one spindly leg coming down
+    osc(c, o, t, { type: 'sine', f0: 70, f1: 30, dur: 0.28, gain: 0.7 });
+    noise(c, o, t, { dur: 0.22, type: 'lowpass', f0: 700, f1: 120, gain: 0.35 });
+  } },
+  hub_land: { fn: (c, o, t) => {                          // Core touchdown: ground thud, dust wash, hull clank
+    osc(c, o, t, { type: 'sine', f0: 85, f1: 24, dur: 1.1, gain: 1.0 });
+    noise(c, o, t, { dur: 1.6, type: 'lowpass', f0: 1400, f1: 90, gain: 0.7 });
+    noise(c, o, t, { dur: 0.09, type: 'bandpass', f0: 2400, q: 2, gain: 0.3, a: 0.001 });
+    osc(c, o, t + 0.02, { type: 'square', f0: 210, f1: 150, dur: 0.35, gain: 0.08, lp: 900 });
+    osc(c, o, t + 0.22, { type: 'sine', f0: 60, f1: 30, dur: 0.5, gain: 0.35 });        // settle bounce
+  } },
   explosion: { min: 0.04, fn: (c, o, t, p) => {
     const s = p.size ?? 1;
     osc(c, o, t, { type: 'sine', f0: 110 / Math.sqrt(s), f1: 28, dur: 0.5 * s, gain: 0.8 });
@@ -173,6 +225,22 @@ const SYNTH = {
     noise(c, o, t, { dur: 1.6, type: 'lowpass', f0: 600, f1: 300, gain: 0.7, a: 1.0 });
     osc(c, o, t, { type: 'sawtooth', f0: 38, f1: 30, dur: 1.6, gain: 0.35, a: 0.8, lp: 140 });
   } },
+  archangel_charge: { fn: (c, o, t) => {                   // ~9.5 s: a choir-like rising drone with a building hiss
+    osc(c, o, t, { type: 'sawtooth', f0: 55, f1: 196, a: 9.3, dur: 0.3, gain: 0.4, lp: 900 });          // long attack = a swell
+    osc(c, o, t, { type: 'sawtooth', f0: 82.5, f1: 294, a: 9.3, dur: 0.3, gain: 0.26, lp: 1200 });
+    osc(c, o, t + 1, { type: 'sine', f0: 220, f1: 784, a: 8.3, dur: 0.3, gain: 0.2 });
+    osc(c, o, t + 3, { type: 'sine', f0: 440, f1: 1568, a: 6.3, dur: 0.3, gain: 0.1 });
+    noise(c, o, t, { a: 9.3, dur: 0.3, type: 'bandpass', f0: 500, f1: 5200, q: 1.4, gain: 0.4 });
+  } },
+  nuke_rumble: { fn: (c, o, t) => {                        // the long rolling boom after the crack, with two echoes off the hills
+    osc(c, o, t + 0.05, { type: 'sine', f0: 44, f1: 19, dur: 6.5, gain: 1.0, a: 0.04 });
+    osc(c, o, t + 0.1, { type: 'triangle', f0: 72, f1: 28, dur: 4.2, gain: 0.55, a: 0.05 });
+    noise(c, o, t + 0.05, { dur: 7.5, type: 'lowpass', f0: 900, f1: 38, gain: 0.85, a: 0.08 });
+    for (const [dl, gn] of [[1.1, 0.7], [2.3, 0.5], [3.8, 0.32]]) {
+      osc(c, o, t + dl, { type: 'sine', f0: 58, f1: 22, dur: 1.6, gain: gn, a: 0.02 });
+      noise(c, o, t + dl, { dur: 1.9, type: 'lowpass', f0: 1400, f1: 60, gain: gn * 0.7, a: 0.02 });
+    }
+  } },
   nuke_impact: { fn: (c, o, t) => {
     noise(c, o, t, { dur: 0.35, gain: 1.0, a: 0.002 });
     noise(c, o, t, { dur: 4.5, type: 'lowpass', f0: 7000, f1: 45, gain: 0.9, a: 0.01 });
@@ -212,6 +280,80 @@ const LOOPS = {
     nodes.forEach((x) => x.start());
     return { gain: g, level: 0.4, nodes };
   },
+};
+
+// Core descent engines: sub rumble, broadband roar and a crackle riding on top.
+LOOPS.hub_thruster = (c, out) => {
+  const g = c.createGain(); g.gain.value = 0; g.connect(out);
+  const n = c.createBufferSource(); n.buffer = noiseBuffer(c); n.loop = true;
+  const low = c.createBiquadFilter(); low.type = 'lowpass'; low.frequency.value = 260;
+  const lowG = c.createGain(); lowG.gain.value = 1.0; n.connect(low).connect(lowG).connect(g);
+  const mid = c.createBiquadFilter(); mid.type = 'bandpass'; mid.frequency.value = 900; mid.Q.value = 0.6;
+  const midG = c.createGain(); midG.gain.value = 0.35; n.connect(mid).connect(midG).connect(g);
+  const hi = c.createBiquadFilter(); hi.type = 'highpass'; hi.frequency.value = 3200;
+  const hiG = c.createGain(); hiG.gain.value = 0.06; n.connect(hi).connect(hiG).connect(g);
+  const sub = c.createOscillator(); sub.type = 'sawtooth'; sub.frequency.value = 46;
+  const subF = c.createBiquadFilter(); subF.type = 'lowpass'; subF.frequency.value = 120;
+  const subG = c.createGain(); subG.gain.value = 0.35; sub.connect(subF).connect(subG).connect(g);
+  const am1 = c.createOscillator(); am1.frequency.value = 23; const a1 = c.createGain(); a1.gain.value = 0.18; am1.connect(a1).connect(midG.gain);
+  const am2 = c.createOscillator(); am2.frequency.value = 3.1; const a2 = c.createGain(); a2.gain.value = 0.2; am2.connect(a2).connect(lowG.gain);
+  const nodes = [n, sub, am1, am2];
+  nodes.forEach((x) => x.start());
+  return { gain: g, level: 0.5, nodes };
+};
+
+// Airship: slow, heavy propeller drone with a beating sub and a little wind.
+LOOPS.airship_engine = (c, out) => {
+  const g = c.createGain(); g.gain.value = 0; g.connect(out);
+  const nodes = [];
+  for (const [f, gn] of [[41, 0.5], [43.5, 0.4], [82, 0.16]]) {
+    const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 240;
+    const og = c.createGain(); og.gain.value = gn; o.connect(lp).connect(og).connect(g); nodes.push(o);
+  }
+  const n = c.createBufferSource(); n.buffer = noiseBuffer(c); n.loop = true;
+  const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 420; bp.Q.value = 0.8;
+  const ng = c.createGain(); ng.gain.value = 0.22;
+  const lfo = c.createOscillator(); lfo.frequency.value = 11; const lg = c.createGain(); lg.gain.value = 0.12; lfo.connect(lg).connect(ng.gain);
+  n.connect(bp).connect(ng).connect(g); nodes.push(n, lfo);
+  nodes.forEach((x) => x.start());
+  return { gain: g, level: 0.4, nodes };
+};
+
+// VTOL gunship: twin lift jets, a broadband roar under a steady turbine whine with a slow beat between the engines.
+LOOPS.vtol_jet = (c, out) => {
+  const g = c.createGain(); g.gain.value = 0; g.connect(out);
+  const n = c.createBufferSource(); n.buffer = noiseBuffer(c); n.loop = true;
+  const low = c.createBiquadFilter(); low.type = 'lowpass'; low.frequency.value = 340; const lowG = c.createGain(); lowG.gain.value = 0.8; n.connect(low).connect(lowG).connect(g);
+  const hiss = c.createBiquadFilter(); hiss.type = 'bandpass'; hiss.frequency.value = 2600; hiss.Q.value = 0.7; const hissG = c.createGain(); hissG.gain.value = 0.16; n.connect(hiss).connect(hissG).connect(g);
+  const nodes = [n];
+  for (const f of [880, 893]) {
+    const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 8;
+    const og = c.createGain(); og.gain.value = 0.03; o.connect(bp).connect(og).connect(g);
+    nodes.push(o);
+  }
+  const lfo = c.createOscillator(); lfo.frequency.value = 5.5; const lg = c.createGain(); lg.gain.value = 0.12; lfo.connect(lg).connect(lowG.gain); nodes.push(lfo);
+  nodes.forEach((x) => x.start());
+  return { gain: g, level: 0.42, nodes };
+};
+
+// Helicopter: blade slap (noise gated at the blade-pass rate) over a turbine whine.
+LOOPS.heli_rotor = (c, out) => {
+  const g = c.createGain(); g.gain.value = 0; g.connect(out);
+  const n = c.createBufferSource(); n.buffer = noiseBuffer(c); n.loop = true;
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520;
+  const chop = c.createGain(); chop.gain.value = 0.5;
+  const lfo = c.createOscillator(); lfo.type = 'sawtooth'; lfo.frequency.value = 19; const lg = c.createGain(); lg.gain.value = 0.5; lfo.connect(lg).connect(chop.gain);
+  n.connect(lp).connect(chop).connect(g);
+  const thump = c.createOscillator(); thump.type = 'sine'; thump.frequency.value = 57; const tg = c.createGain(); tg.gain.value = 0.0;
+  const lg2 = c.createGain(); lg2.gain.value = 0.35; lfo.connect(lg2).connect(tg.gain); thump.connect(tg).connect(g);
+  const whine = c.createOscillator(); whine.type = 'sawtooth'; whine.frequency.value = 1450;
+  const wf = c.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 1500; wf.Q.value = 6;
+  const wg = c.createGain(); wg.gain.value = 0.035; whine.connect(wf).connect(wg).connect(g);
+  const nodes = [n, lfo, thump, whine];
+  nodes.forEach((x) => x.start());
+  return { gain: g, level: 0.45, nodes };
 };
 
 LOOPS.flame_loop = (c, out) => {
@@ -266,6 +408,7 @@ export const audio = {
     };
     addEventListener('pointerdown', unlock);
     addEventListener('keydown', unlock);
+    try { unlock(); } catch { /* stays locked until the first gesture */ }   // usually allowed right after the title-screen click
     addEventListener('keydown', (e) => { if (e.code === 'KeyM') audio.toggleMute(); });
   },
   update() {
@@ -274,20 +417,38 @@ export const audio = {
   toggleMute() {
     state.muted = !state.muted;
     if (state.master) state.master.gain.setTargetAtTime(state.muted ? 0 : state.volume, state.ctx.currentTime, 0.02);
+    if (!TEST_ENV) { try { localStorage.setItem(MUTE_KEY, state.muted ? '1' : '0'); } catch { /* fine */ } }
+    for (const f of state.muteListeners) f(state.muted);
     return state.muted;
   },
+  isMuted: () => state.muted,
+  onMute(f) { state.muteListeners.push(f); f(state.muted); },
   setVolume(v) {
     state.volume = Math.min(1, Math.max(0, v));
     if (state.master && !state.muted) state.master.gain.setTargetAtTime(state.volume, state.ctx.currentTime, 0.02);
   },
-  // One-shot. p: { x, z, vol, delay, size, hi }
+  // One-shot. p: { x, z, vol, delay, size, hi, force, rate, dur } (force skips the per-sound
+  // rate limit; rate and dur only apply when an asset file replaces the synth)
+  // Video capture (record.js): all sound goes into an OfflineAudioContext that is stepped in lockstep with the sim.
+  async beginOffline(seconds, { skip = [], listener } = {}) {
+    state.offline = seconds;
+    state.muted = false;
+    state.skip = new Set(skip);
+    state.paused = true;                                   // silent until record.js starts the take
+    if (listener) state.listener = listener;
+    const ctx = ensure();
+    await state.assetsReady;
+    return ctx;
+  },
+  setPaused(v) { state.paused = v; },
   play(name, p = {}) {
     const ctx = state.ctx;
-    if (!ctx || ctx.state !== 'running') return;
+    if (!ctx || (!state.offline && ctx.state !== 'running')) return;
+    if (state.paused || state.skip?.has(name)) return;
     const def = SYNTH[name];
     if (!def) return;
     const now = ctx.currentTime;
-    if (def.min && state.last[name] && now - state.last[name] < def.min) return;
+    if (!p.force && def.min && state.last[name] && now - state.last[name] < def.min) return;
     state.last[name] = now;
     const t0 = now + (p.delay ?? 0);
     const g = ctx.createGain();
@@ -300,6 +461,11 @@ export const audio = {
       if (p.rate) src.playbackRate.value = p.rate;
       src.connect(g);
       src.start(t0);
+      if (p.dur) {                                           // play only the first p.dur seconds, faded out
+        g.gain.setValueAtTime(g.gain.value, t0 + Math.max(0, p.dur - 0.04));
+        g.gain.linearRampToValueAtTime(0, t0 + p.dur);
+        src.stop(t0 + p.dur + 0.01);
+      }
     } else {
       def.fn(ctx, g, t0, p);
     }
@@ -307,7 +473,8 @@ export const audio = {
   // Sustained sound. Returns a handle with setPos() and stop().
   loop(name, p = {}) {
     const ctx = state.ctx;
-    if (!ctx || ctx.state !== 'running') return null;
+    if (!ctx || (!state.offline && ctx.state !== 'running')) return null;
+    if (state.paused || state.skip?.has(name)) return null;
     const asset = state.assets[name];
     let h;
     if (asset) {
@@ -322,6 +489,7 @@ export const audio = {
     const base = (p.vol ?? 1) * h.level;
     h.gain.gain.setTargetAtTime(base * spatial(p), ctx.currentTime, 0.08);
     return {
+      setVol(v) { h.gain.gain.setTargetAtTime(base * v, ctx.currentTime, 0.08); },
       setPos(x, z) { h.gain.gain.setTargetAtTime(base * spatial({ x, z }), ctx.currentTime, 0.1); },
       stop() {
         h.gain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.06);
