@@ -152,6 +152,24 @@ export function pickTerrain(ray) {
   return null;
 }
 
+// Shaft openings for retracting buildings (retract.js): a coarse mask over the build area that the terrain shader
+// discards against, so a silo is a real hole in the ground. Counted, so overlapping openings can come and go freely.
+const HOLE_RES = 0.25, HOLE_HALF = HALF + 6, HOLE_N = Math.round((HOLE_HALF * 2) / HOLE_RES);
+const holeCount = new Uint8Array(HOLE_N * HOLE_N);
+const holeTex = new THREE.DataTexture(new Uint8Array(HOLE_N * HOLE_N), HOLE_N, HOLE_N, THREE.RedFormat);
+holeTex.magFilter = holeTex.minFilter = THREE.NearestFilter;
+holeTex.needsUpdate = true;
+export function cutHole(x0, z0, x1, z1, open) {
+  const i0 = Math.max(0, Math.round((x0 + HOLE_HALF) / HOLE_RES)), i1 = Math.min(HOLE_N, Math.round((x1 + HOLE_HALF) / HOLE_RES));
+  const j0 = Math.max(0, Math.round((z0 + HOLE_HALF) / HOLE_RES)), j1 = Math.min(HOLE_N, Math.round((z1 + HOLE_HALF) / HOLE_RES));
+  for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
+    const k = j * HOLE_N + i;
+    holeCount[k] = Math.max(0, holeCount[k] + (open ? 1 : -1));
+    holeTex.image.data[k] = holeCount[k] ? 255 : 0;
+  }
+  holeTex.needsUpdate = true;
+}
+
 export function createTerrain(renderer) {
   const n = Math.round((EXTENT * 2) / SPACING) + 1;
   const count = n * n;
@@ -225,6 +243,7 @@ function createTerrainMaterial(renderer) {
       uFlat: { value: FLAT },
       uGrid: { value: 0 },
       uCanyon: { value: MAP === 'canyon' ? 1 : 0 },
+      tHoles: { value: holeTex }, uHoleHalf: { value: HOLE_HALF },
     });
     mat.userData.setGrid = (v) => { shader.uniforms.uGrid.value = v; };
     shader.vertexShader = shader.vertexShader
@@ -239,9 +258,12 @@ function createTerrainMaterial(renderer) {
       .replace('#include <common>', `#include <common>
         uniform sampler2D tSoil, tSoilN, tRock, tRockN, tMoss, tMossN;
         uniform float uBound; uniform float uFlat; uniform float uGrid; uniform float uCanyon;
+        uniform sampler2D tHoles; uniform float uHoleHalf;
         varying vec3 vSplat; varying vec3 vWorldPos; varying vec3 vWNormal;
         vec3 sample2(sampler2D t, vec2 a, vec2 b) { return mix(texture2D(t, a).rgb, texture2D(t, b).rgb, 0.5); }`)
       .replace('#include <map_fragment>', `
+        vec2 holeUv = (vWorldPos.xz + uHoleHalf) / (2.0 * uHoleHalf);
+        if (holeUv.x > 0.0 && holeUv.x < 1.0 && holeUv.y > 0.0 && holeUv.y < 1.0 && texture2D(tHoles, holeUv).r > 0.5) discard;
         vec2 uvA = vWorldPos.xz * 0.22;
         vec2 uvB = vWorldPos.xz * 0.071 + vec2(0.37, 0.71);
         vec3 w = vSplat / max(0.001, vSplat.x + vSplat.y + vSplat.z);

@@ -11,10 +11,10 @@
 
   <div id="sidebar">
     <div class="hud">
-      <div class="stat"><span>CREDITS</span><b id="credits">0</b></div>
+      <div class="stat credits"><span>CREDITS</span><b id="credits">0</b></div>
       <div class="stat"><span>WAVE</span><b id="wave">0</b></div>
       <div class="stat"><span>KILLS</span><b id="kills">0</b></div>
-      <div class="stat wide"><span>CORE INTEGRITY</span><div class="bar"><div id="corehp"></div></div></div>
+      <div class="stat wide" id="coreStat"><span>CORE INTEGRITY</span><em id="corepct">100%</em><div class="bar"><div id="corehp"></div></div></div>
     </div>
     <button id="startWave" class="big">START WAVE 1</button>
     <div class="tabs">
@@ -27,15 +27,8 @@
     <div id="desc"></div>
   </div>
 
+  <div id="dock">
   <div id="log"></div>
-  <div id="help">LMB place / select &nbsp;·&nbsp; LMB drag select troopers &nbsp;·&nbsp; RMB drag rotate &nbsp;·&nbsp; MMB drag / WASD pan &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; Q/E rotate &nbsp;·&nbsp; ESC cancel &nbsp;·&nbsp; M mute</div>
-
-  <div id="overlay" hidden>
-    <h1>THE CORE HAS FALLEN</h1>
-    <p id="overlayStats"></p>
-    <button id="restart" class="big">REBUILD</button>
-  </div>
-
   <div id="debug" hidden>
     <h4>DEBUG</h4>
     <button id="dbgCash">Add 1000 cash</button>
@@ -43,16 +36,33 @@
     <button id="dbgTest">Test map (bug flood)</button>
     <button id="dbgWave">Spawn next wave</button>
     <button id="dbgBoss">Spawn boss</button>
+    <button id="dbgSilo">Retract / deploy all</button>
+    <button id="dbgCore">Core silo (cinematic test)</button>
     <small id="dbgMapName"></small>
   </div>
+  <div id="help">
+    <span><kbd>LMB</kbd>place / select</span><span><kbd>LMB</kbd>drag: select troopers</span><span><kbd>RMB</kbd>rotate</span>
+    <span><kbd>MMB</kbd><kbd>WASD</kbd>pan</span><span><kbd>WHEEL</kbd>zoom</span><span><kbd>Q</kbd><kbd>E</kbd>turn</span>
+    <span><kbd>1</kbd>-<kbd>9</kbd>call-ins</span><span><kbd>R</kbd>retract / deploy</span><span><kbd>ESC</kbd>cancel</span><span><kbd>M</kbd>mute</span>
+  </div>
+  </div>
+
+  <div id="overlay" hidden>
+    <small>MISSION FAILED</small>
+    <h1>THE CORE HAS FALLEN</h1>
+    <p id="overlayStats"></p>
+    <button id="restart" class="big">REBUILD</button>
+  </div>
+
   <button id="mute" title="Mute / unmute (M)"></button>
   <div id="bossbar" hidden><span id="bossname">COLOSSUS</span><div class="track"><div id="bossfill"></div></div></div>
   <div id="wavebanner"><b></b><span></span></div>
+  <div id="strategic"><b></b><span></span></div>
   <div id="selbox"></div>
   <div id="abilities"></div>
   <div id="flash"></div>
   <div id="fade"></div>
-  <div id="deploy"><b>HIVE SIEGE</b><span>CLICK OR PRESS ANY KEY TO DEPLOY</span></div>
+  <div id="deploy"><small>ORBITAL COMMAND</small><b>HIVE SIEGE</b><i></i><span>CLICK OR PRESS ANY KEY TO DEPLOY</span></div>
   <div id="skip">PRESS ANY KEY TO SKIP</div>
 
   <script type="module" src="/src/main.js"></script>

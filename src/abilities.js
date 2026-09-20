@@ -10,17 +10,20 @@ import { audio } from './audio.js';
 import { troopers } from './troopers.js';
 import { bombingRun, lineSpan } from './bomber.js';
 import { EXTENT } from './terrain.js';
+import { strategicStrike } from './strategic.js';
 
 // ---------------------------------------------------------------- definitions
 export const ABILITIES = {
-  lance:     { name: 'Orbital Lance',    key: '1', cooldown: 25, radius: 5.5, desc: 'Orbital beams converge into one devastating strike.' },
-  laser:     { name: 'Orbital Laser',    key: '2', cooldown: 20, radius: 1.65, desc: 'Sustained beam that follows your cursor for 6 s.' },
+  laser:     { name: 'Orbital Laser',    key: '1', cooldown: 20, radius: 1.65, desc: 'Sustained beam that follows your cursor for 6 s.' },
+  lance:     { name: 'Orbital Lance',    key: '2', cooldown: 25, radius: 5.5, desc: 'Orbital beams converge into one devastating strike.' },
   strafe:    { name: 'Strafing Run',     key: '3', cooldown: 25, length: 24, width: 6.6, desc: 'Three jets rake a long strip with rockets and cannon fire.' },
   artillery: { name: 'Artillery Strike', key: '4', cooldown: 25, radius: 7.6, desc: 'Two dozen HE shells rain across the area.' },
-  nuke:      { name: 'Nuclear Strike',   key: '5', cooldown: 60, radius: 13.2, desc: '10 s countdown, then an ICBM levels the whole area. Bugs in the outer ring are set ablaze for 5 s.' },
-  troopers:  { name: 'Shock Troopers',   key: '6', cooldown: 60, radius: 7,  desc: 'Five drop pods slam down and unload three troopers each. Drag to select them, click to move.' },
-  bomber:    { name: 'Strategic Bomber', key: '7', cooldown: 90, width: 9.9, line: true, desc: 'Click a point, then a direction: a heavy bomber carpets that line across the entire map.' },
+  troopers:  { name: 'Shock Troopers',   key: '5', cooldown: 60, radius: 7,  desc: 'Five drop pods slam down and unload three troopers each. Drag to select them, click to move.' },
+  bomber:    { name: 'Strategic Bomber', key: '6', cooldown: 90, width: 9.9, line: true, desc: 'Click a point, then a direction: a heavy bomber carpets that line across the entire map.' },
+  nuke:      { name: 'Tactical Nuke',    key: '7', cooldown: 60, radius: 13.2, desc: '10 s countdown, then an ICBM levels the whole area. Bugs in the outer ring are set ablaze for 5 s.' },
   archangel: { name: 'Archangel Lance',  key: '8', cooldown: 60, radius: 13.2, desc: 'The ultimate orbital strike: a dozen beams spiral inward and merge into one colossal lance that swells until it detonates.' },
+  // instant: no targeting, it fires the moment it is called (the whole map is the target)
+  strategic: { name: 'Strategic Nuclear Strike', key: '9', cooldown: 300, instant: true, desc: 'Last resort. Every structure retracts into its silo, then a 10 s countdown and a giant ICBM hits the centre of the map: everything on the surface dies. The base redeploys once the cloud clears.' },
 };
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -29,7 +32,7 @@ const rnd = (a = 0, b = 1) => a + Math.random() * (b - a);
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const easeOut = (p) => 1 - Math.pow(1 - clamp01(p), 3);
 
-const ab = { scene: null, ui: null, armed: null, anchor: null, cooldowns: {}, effects: [], reticle: null, hover: null, laser: null, buttons: {} };
+const ab = { scene: null, ui: null, camera: null, controls: null, cine: null, armed: null, anchor: null, cooldowns: {}, effects: [], reticle: null, hover: null, laser: null, buttons: {} };
 
 // ---------------------------------------------------------------- terrain-draped shapes
 function gridGeo(nu, nv, fn, lift = 0.12) {
@@ -533,25 +536,27 @@ function makeICBM() {
 // of billows that roll outward around the ring's core like a real vortex, over a domed crown; the stem is a stack
 // that rises under it, with a skirt of ground smoke. It climbs, hangs for several seconds, then thins and drifts.
 const billowGeo = new THREE.IcosahedronGeometry(1, 2);
-function makeMushroom(cx, gy, cz, R) {
+// opts (for the strategic strike's far bigger cloud): top / hold / gone, smooth shading, a fatter stem, more billows.
+export function makeMushroom(cx, gy, cz, R, { top: TOP = 30, hold: HOLD = 12, gone: GONE = CLOUD_GONE, smooth = false, stemK = 1, dense = 1 } = {}) {
   const group = new THREE.Group();
   group.position.set(cx, gy, cz);
-  const mat = (color) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, emissive: 0xff6a20, emissiveIntensity: 0, transparent: true, opacity: 1, flatShading: true });
+  const mat = (color) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, emissive: 0xff6a20, emissiveIntensity: 0, transparent: true, opacity: 1, flatShading: !smooth });
   const mats = { cap: mat(0x4a433e), crown: mat(0x5a524c), stem: mat(0x332e2a), skirt: mat(0x5a5048) };   // dark, sooty smoke
   const DENSITY = 0.9;                                          // never quite opaque
   const parts = [];
   const add = (m, o) => { const b = new THREE.Mesh(billowGeo, m); b.castShadow = false; b.rotation.set(rnd(0, 6), rnd(0, 6), rnd(0, 6)); group.add(b); parts.push({ b, ...o }); };
-  for (let k = 0; k < 18; k++) add(mats.cap, { kind: 'ring', ang: k / 18 * Math.PI * 2 + rnd(-0.1, 0.1), ph: rnd(0, 6.28), size: rnd(0.85, 1.2) });
-  for (let k = 0; k < 9; k++) add(mats.crown, { kind: 'crown', ang: k / 9 * Math.PI * 2, ph: rnd(0, 6.28), size: rnd(0.9, 1.25), r: k === 0 ? 0 : 0.5 });
-  for (let k = 0; k < 12; k++) add(mats.stem, { kind: 'stem', u: k / 11, ang: rnd(0, 6.28), ph: rnd(0, 6.28), size: rnd(0.85, 1.15) });
+  const nRing = Math.round(18 * dense), nCrown = Math.round(9 * dense), nStem = Math.round(12 * dense);
+  for (let k = 0; k < nRing; k++) add(mats.cap, { kind: 'ring', ang: k / nRing * Math.PI * 2 + rnd(-0.1, 0.1), ph: rnd(0, 6.28), size: rnd(0.85, 1.2) });
+  for (let k = 0; k < nCrown; k++) add(mats.crown, { kind: 'crown', ang: k / nCrown * Math.PI * 2, ph: rnd(0, 6.28), size: rnd(0.9, 1.25), r: k === 0 ? 0 : k % 2 ? 0.5 : 0.28 });
+  for (let k = 0; k < nStem; k++) add(mats.stem, { kind: 'stem', u: k / (nStem - 1), ang: rnd(0, 6.28), ph: rnd(0, 6.28), size: rnd(0.85, 1.15) });
   for (let k = 0; k < 12; k++) add(mats.skirt, { kind: 'skirt', ang: k / 12 * Math.PI * 2 + rnd(-0.15, 0.15), ph: rnd(0, 6.28), size: rnd(0.8, 1.2) });
-  const TOP = 30, HOLD = 12, GONE = CLOUD_GONE;                       // starts thinning 12 s after the blast, gone by 20 s
+  const K = TOP / 30;                                           // defaults: starts thinning 12 s after the blast, gone by 20 s
   return {
     group,
     // a = seconds since detonation. Returns false once the cloud has fully dissipated.
     update(a, dt) {
       const rise = easeOut(clamp01(a / 6.5));
-      const top = 5 + (TOP - 5) * rise + Math.max(0, a - 6.5) * 0.35;          // keeps creeping upward as it hangs
+      const top = 5 + (TOP - 5) * rise + Math.max(0, a - 6.5) * 0.35 * K;          // keeps creeping upward as it hangs
       const capR = 3 + (R * 0.95 - 3) * easeOut(clamp01(a / 8));
       const fade = clamp01((a - HOLD) / (GONE - HOLD));                          // 0 while it lingers, 1 when gone
       const thin = 1 - fade * fade * (3 - 2 * fade);
@@ -570,12 +575,12 @@ function makeMushroom(cx, gy, cz, R) {
           q.b.position.set(Math.cos(q.ang) * rr, top + capR * (q.r ? 0.22 : 0.42) + wob * 0.3, Math.sin(q.ang) * rr);
           q.b.scale.setScalar(capR * (q.r ? 0.5 : 0.62) * q.size * grow * (1 + fade * 0.3));
         } else if (q.kind === 'stem') {
-          const yy = q.u * (top - capR * 0.15), w = 1.7 + (1 - q.u) * 1.1 + Math.abs(q.u - 0.5) * 1.2;
-          q.b.position.set(Math.cos(q.ang + a * 0.3) * 0.5, yy, Math.sin(q.ang + a * 0.3) * 0.5);
-          q.b.scale.set(w * q.size * grow, (top / 11) * 1.25 * grow, w * q.size * grow);
+          const yy = q.u * (top - capR * 0.15), w = (1.7 + (1 - q.u) * 1.1 + Math.abs(q.u - 0.5) * 1.2) * K * stemK;
+          q.b.position.set(Math.cos(q.ang + a * 0.3) * 0.5 * K * stemK, yy, Math.sin(q.ang + a * 0.3) * 0.5 * K * stemK);
+          q.b.scale.set(w * q.size * grow, (top / (nStem - 1)) * 1.25 * grow, w * q.size * grow);
         } else {
           const rr = (2 + (R * 0.75 - 2) * easeOut(clamp01(a / 3))) * spread;
-          q.b.position.set(Math.cos(q.ang) * rr, 0.8 + wob * 0.2, Math.sin(q.ang) * rr);
+          q.b.position.set(Math.cos(q.ang) * rr, 0.8 * K + wob * 0.2, Math.sin(q.ang) * rr);
           q.b.scale.set(R * 0.2 * q.size * grow, R * 0.11 * q.size * grow, R * 0.2 * q.size * grow);
         }
         q.b.rotation.y += dt * 0.25 * (q.kind === 'ring' ? 1 : 0.4);
@@ -611,7 +616,7 @@ function nuclearStrike(cx, cz, R) {
   let t = 0, shown = -1, icbm = null, hit = false, ball = null, wave = null, wave2 = null, stemT = 0, capT = 0;
   const start = new THREE.Vector3(cx - 45, gy + 140, cz - 30);
   const target = new THREE.Vector3(cx, gy, cz);
-  log('NUCLEAR STRIKE AUTHORISED. Impact in 10 seconds.', true);
+  log('TACTICAL NUKE AUTHORISED. Impact in 10 seconds.', true);
   return {
     update(dt) {
       t += dt;
@@ -1014,9 +1019,10 @@ function dirFromCore(p) {
 }
 
 export const abilities = {
-  init({ scene, ui }) {
+  init({ scene, ui, camera, controls }) {
     ab.scene = scene;
     ab.ui = ui;
+    ab.camera = camera; ab.controls = controls;
     for (const k of Object.keys(ABILITIES)) ab.cooldowns[k] = 0;
     buildBar();
     addEventListener('keydown', (e) => {
@@ -1026,6 +1032,7 @@ export const abilities = {
     });
   },
   get armed() { return ab.armed; },
+  get cinematic() { return ab.cine; },                          // camera driver while a cinematic strike owns the view (main.js)
   get laserActive() { return !!ab.laser; },
   arm(key) {
     if (ab.cooldowns[key] > 0) return log(`${ABILITIES[key].name} recharging (${Math.ceil(ab.cooldowns[key])} s)`, true);
@@ -1033,6 +1040,11 @@ export const abilities = {
     abilities.cancel();
     ab.ui.cancel();
     ab.ui.showSelected(null);
+    if (ABILITIES[key].instant) {                              // nothing to aim: it goes now
+      ab.effects.push(strategicStrike({ scene: ab.scene, camera: ab.camera, controls: ab.controls, setCinematic: (fn) => { ab.cine = fn; } }));
+      ab.cooldowns[key] = ABILITIES[key].cooldown;
+      return refreshBar();
+    }
     ab.armed = key;
     refreshBar();
   },

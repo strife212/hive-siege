@@ -2,13 +2,14 @@ import { BUILDINGS, RESEARCH } from './config.js';
 import { state, on, startWave, doResearch, sellStructure, hasBuilding, countBuildings, log } from './game.js';
 import { abilities } from './abilities.js';
 import { iconImg } from './icons.js';
+import { retract } from './retract.js';
 
 const $ = (id) => document.getElementById(id);
 
 function card(key, name, cost) {
   const el = document.createElement('div');
   el.className = 'card';
-  el.innerHTML = `<div class="icon">${iconImg(key)}</div><div class="name">${name}</div><div class="cost">$${cost}</div>`;
+  el.innerHTML = `<div class="icon">${iconImg(key)}</div><div class="name">${name}</div><div class="cost">$${cost.toLocaleString('en-US')}</div>`;
   return el;
 }
 
@@ -67,9 +68,11 @@ export function createUI({ onSelectBuild }) {
   $('restart').addEventListener('click', () => location.reload());
 
   // Selected structure panel (built once, text updated per frame)
-  info.innerHTML = '<h3></h3><div class="hp"></div><div class="stats"></div><button>SELL (50%)</button>';
-  const infoName = info.querySelector('h3'), infoHp = info.querySelector('.hp'), infoStats = info.querySelector('.stats');
-  const sellBtn = info.querySelector('button');
+  info.innerHTML = '<h3></h3><div class="hp"><span>INTEGRITY</span><b></b></div><div class="bar"><div></div></div><div class="stats"></div><button class="silo"></button><button class="sell"></button>';
+  const infoName = info.querySelector('h3'), infoHp = info.querySelector('.hp b'), infoBar = info.querySelector('.bar > div'), infoStats = info.querySelector('.stats');
+  const sellBtn = info.querySelector('button.sell'), siloBtn = info.querySelector('button.silo');
+  siloBtn.addEventListener('click', () => { if (selected) retract.toggle(selected); siloBtn.blur(); });
+  addEventListener('keydown', (e) => { if (e.code === 'KeyR' && !e.repeat && selected && selected.type !== 'core' && !state.intro) retract.toggle(selected); });
   sellBtn.addEventListener('click', () => { if (selected) { sellStructure(selected); showSelected(null); } });
 
   function showSelected(s) {
@@ -77,9 +80,10 @@ export function createUI({ onSelectBuild }) {
     info.hidden = !s;
     if (!s) return;
     infoName.textContent = s.name;
-    sellBtn.hidden = s.type === 'core';
+    sellBtn.hidden = siloBtn.hidden = s.type === 'core';
     const d = s.def || {};
-    infoStats.textContent = d.kind === 'flame'
+    sellBtn.textContent = `SELL  +$${Math.floor((d.cost || 0) * 0.5)}`;
+    const stats = d.kind === 'flame'
       ? `Range ${d.range} · Burns ${d.damage}/s for ${d.burn} s · ${d.cone}° cone`
       : d.kind === 'mortar' ? `Range ${d.minRange}-${d.range} · ${d.damage} dmg, ${d.splash} splash · ${d.rate}/s`
       : d.kind === 'missile' ? `Range ${d.range} · ${d.salvo} x ${d.damage} rockets every ${d.interval} s`
@@ -89,6 +93,7 @@ export function createUI({ onSelectBuild }) {
       : d.kind
       ? `Range ${d.range} · Damage ${d.damage} · ${d.rate}/s ${d.kind}`
       : d.income ? `+${d.income} credits / s` : '';
+    infoStats.replaceChildren(...stats.split(' · ').filter(Boolean).map((t) => Object.assign(document.createElement('div'), { textContent: t })));
   }
 
   const logEl = $('log');
@@ -125,19 +130,24 @@ export function createUI({ onSelectBuild }) {
     $('overlayStats').textContent = `Survived ${state.wave} waves · ${state.kills} bugs exterminated`;
   });
 
-  const els = { credits: $('credits'), wave: $('wave'), kills: $('kills'), corehp: $('corehp'), start: $('startWave') };
+  const els = { credits: $('credits'), wave: $('wave'), kills: $('kills'), corehp: $('corehp'), corepct: $('corepct'), start: $('startWave') };
+  const coreStat = $('coreStat');
   const cache = {};
   const setText = (key, v) => { if (cache[key] !== v) { cache[key] = v; els[key].textContent = v; } };
 
   function refresh() {
     updateBanner();
-    setText('credits', Math.floor(state.credits));
+    setText('credits', Math.floor(state.credits).toLocaleString('en-US'));
     setText('wave', state.wave);
-    setText('kills', state.kills);
-    els.corehp.style.width = `${Math.max(0, (state.core.hp / state.core.maxHp) * 100)}%`;
+    setText('kills', state.kills.toLocaleString('en-US'));
+    const core = Math.max(0, state.core.hp / state.core.maxHp);
+    els.corehp.style.width = `${core * 100}%`;
+    setText('corepct', `${Math.ceil(core * 100)}%`);
+    coreStat.classList.toggle('warn', core <= 0.6 && core > 0.3);
+    coreStat.classList.toggle('crit', core <= 0.3);
     els.start.disabled = state.waveActive || state.gameOver;
     setText('start', state.waveActive
-      ? `WAVE ${state.wave} — ${state.enemies.length + state.spawnQueue.length + state.walkQueue.length} BUGS LEFT`
+      ? `WAVE ${state.wave}  •  ${state.enemies.length + state.spawnQueue.length + state.walkQueue.length} HOSTILES`
       : `START WAVE ${state.wave + 1}`);
 
     const labBuilt = hasBuilding('lab');
@@ -155,7 +165,12 @@ export function createUI({ onSelectBuild }) {
     }
     if (selected) {
       if (selected.hp <= 0) showSelected(null);
-      else infoHp.textContent = `HP ${Math.ceil(selected.hp)} / ${selected.maxHp}`;
+      else {
+        const hp = `${Math.ceil(selected.hp)} / ${selected.maxHp}`;
+        if (infoHp.textContent !== hp) { infoHp.textContent = hp; infoBar.style.width = `${(selected.hp / selected.maxHp) * 100}%`; }
+        const label = selected.selling ? 'CLEARING SITE…' : `${retract.label(selected)}  [R]`;
+        if (siloBtn.textContent !== label) { siloBtn.textContent = label; siloBtn.disabled = !!selected.selling; }
+      }
     }
   }
 

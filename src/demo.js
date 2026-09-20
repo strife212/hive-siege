@@ -8,9 +8,10 @@ import { DEPLOY_KEY, RECORD } from './config.js';
 // into the actual game; if the demo Core falls the page reloads and the scene starts over.
 const POPULATION = 330;
 
+let instant = false;                                   // the opening fortress is already standing; later rebuilds deploy normally
 function build(type, i, j) {
   if (!canPlace(type, i, j).ok) return null;
-  return placeStructure(type, i, j);
+  return placeStructure(type, i, j, { instant });
 }
 
 function fortify() {
@@ -48,7 +49,9 @@ export function startDemo({ camera, controls }) {
   for (const q of ud.fairing || []) q.removeFromParent();
   for (const py of ud.pylons || []) py.scale.y = 1.14;
 
+  instant = true;
   fortify();
+  instant = false;
   scatterBugs(POPULATION);
 
   let t = 0, spawnT = 0, repairT = 3, callT = 5, strafeNext = true, leaving = false;

@@ -5,6 +5,7 @@ import { log } from './game.js';
 import { explode } from './effects.js';
 import { puff } from './particles.js';
 import { audio } from './audio.js';
+import { bevelBox, worn } from './surface.js';
 
 // Strategic bomber: a big white six-engined delta (long forward fuselage with canards, drooped wingtips, twin fins,
 // boxy engine nacelle) that crosses the whole map along a player-chosen line, laying a stick of heavy bombs.
@@ -24,6 +25,8 @@ const mats = {
   bombBand: new THREE.MeshStandardMaterial({ color: 0xe0b020, roughness: 0.5, metalness: 0.2 }),
   bombFin: new THREE.MeshStandardMaterial({ color: 0x23271c, roughness: 0.6, metalness: 0.4, side: THREE.DoubleSide }),
 };
+for (const k of ['skin', 'panel', 'stripe']) worn(mats[k], { grime: 0.2, chips: 0.12, scale: 0.3 });
+for (const k of ['dark', 'metal', 'bomb']) worn(mats[k], { grime: 0.12, chips: 0.15, rough: 0.35 });
 
 const flat = (pts, depth, bevel = 0.03) => {                  // shape in (x, z-forward), extruded downward
   const s = new THREE.Shape();
@@ -59,23 +62,23 @@ function geometry() {
     canard: flat([[0.35, 6.9], [2.0, 5.55], [2.0, 5.1], [0.35, 5.3]], 0.08, 0.025),
     fin: upright([[-3.6, 0], [-6.2, 2.3], [-7.1, 2.3], [-7.0, 0]], 0.1),
     finStripe: upright([[-6.0, 1.75], [-6.98, 1.75], [-7.04, 2.05], [-6.27, 2.05]], 0.125),
-    nacelle: new THREE.BoxGeometry(3.0, 0.95, 8.4),
-    nacelleTaper: new THREE.BoxGeometry(3.0, 0.5, 2.2),
+    nacelle: bevelBox(3.0, 0.95, 8.4),
+    nacelleTaper: bevelBox(3.0, 0.5, 2.2),
     splitter: upright([[2.9, -0.95], [0.6, -0.95], [0.6, 0], [1.2, 0]], 0.16),
     ramp: flat([[-1.5, 1.2], [1.5, 1.2], [1.5, 2.9], [-1.5, 2.9]], 0.05, 0.01),
-    intake: new THREE.BoxGeometry(1.3, 0.78, 0.12),
-    bay: new THREE.BoxGeometry(1.5, 0.06, 3.4),
+    intake: bevelBox(1.3, 0.78, 0.12),
+    bay: bevelBox(1.5, 0.06, 3.4),
     nozzle: new THREE.CylinderGeometry(0.235, 0.2, 0.75, 14, 1, true).rotateX(Math.PI / 2),
     nozzleGlow: new THREE.CircleGeometry(0.19, 14),
     flame: new THREE.ConeGeometry(0.2, 3.2, 10, 1, true).rotateX(-Math.PI / 2).translate(0, 0, -1.6),
     flameCore: new THREE.ConeGeometry(0.1, 1.9, 8, 1, true).rotateX(-Math.PI / 2).translate(0, 0, -0.95),
     windscreen: new THREE.SphereGeometry(0.4, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2),
     glare: flat([[-0.16, 9.7], [0.16, 9.7], [0.3, 8.2], [-0.3, 8.2]], 0.02, 0.005),
-    spine: new THREE.BoxGeometry(0.5, 0.18, 6.5),
+    spine: bevelBox(0.5, 0.18, 6.5),
     nav: new THREE.SphereGeometry(0.09, 8, 6),
     bombBody: new THREE.CapsuleGeometry(0.26, 0.9, 6, 12).rotateX(Math.PI / 2),
     bombBand: new THREE.CylinderGeometry(0.268, 0.268, 0.14, 12).rotateX(Math.PI / 2),
-    bombFin: new THREE.BoxGeometry(0.03, 0.62, 0.5),
+    bombFin: bevelBox(0.03, 0.62, 0.5),
     bombRing: new THREE.CylinderGeometry(0.3, 0.3, 0.22, 12, 1, true).rotateX(Math.PI / 2),
   };
   return G;

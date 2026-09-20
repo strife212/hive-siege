@@ -200,6 +200,31 @@ const SYNTH = {
     noise(c, o, t, { dur: 0.9, type: 'bandpass', f0: 1400, f1: 240, q: 0.8, gain: 0.45, a: 0.02 });
     osc(c, o, t, { type: 'sawtooth', f0: 260, f1: 70, dur: 0.5, gain: 0.12, lp: 900 });
   } },
+  air_raid: { min: 2, fn: (c, o, t) => {                   // strategic launch warning: two slow siren wails
+    for (let k = 0; k < 2; k++) {
+      const at = t + k * 3.2;
+      for (const [f, g] of [[1, 0.13], [1.5, 0.05]]) {
+        osc(c, o, at, { type: 'sawtooth', f0: 290 * f, f1: 640 * f, dur: 0.05, gain: g, a: 1.5, lp: 1800 });
+        osc(c, o, at + 1.5, { type: 'sawtooth', f0: 640 * f, f1: 300 * f, dur: 1.6, gain: g, a: 0.03, lp: 1800 });
+      }
+    }
+  } },
+  silo_servo: { min: 0.12, fn: (c, o, t) => {                        // elevator drive: a geared whine that winds up, runs and winds down
+    osc(c, o, t, { type: 'sawtooth', f0: 70, f1: 150, dur: 0.5, gain: 0.1, a: 0.25, hold: 0.9, lp: 900 });
+    osc(c, o, t, { type: 'square', f0: 210, f1: 430, dur: 0.5, gain: 0.03, a: 0.25, hold: 0.9, lp: 1400 });
+    noise(c, o, t, { dur: 0.6, type: 'bandpass', f0: 500, f1: 900, q: 1.5, gain: 0.07, a: 0.2, hold: 0.8 });
+  } },
+  blast_door: { min: 0.12, fn: (c, o, t) => {                        // heavy plate slamming into its seat
+    osc(c, o, t, { type: 'sine', f0: 95, f1: 38, dur: 0.45, gain: 0.6, a: 0.002 });
+    noise(c, o, t, { dur: 0.22, type: 'lowpass', f0: 1200, f1: 200, gain: 0.5, a: 0.001 });
+    osc(c, o, t + 0.01, { type: 'square', f0: 320, f1: 250, dur: 0.5, gain: 0.05, lp: 1200 });
+    osc(c, o, t + 0.01, { type: 'triangle', f0: 517, f1: 480, dur: 0.7, gain: 0.04 });
+  } },
+  lock_bolt: { min: 0.12, fn: (c, o, t) => {                         // ratcheting lock bolts, then a final seat
+    for (let k = 0; k < 6; k++) noise(c, o, t + k * 0.075, { dur: 0.03, type: 'bandpass', f0: 2400 - k * 120, q: 3, gain: 0.16, a: 0.001 });
+    osc(c, o, t, { type: 'sawtooth', f0: 240, f1: 300, dur: 0.1, gain: 0.04, a: 0.05, hold: 0.35, lp: 1500 });
+    osc(c, o, t + 0.5, { type: 'sine', f0: 140, f1: 70, dur: 0.12, gain: 0.3, a: 0.002 });
+  } },
   silo_hatch: { fn: (c, o, t) => {
     osc(c, o, t, { type: 'sawtooth', f0: 110, f1: 95, dur: 0.8, gain: 0.12, a: 0.05, lp: 600 });
     noise(c, o, t, { dur: 0.8, type: 'bandpass', f0: 700, q: 2, gain: 0.08, a: 0.1 });

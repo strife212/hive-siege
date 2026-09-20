@@ -115,14 +115,43 @@ anything between them and your Core.
   strike), Orbital Laser (sustained beam that follows the cursor for 6 s, scorching a trail), Strafing Run
   (three strike fighters with lathed fuselages, canopies, swept wings, canted twin fins, afterburners, contrails,
   wingtip missiles and rocket pods fly in from the map edge and rake an oriented strip with rockets and splash-damage cannon fire), Artillery
-  Strike (10-12 shells from off-screen), Nuclear Strike (10 s countdown, ICBM, white-out flash, fireball,
+  Strike (10-12 shells from off-screen), Tactical Nuke (10 s countdown, ICBM, white-out flash, fireball,
   double shockwave, mushroom cloud, huge radius). Explosions leave scorch decals and shake the camera.
+- **Strategic Nuclear Strike** (key 9, `src/strategic.js`): an instant, untargeted last resort played as a cinematic.
+  Every structure and the Core retract into their silos; then a 10 s beeping countdown ("STRATEGIC LAUNCH DETECTED /
+  IMPACT IN n") while a giant ICBM comes down on the centre of the map. With 7 s to go the camera leaves the player,
+  rides alongside the missile, then races ahead to watch it land. The shock front crosses the whole map killing every
+  bug it reaches (bosses and any troopers left outside included), with fires and burn scars across the basin; the
+  camera pulls back to the mushroom cloud, the cloud thins, the view returns to where the player left it and everything
+  the strike sent below redeploys. Aircraft do not shelter: every gunship in the air and the Titan (cast off first if it
+  was moored) scatter to the map edge on separate headings at emergency power, loiter there, and return to work on the
+  all clear, landing once their pads are back up; a gunship sitting on its pad rides down with it. Abilities flagged `instant` fire on the key press; a strike that wants the camera
+  registers a driver through `abilities.cinematic`, which main.js runs in place of the player's controls (`body.cine`
+  slides the HUD away and brings in letterbox bars).
 - **Sound** (`src/audio.js`): every turret and ability has a procedurally synthesised Web Audio effect
   (machine-gun bark, autocannon thump, laser hum loop, lance charge and strike, jet fly-by with doppler,
   rocket whoosh, explosions scaled by size, artillery whistle, nuke countdown beeps, launch rumble and
   detonation with ringing). Sounds are attenuated by distance from the camera focus and rate-limited.
   Drop audio files in `public/sfx/` and list them in `public/sfx/manifest.json` to replace any of them
   (see `public/sfx/README.md`). M toggles mute.
+- **Presentation**: every built model uses bevelled boxes and a shared wear layer (`src/surface.js`: grime, grain and
+  paint chips sampled triplanar in each part's own space, so nothing swims when a turret turns). Buildings sit on a
+  sunk footing so slopes never show daylight under a base plate. Boulders share the cliff rock texture. Reflections
+  come from a probe that matches the world (dusk horizon, hot sun spot, cool fill) and the frame goes through an HDR
+  chain: 4x MSAA, bloom on anything brighter than white, ACES tone map, light vignette and a dither against banding.
+  Add `?lowfx` to the URL to skip the chain on weak GPUs. The UI uses bundled fonts (Rajdhani, Barlow Semi Condensed).
+- **Retractable buildings** (`src/retract.js`): every structure (and the Core) stands on an elevator in its own silo.
+  One reversible timeline drives the whole cycle: collar lock bolts spin free, weapons stow pointing straight up (rail
+  sled stands on end, mortar tube goes vertical, silo hatches shut, wall link arms pull in, Core pylons draw up), the
+  platform sinks down a lit shaft on spinning drive screws, two blast doors swing up and slam, and a hub lock and the
+  door bolts turn home under rotating beacons. The shaft is a real hole: the terrain shader discards against a mask
+  (`cutHole` in terrain.js). New buildings arrive this way (run backwards, faster) and sold ones leave this way. Select a
+  building and press R (or the panel button) to retract or deploy it: a retracted building is offline, cannot be hurt
+  and bugs walk over its doors. Gunships are recalled to the pad first and ride down on it; the Titan casts off and
+  holds overhead (it would never fit), and a new airship pad comes up empty while its ship flies in. None of the
+  hardware exists while a building is just standing there. The Core has no player toggle: drive it from code for
+  cutscenes with `retract.retract(state.core)` / `deploy` / `snap(s, down)` (`window.__retract` in the console, or the
+  debug menu's Core silo button). The debug menu also has a base-wide retract / deploy drill.
 - **Waves**: manual start, scaling counts and HP, 1-4 spawn nests shown as red rings, clear bonus.
 
 ## Debugging
@@ -138,6 +167,9 @@ anything between them and your Core.
     src/textures.js  procedural tileable albedo/normal maps
     src/sky.js       sky dome shader
     src/scatter.js   instanced rocks and crystals
+    src/strategic.js the Strategic Nuclear Strike cinematic (giant ICBM, camera choreography, map-wide blast)
+    src/retract.js   retractable-building silos: timeline, stow poses, shaft/door/lock hardware
+    src/surface.js   bevelled boxes and the triplanar wear shader shared by all built models
     src/intro.js     landing cinematic
     src/decals.js    ground splatter and scorch decals
     src/particles.js shared sprite particle system (dust, smoke, fire)
@@ -148,7 +180,7 @@ anything between them and your Core.
     src/spatial.js   spatial hash for enemies
     src/abilities.js active abilities, their effects and the bottom bar
     src/entities.js  procedural meshes (buildings, bugs, HP bars, beams, gibs)
-    src/scene.js     renderer, lights, RTS camera controls
+    src/scene.js     renderer, lights, reflection probe, post chain (bloom/tone map), RTS camera controls
     src/game.js      game state, placement, towers, enemy AI, waves
     src/ui.js        sidebar DOM
     src/input.js     raycast picking, ghost preview, click handling

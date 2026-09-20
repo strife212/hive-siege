@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { sampleTerrain, EXTENT, isScenery } from './terrain.js';
-import { HALF, FLAT } from './config.js';
+import { HALF, FLAT, MAP } from './config.js';
+import { terrainTextures } from './textures.js';
 
 // Instanced decoration: low-poly rocks everywhere (bigger in the mountains) and glowing crystals on moss.
 function seeded(seed) {
@@ -8,18 +9,53 @@ function seeded(seed) {
 }
 
 function rockGeometry(rnd) {
-  const g = new THREE.DodecahedronGeometry(1, 0);
+  const g = new THREE.IcosahedronGeometry(1, 1);
   const p = g.attributes.position;
   // Jitter shared corners consistently by rounding to a key, so faces stay closed.
   const seen = new Map();
   for (let i = 0; i < p.count; i++) {
     const key = `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`;
     let j = seen.get(key);
-    if (!j) { j = [(rnd() - 0.5) * 0.35, (rnd() - 0.5) * 0.35, (rnd() - 0.5) * 0.35]; seen.set(key, j); }
+    if (!j) { j = [(rnd() - 0.5) * 0.3, (rnd() - 0.5) * 0.3, (rnd() - 0.5) * 0.3]; seen.set(key, j); }
     p.setXYZ(i, p.getX(i) + j[0], p.getY(i) + j[1], p.getZ(i) + j[2]);
   }
   g.computeVertexNormals();
   return g;
+}
+
+// Boulders wear the same rock texture as the cliffs (world-space triplanar, canyon strata tint included) so they read
+// as broken-off pieces of the terrain, and darken toward their buried base.
+function rockMaterial() {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, flatShading: true });
+  const tex = terrainTextures();
+  if (!tex) { mat.color.set(0x6b6b72); return mat; }
+  mat.customProgramCacheKey = () => 'scatter-rock';
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.tRock = { value: tex.rock.map };
+    shader.uniforms.uCanyon = { value: MAP === 'canyon' ? 1 : 0 };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vRockPos; varying float vRockY;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec4 rp = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          rp = instanceMatrix * rp;
+        #endif
+        vRockPos = (modelMatrix * rp).xyz;
+        vRockY = position.y;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform sampler2D tRock; uniform float uCanyon; varying vec3 vRockPos; varying float vRockY;`)
+      .replace('#include <map_fragment>', `
+        vec3 rn = abs(normalize(cross(dFdx(vRockPos), dFdy(vRockPos))));
+        vec3 rw = pow(rn, vec3(4.0)); rw /= (rw.x + rw.y + rw.z);
+        vec3 rockC = texture2D(tRock, vRockPos.zy * 0.3).rgb * rw.x + texture2D(tRock, vRockPos.xz * 0.3).rgb * rw.y + texture2D(tRock, vRockPos.xy * 0.3).rgb * rw.z;
+        float band = sin(vRockPos.y * 2.6 + sin(vRockPos.x * 0.11 + vRockPos.z * 0.07) * 2.0) * 0.5 + 0.5;
+        vec3 strata = mix(vec3(1.18, 0.78, 0.55), vec3(1.5, 1.12, 0.82), band) * (0.8 + 0.2 * (1.0 - rn.y));
+        rockC *= mix(vec3(1.0), strata, uCanyon);
+        diffuseColor.rgb *= rockC * 1.12 * mix(0.5, 1.0, smoothstep(-0.55, 0.25, vRockY));`);
+  };
+  return mat;
 }
 
 export function createScatter() {
@@ -52,7 +88,7 @@ export function createScatter() {
 
   const rockMesh = new THREE.InstancedMesh(
     rockGeometry(rnd),
-    new THREE.MeshStandardMaterial({ color: 0x6b6b72, roughness: 0.95, flatShading: true }),
+    rockMaterial(),
     rocks.length,
   );
   rocks.forEach((rk, i) => {

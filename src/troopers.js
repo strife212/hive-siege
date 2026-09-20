@@ -6,6 +6,7 @@ import { makeTracer } from './entities.js';
 import { explode } from './effects.js';
 import { puff } from './particles.js';
 import { audio } from './audio.js';
+import { bevelBox, worn } from './surface.js';
 
 // Orbital Shock Troopers: drop pods slam in from orbit and each unloads a fire team. Troopers are player-controlled
 // infantry (drag a box to select, click to move): a light machine gun, a grenade every few seconds, and almost no
@@ -30,34 +31,36 @@ const mat = {
   nadeCap: new THREE.MeshStandardMaterial({ color: 0x20251c, roughness: 0.6, metalness: 0.5 }),
   flash: new THREE.MeshBasicMaterial({ color: 0xffe2a0, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
 };
+for (const k of ['armour', 'pod']) worn(mat[k], { grime: 0.22, chips: 0.45, scale: 1.4 });
+for (const k of ['dark', 'gun', 'podDark']) worn(mat[k], { grime: 0.12, chips: 0.15, rough: 0.35, scale: 1.4 });
 const geo = {
-  thigh: new THREE.BoxGeometry(0.21, 0.3, 0.27).translate(0, -0.15, 0),
-  shin: new THREE.BoxGeometry(0.19, 0.28, 0.24).translate(0, -0.14, 0),
-  boot: new THREE.BoxGeometry(0.23, 0.1, 0.36).translate(0, -0.31, 0.05),
-  kneePad: new THREE.BoxGeometry(0.2, 0.11, 0.08).translate(0, -0.02, 0.15),
-  torso: new THREE.BoxGeometry(0.58, 0.46, 0.4),
-  chest: new THREE.BoxGeometry(0.3, 0.08, 0.04),
-  belt: new THREE.BoxGeometry(0.5, 0.12, 0.36),
-  pack: new THREE.BoxGeometry(0.46, 0.5, 0.24),
+  thigh: bevelBox(0.21, 0.3, 0.27).translate(0, -0.15, 0),
+  shin: bevelBox(0.19, 0.28, 0.24).translate(0, -0.14, 0),
+  boot: bevelBox(0.23, 0.1, 0.36).translate(0, -0.31, 0.05),
+  kneePad: bevelBox(0.2, 0.11, 0.08).translate(0, -0.02, 0.15),
+  torso: bevelBox(0.58, 0.46, 0.4),
+  chest: bevelBox(0.3, 0.08, 0.04),
+  belt: bevelBox(0.5, 0.12, 0.36),
+  pack: bevelBox(0.46, 0.5, 0.24),
   vent: new THREE.CylinderGeometry(0.07, 0.07, 0.16, 8),
   pauldron: new THREE.SphereGeometry(0.22, 10, 8),
   pauldronRim: new THREE.TorusGeometry(0.2, 0.025, 6, 14).rotateX(Math.PI / 2),
-  upperArm: new THREE.BoxGeometry(0.16, 0.26, 0.18).translate(0, -0.13, 0),
-  foreArm: new THREE.BoxGeometry(0.15, 0.24, 0.17).translate(0, -0.12, 0),
-  glove: new THREE.BoxGeometry(0.14, 0.1, 0.16).translate(0, -0.28, 0),
+  upperArm: bevelBox(0.16, 0.26, 0.18).translate(0, -0.13, 0),
+  foreArm: bevelBox(0.15, 0.24, 0.17).translate(0, -0.12, 0),
+  glove: bevelBox(0.14, 0.1, 0.16).translate(0, -0.28, 0),
   helmet: new THREE.SphereGeometry(0.19, 12, 10),
-  visor: new THREE.BoxGeometry(0.22, 0.06, 0.08),
-  crest: new THREE.BoxGeometry(0.05, 0.1, 0.3),
-  gunBody: new THREE.BoxGeometry(0.12, 0.17, 0.5),
-  gunStock: new THREE.BoxGeometry(0.09, 0.13, 0.22),
+  visor: bevelBox(0.22, 0.06, 0.08),
+  crest: bevelBox(0.05, 0.1, 0.3),
+  gunBody: bevelBox(0.12, 0.17, 0.5),
+  gunStock: bevelBox(0.09, 0.13, 0.22),
   gunBarrel: new THREE.CylinderGeometry(0.035, 0.035, 0.34, 8).rotateX(Math.PI / 2),
-  gunMag: new THREE.BoxGeometry(0.08, 0.2, 0.12),
+  gunMag: bevelBox(0.08, 0.2, 0.12),
   flash: new THREE.PlaneGeometry(0.34, 0.34),
   ring: new THREE.RingGeometry(0.62, 0.74, 28).rotateX(-Math.PI / 2),
   order: new THREE.RingGeometry(0.5, 0.64, 24).rotateX(-Math.PI / 2),
   nade: new THREE.SphereGeometry(0.075, 10, 8),
   nadeCap: new THREE.CylinderGeometry(0.03, 0.04, 0.06, 8).translate(0, 0.095, 0),
-  nadeLever: new THREE.BoxGeometry(0.02, 0.1, 0.025).translate(0.05, 0.065, 0),
+  nadeLever: bevelBox(0.02, 0.1, 0.025).translate(0.05, 0.065, 0),
 };
 const part = (g, m, x, y, z, parent) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; parent.add(o); return o; };
 
@@ -163,7 +166,7 @@ function makePodMesh() {
   part(new THREE.CylinderGeometry(0.2, 0.3, 0.4, 8), mat.scorch, 0, 3.55, 0, hull);
   part(new THREE.CylinderGeometry(0.5, 0.9, 1.6, 6), mat.podGlow, 0, 1.3, 0, hull).scale.set(0.92, 1, 0.92);
   for (let k = 0; k < 3; k++) {                                   // braking fins
-    const fin = part(new THREE.BoxGeometry(0.08, 1.1, 0.7), mat.podDark, 0, 2.6, 0, hull);
+    const fin = part(bevelBox(0.08, 1.1, 0.7), mat.podDark, 0, 2.6, 0, hull);
     const a = k * Math.PI * 2 / 3 + Math.PI / 6;
     fin.position.set(Math.sin(a) * 0.95, 2.55, Math.cos(a) * 0.95);
     fin.rotation.y = a + Math.PI / 2;
@@ -175,8 +178,8 @@ function makePodMesh() {
     hinge.position.set(Math.sin(a) * 1.05, 0.4, Math.cos(a) * 1.05);
     hinge.rotation.order = 'YXZ';                                 // swing about the hinge's own axis
     hinge.rotation.y = a;
-    part(new THREE.BoxGeometry(1.05, 1.9, 0.1), mat.pod, 0, 0.95, 0.04, hinge);
-    part(new THREE.BoxGeometry(0.8, 0.12, 0.12), mat.trim, 0, 1.5, 0.1, hinge);
+    part(bevelBox(1.05, 1.9, 0.1), mat.pod, 0, 0.95, 0.04, hinge);
+    part(bevelBox(0.8, 0.12, 0.12), mat.trim, 0, 1.5, 0.1, hinge);
     hinge.rotation.x = -0.17;                                     // closed: leaning in against the hull
     hull.add(hinge);
     doors.push(hinge);
@@ -193,7 +196,8 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const blocked = (x, z) => {
   if (Math.abs(x) > FLAT - 1 || Math.abs(z) > FLAT - 1 || isScenery(x, z)) return true;
   const c = worldToCell(x, z);
-  return state.occ.has(cellKey(c.i, c.j));
+  const st = state.occ.get(cellKey(c.i, c.j));
+  return !!st && !st.buried;                                     // closed blast doors can be walked over
 };
 
 function spawnTrooper(x, z, tx, tz) {

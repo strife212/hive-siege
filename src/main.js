@@ -1,3 +1,8 @@
+import '@fontsource/rajdhani/latin-600.css';
+import '@fontsource/rajdhani/latin-700.css';
+import '@fontsource/barlow-semi-condensed/latin-400.css';
+import '@fontsource/barlow-semi-condensed/latin-500.css';
+import '@fontsource/barlow-semi-condensed/latin-600.css';
 import * as THREE from 'three';
 import { createScene } from './scene.js';
 import { createTerrain } from './terrain.js';
@@ -16,8 +21,9 @@ import { DEMO, DEPLOY_KEY, RECORD, MAP, MAPS } from './config.js';
 import { startDemo } from './demo.js';
 import { iconImg } from './icons.js';
 import { troopers } from './troopers.js';
+import { retract } from './retract.js';
 
-const { renderer, scene, camera, controls, updateCamera } = createScene(document.getElementById('app'));
+const { renderer, scene, camera, controls, updateCamera, render } = createScene(document.getElementById('app'));
 const terrain = createTerrain(renderer);
 scene.add(terrain);
 scene.add(createScatter());
@@ -28,7 +34,7 @@ const ui = createUI({ onSelectBuild: (type) => input.setBuild(type) });
 input = createInput({ renderer, camera, scene, terrain, ui });
 initParticles(scene);
 initEffects(scene);
-abilities.init({ scene, ui });
+abilities.init({ scene, ui, camera, controls });
 troopers.init(scene);
 try { sessionStorage.removeItem(DEPLOY_KEY); } catch { /* fine */ }      // a manual refresh shows the title screen again
 if (!DEMO && !RECORD) audio.init({ getListener: () => controls.target });   // the demo plays silent; the recorder owns the audio graph
@@ -63,10 +69,10 @@ function tick(dt) {
   else if (state.intro) {
     intro.update(dt);
     ui.refresh();
-    renderer.render(scene, camera);
+    render();
     return;
   }
-  if (director) director(dt); else if (!demo) updateCamera(dt);
+  if (director) director(dt); else if (abilities.cinematic) abilities.cinematic(dt); else if (!demo) updateCamera(dt);
   if (!state.gameOver) { update(dt); troopers.update(dt); }
   if (MAPS[MAP].population && state.enemies.length < MAPS[MAP].population) spawnMany(Math.min(25, MAPS[MAP].population - state.enemies.length));   // test range refills from the rim
   abilities.update(dt);
@@ -78,7 +84,7 @@ function tick(dt) {
   state.shake *= Math.exp(-3 * dt);
   const ox = (Math.random() - 0.5) * sh * 0.5, oy = (Math.random() - 0.5) * sh * 0.5, oz = (Math.random() - 0.5) * sh * 0.5;
   camera.position.x += ox; camera.position.y += oy; camera.position.z += oz;
-  renderer.render(scene, camera);
+  render();
   camera.position.x -= ox; camera.position.y -= oy; camera.position.z -= oz;
 }
 
@@ -102,4 +108,5 @@ window.__audio = audio;
 window.__swarm = swarm;
 window.__spawnMany = spawnMany;
 window.__place = placeStructure;
+window.__retract = retract;                            // retract(s) / deploy(s) / snap(s, down); works on state.core too (cinematics)
 window.__step = (dt = 1 / 60, n = 1) => { for (let k = 0; k < n; k++) tick(dt); };

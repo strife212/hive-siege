@@ -1,6 +1,7 @@
 import { state, log, spawnEnemy, startWave } from './game.js';
 import { SPAWN_RADIUS } from './config.js';
 import { nestPosition } from './terrain.js';
+import { retract } from './retract.js';
 import { MAP, MAPS, DEPLOY_KEY, TEST_KEY } from './config.js';
 
 // Debug popup (Z): cheat credits and cycle the map. Maps are built at load, so changing one reloads the page.
@@ -16,6 +17,12 @@ export function initDebug() {
   document.getElementById('dbgCash').onclick = () => { state.credits += 1000; log('Debug: +1000 credits'); };
   document.getElementById('dbgWave').onclick = () => startWave(true);
   document.getElementById('dbgBoss').onclick = () => { const p = nestPosition(0, 1, Math.random() * 6.28, SPAWN_RADIUS); spawnEnemy('colossus', p.x, p.z); };
+  document.getElementById('dbgSilo').onclick = () => {         // city-wide drill: everything down, or everything back up
+    const list = state.structures.filter((s) => s !== state.core && !s.selling);
+    const anyUp = list.some((s) => !s.pending && !(s.silo && s.silo.target > 0));
+    for (const s of list) if (anyUp) retract.retract(s); else retract.deploy(s);
+  };
+  document.getElementById('dbgCore').onclick = () => retract.toggle(state.core);   // players get no Core toggle: this is for staging cutscenes
   document.getElementById('dbgMap').onclick = () => {
     const q = new URLSearchParams(location.search);
     q.set('map', next);

@@ -1,6 +1,23 @@
 import * as THREE from 'three';
 import { makeHelipad } from './heli.js';
 import { makeAirshipPad } from './airship.js';
+import { bevelBox, softBox, worn } from './surface.js';
+import { BUILDINGS } from './config.js';
+
+// Yellow / black chevron tape for pit edges and hatch surrounds.
+function hazardTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 32;
+  const g = c.getContext('2d');
+  g.fillStyle = '#d9a028'; g.fillRect(0, 0, 128, 32);
+  g.fillStyle = '#17181b';
+  for (let x = -32; x < 160; x += 32) { g.beginPath(); g.moveTo(x, 32); g.lineTo(x + 16, 32); g.lineTo(x + 48, 0); g.lineTo(x + 32, 0); g.fill(); }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
 
 // Shared materials
 const M = {
@@ -15,6 +32,7 @@ const M = {
   red: new THREE.MeshStandardMaterial({ color: 0x9a2b22, roughness: 0.45, metalness: 0.4 }),
   sandbag: new THREE.MeshStandardMaterial({ color: 0x8a7a58, roughness: 0.95, metalness: 0 }),
   concrete: new THREE.MeshStandardMaterial({ color: 0x8b8f94, roughness: 0.9, metalness: 0.05 }),
+  footing: new THREE.MeshStandardMaterial({ color: 0x4c4f55, roughness: 0.95, metalness: 0.05 }),
   capIdle: new THREE.MeshStandardMaterial({ color: 0x4fd1ff, emissive: 0x2aa8dd, emissiveIntensity: 0.3, roughness: 0.3 }),
   fairing: new THREE.MeshStandardMaterial({ color: 0xd9dcd6, roughness: 0.45, metalness: 0.35, side: THREE.DoubleSide }),
   fairingTip: new THREE.MeshStandardMaterial({ color: 0x23262a, roughness: 0.7, metalness: 0.4, side: THREE.DoubleSide }),
@@ -25,9 +43,12 @@ const M = {
   white: new THREE.MeshStandardMaterial({ color: 0xdfe4e8, roughness: 0.45, metalness: 0.15 }),
   trim: new THREE.MeshStandardMaterial({ color: 0x6d737b, roughness: 0.55, metalness: 0.5 }),
   cable: new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.8, metalness: 0.1 }),
-  lensGlass: new THREE.MeshPhysicalMaterial({ color: 0x0b2f3d, emissive: 0x1c8aa6, emissiveIntensity: 0.9, roughness: 0.1, metalness: 0.0, clearcoat: 1.0, clearcoatRoughness: 0.05 }),
+  lensGlass: new THREE.MeshPhysicalMaterial({ color: 0x06202b, emissive: 0x1c8aa6, emissiveIntensity: 0.35, roughness: 0.1, metalness: 0.0, clearcoat: 1.0, clearcoatRoughness: 0.05 }),
   cyan:  new THREE.MeshStandardMaterial({ color: 0x4fd1ff, emissive: 0x2aa8dd, emissiveIntensity: 1.2, roughness: 0.2 }),
-  green: new THREE.MeshStandardMaterial({ color: 0x5f8f5a, roughness: 0.7, metalness: 0.2 }),
+  green: new THREE.MeshStandardMaterial({ color: 0x55804f, roughness: 0.65, metalness: 0.25 }),
+  hazard: new THREE.MeshStandardMaterial({ map: hazardTexture(), roughness: 0.6, metalness: 0.2 }),
+  glass: new THREE.MeshPhysicalMaterial({ color: 0x7f9dff, emissive: 0x2a3ccc, emissiveIntensity: 0.55, roughness: 0.08, metalness: 0, transparent: true, opacity: 0.55, clearcoat: 1, clearcoatRoughness: 0.05, side: THREE.DoubleSide }),
+  plasma: new THREE.MeshStandardMaterial({ color: 0x9fb4ff, emissive: 0x5a78ff, emissiveIntensity: 2.4, roughness: 0.3 }),
   blue:  new THREE.MeshStandardMaterial({ color: 0x6f7fff, emissive: 0x2233aa, emissiveIntensity: 0.8, roughness: 0.3 }),
   core:  new THREE.MeshStandardMaterial({ color: 0xffb347, emissive: 0xff7a00, emissiveIntensity: 1.5 }),
   ghostOk:  new THREE.MeshBasicMaterial({ color: 0x4fff7a, transparent: true, opacity: 0.45, depthWrite: false }),
@@ -40,6 +61,16 @@ const M = {
   soil: new THREE.MeshBasicMaterial({ color: 0x7a5a3a }),
   marker: new THREE.MeshBasicMaterial({ color: 0xff3a3a, transparent: true, opacity: 0.8, side: THREE.DoubleSide }),
 };
+
+// Wear layer: painted armour chips and gets grimy, bare metal mostly just varies in sheen, fabric and concrete only stain.
+for (const k of ['metal', 'trim', 'white', 'fairing']) worn(M[k], { grime: 0.2, chips: 0.35 });
+for (const k of ['amber', 'olive', 'red', 'green', 'fairingStripe']) worn(M[k], { grime: 0.26, chips: 0.6 });
+for (const k of ['dark', 'black', 'gunmetal', 'brass', 'fairingTip']) worn(M[k], { grime: 0.14, chips: 0.18, rough: 0.4 });
+worn(M.footing, { grime: 0.4, chips: 0, rough: 0.1, bump: 1.2, scale: 1.0 });
+worn(M.concrete, { grime: 0.34, chips: 0, rough: 0.15, bump: 1.2, scale: 1.0 });
+worn(M.sandbag, { grime: 0.3, chips: 0, rough: 0.1, bump: 1.6, scale: 1.6 });
+
+export const hazardMaterial = () => M.hazard;
 
 function softDisc() {
   const c = document.createElement('canvas');
@@ -82,9 +113,9 @@ function autocannon(g, dual) {
   // Head: armoured cradle, top plate, rear block.
   const head = new THREE.Group();
   head.position.y = 1.05;
-  head.add(mesh(new THREE.BoxGeometry(W, 0.5, 1.0), M.amber, 0, 0.15, -0.05));
-  head.add(mesh(new THREE.BoxGeometry(W + 0.1, 0.16, 0.7), M.dark, 0, 0.42, -0.15));
-  head.add(mesh(new THREE.BoxGeometry(W + 0.08, 0.3, 0.5), M.dark, 0, 0.0, -0.5));
+  head.add(mesh(bevelBox(W, 0.5, 1.0), M.amber, 0, 0.15, -0.05));
+  head.add(mesh(bevelBox(W + 0.1, 0.16, 0.7), M.dark, 0, 0.42, -0.15));
+  head.add(mesh(bevelBox(W + 0.08, 0.3, 0.5), M.dark, 0, 0.0, -0.5));
 
   const addOptic = (x, y, z) => {
     const optic = mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.3, 10), M.black, x, y, z);
@@ -95,7 +126,7 @@ function autocannon(g, dual) {
     head.add(lens);
   };
   const addPort = (side) => {
-    head.add(mesh(new THREE.BoxGeometry(0.1, 0.14, 0.24), M.black, side * (W / 2 + 0.05), 0.1, 0.05));
+    head.add(mesh(bevelBox(0.1, 0.14, 0.24), M.black, side * (W / 2 + 0.05), 0.1, 0.05));
     const port = new THREE.Object3D();
     port.position.set(side * (W / 2 + 0.11), 0.12, 0.05);
     head.add(port);
@@ -104,14 +135,14 @@ function autocannon(g, dual) {
   let ports;
   if (dual) {
     for (const sx of [-1, 1]) {
-      head.add(mesh(new THREE.BoxGeometry(0.3, 0.3, 0.5), M.olive, sx * 0.38, 0.65, -0.2));
-      head.add(mesh(new THREE.BoxGeometry(0.34, 0.04, 0.54), M.black, sx * 0.38, 0.82, -0.2));
+      head.add(mesh(bevelBox(0.3, 0.3, 0.5), M.olive, sx * 0.38, 0.65, -0.2));
+      head.add(mesh(bevelBox(0.34, 0.04, 0.54), M.black, sx * 0.38, 0.82, -0.2));
     }
     addOptic(0, 0.62, 0.25);
     ports = [addPort(-1), addPort(1)];
   } else {
-    head.add(mesh(new THREE.BoxGeometry(0.3, 0.36, 0.55), M.olive, -0.62, 0.12, -0.1));
-    head.add(mesh(new THREE.BoxGeometry(0.34, 0.04, 0.5), M.black, -0.62, 0.32, -0.1));
+    head.add(mesh(bevelBox(0.3, 0.36, 0.55), M.olive, -0.62, 0.12, -0.1));
+    head.add(mesh(bevelBox(0.34, 0.04, 0.5), M.black, -0.62, 0.32, -0.1));
     addOptic(0.42, 0.36, 0.25);
     ports = [addPort(1)];
   }
@@ -143,7 +174,7 @@ function autocannon(g, dual) {
     const port = ports[Math.min(i, ports.length - 1)];
     return { gun, muzzle, flash, port, side: dual ? (i === 0 ? -1 : 1) : 1 };
   });
-  if (dual) head.add(mesh(new THREE.BoxGeometry(0.5, 0.08, 0.3), M.dark, 0, 0.12, 1.0));   // barrel clamp
+  if (dual) head.add(mesh(bevelBox(0.5, 0.08, 0.3), M.dark, 0, 0.12, 1.0));   // barrel clamp
   g.add(head);
   Object.assign(g.userData, { head, guns, gunRest: 0.3 });
 }
@@ -153,7 +184,7 @@ function hmg(g) {
   g.add(mesh(new THREE.CylinderGeometry(0.75, 0.85, 0.25, 8), M.dark, 0, 0.125, 0));
   for (let k = 0; k < 3; k++) {
     const a = (k / 3) * Math.PI * 2 + Math.PI / 6;
-    const leg = mesh(new THREE.BoxGeometry(0.12, 0.12, 0.7), M.metal, Math.cos(a) * 0.45, 0.3, Math.sin(a) * 0.45);
+    const leg = mesh(bevelBox(0.12, 0.12, 0.7), M.metal, Math.cos(a) * 0.45, 0.3, Math.sin(a) * 0.45);
     leg.rotation.y = -a + Math.PI / 2;
     leg.rotation.x = 0.35;
     g.add(leg);
@@ -163,21 +194,21 @@ function hmg(g) {
 
   const head = new THREE.Group();
   head.position.y = 1.08;
-  head.add(mesh(new THREE.BoxGeometry(0.46, 0.3, 0.6), M.dark, 0, 0.15, -0.1));            // cradle
-  head.add(mesh(new THREE.BoxGeometry(0.28, 0.3, 0.42), M.olive, -0.42, 0.22, -0.15));      // belt box
-  head.add(mesh(new THREE.BoxGeometry(0.3, 0.03, 0.44), M.black, -0.42, 0.38, -0.15));
-  head.add(mesh(new THREE.BoxGeometry(0.16, 0.06, 0.18), M.brass, -0.24, 0.3, 0.02));       // belt feed
-  head.add(mesh(new THREE.BoxGeometry(0.1, 0.12, 0.2), M.black, 0.3, 0.26, 0.05));          // ejection port
+  head.add(mesh(bevelBox(0.46, 0.3, 0.6), M.dark, 0, 0.15, -0.1));            // cradle
+  head.add(mesh(bevelBox(0.28, 0.3, 0.42), M.olive, -0.42, 0.22, -0.15));      // belt box
+  head.add(mesh(bevelBox(0.3, 0.03, 0.44), M.black, -0.42, 0.38, -0.15));
+  head.add(mesh(bevelBox(0.16, 0.06, 0.18), M.brass, -0.24, 0.3, 0.02));       // belt feed
+  head.add(mesh(bevelBox(0.1, 0.12, 0.2), M.black, 0.3, 0.26, 0.05));          // ejection port
   const port = new THREE.Object3D();
   port.position.set(0.36, 0.28, 0.05);
   head.add(port);
-  const sight = mesh(new THREE.BoxGeometry(0.06, 0.1, 0.25), M.black, 0.08, 0.5, -0.05);
+  const sight = mesh(bevelBox(0.06, 0.1, 0.25), M.black, 0.08, 0.5, -0.05);
   head.add(sight);
 
   const gun = new THREE.Group();
   gun.position.set(0, 0.3, 0.2);
   head.add(gun);
-  gun.add(mesh(new THREE.BoxGeometry(0.2, 0.22, 0.7), M.gunmetal, 0, 0, -0.1));             // receiver
+  gun.add(mesh(bevelBox(0.2, 0.22, 0.7), M.gunmetal, 0, 0, -0.1));             // receiver
   const shroud = mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.7, 10), M.dark, 0, 0, 0.55);
   shroud.rotation.x = Math.PI / 2;
   gun.add(shroud);
@@ -206,14 +237,16 @@ function flamethrower(g) {
   g.add(mesh(new THREE.CylinderGeometry(0.8, 0.9, 0.35, 8), M.metal, 0, 0.5, 0));
   for (let k = 0; k < 8; k++) {
     const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
-    g.add(mesh(new THREE.BoxGeometry(0.22, 0.08, 0.1), M.amber, Math.cos(a) * 0.86, 0.7, Math.sin(a) * 0.86)).rotation.y = -a;
+    const tab = mesh(bevelBox(0.1, 0.08, 0.22), M.amber, Math.cos(a) * 0.86, 0.7, Math.sin(a) * 0.86);
+    tab.rotation.y = -a;
+    g.add(tab);
   }
   g.add(mesh(new THREE.CylinderGeometry(0.5, 0.58, 0.22, 12), M.dark, 0, 0.78, 0));
 
   const head = new THREE.Group();
   head.position.y = 1.0;
-  head.add(mesh(new THREE.BoxGeometry(0.9, 0.45, 0.8), M.metal, 0, 0.2, -0.1));                 // body
-  head.add(mesh(new THREE.BoxGeometry(1.0, 0.06, 0.5), M.black, 0, 0.45, -0.2));
+  head.add(mesh(bevelBox(0.9, 0.45, 0.8), M.metal, 0, 0.2, -0.1));                 // body
+  head.add(mesh(bevelBox(1.0, 0.06, 0.5), M.black, 0, 0.45, -0.2));
   for (const sx of [-1, 1]) {                                                                     // fuel tanks
     const tank = mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.9, 12), M.red, sx * 0.32, 0.62, -0.35);
     tank.rotation.x = Math.PI / 2;
@@ -228,7 +261,7 @@ function flamethrower(g) {
     pipe.rotation.x = Math.PI / 2;
     head.add(pipe);
   }
-  const shield = mesh(new THREE.BoxGeometry(1.1, 0.5, 0.06), M.dark, 0, 0.25, 0.34);              // blast shield
+  const shield = mesh(bevelBox(1.1, 0.5, 0.06), M.dark, 0, 0.25, 0.34);              // blast shield
   head.add(shield);
   const barrel = mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.9, 10), M.gunmetal, 0, 0.22, 0.75);
   barrel.rotation.x = Math.PI / 2;
@@ -250,15 +283,18 @@ function flamethrower(g) {
   Object.assign(g.userData, { head, nozzle, pilot });
 }
 
+const sandbagGeo = softBox(0.8, 0.36, 0.5, 0.16);
+
 // Mortar Pit (2x2): sandbag ring, baseplate, tube on a yaw pivot fixed at 60 degrees, shell rack.
 function mortarPit(g) {
   g.add(mesh(new THREE.CylinderGeometry(1.75, 1.85, 0.16, 20), M.dark, 0, 0.08, 0));
   for (let layer = 0; layer < 2; layer++) {
     for (let k = 0; k < 16; k++) {
       const a = ((k + layer * 0.5) / 16) * Math.PI * 2;
-      const bag = mesh(new THREE.BoxGeometry(0.85, 0.36, 0.5), M.sandbag, Math.cos(a) * 1.75, 0.2 + layer * 0.34, Math.sin(a) * 1.75);
-      bag.rotation.y = -a + Math.PI / 2;
-      bag.rotation.z = (Math.random() - 0.5) * 0.08;
+      const bag = mesh(sandbagGeo, M.sandbag, Math.cos(a) * 1.75, 0.2 + layer * 0.31, Math.sin(a) * 1.75);
+      bag.rotation.y = -a + Math.PI / 2 + (Math.random() - 0.5) * 0.12;
+      bag.rotation.z = (Math.random() - 0.5) * 0.1;
+      bag.scale.set(0.94 + Math.random() * 0.12, 0.92 + Math.random() * 0.16, 0.94 + Math.random() * 0.12);
       g.add(bag);
     }
   }
@@ -286,37 +322,47 @@ function mortarPit(g) {
     leg.rotation.z = sx * 0.55; leg.rotation.x = 0.3;
     head.add(leg);
   }
-  g.add(mesh(new THREE.BoxGeometry(0.6, 0.45, 1.3), M.olive, -1.05, 0.38, -0.5));   // shell rack
+  g.add(mesh(bevelBox(0.6, 0.45, 1.3), M.olive, -1.05, 0.38, -0.5));   // shell rack
   for (let k = 0; k < 4; k++) g.add(mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.55, 8), M.brass, -1.05, 0.85, -1.0 + k * 0.32));
-  g.add(mesh(new THREE.BoxGeometry(0.5, 0.35, 0.5), M.dark, 1.05, 0.33, -0.9));      // ammo crate
+  g.add(mesh(bevelBox(0.5, 0.35, 0.5), M.dark, 1.05, 0.33, -0.9));      // ammo crate
   Object.assign(g.userData, { head, tube, muzzle, flash, tubeRest: 0 });
 }
 
 // Missile Silo (2x2): concrete slab, clamshell hatches, a launch rack that rises out of the pit.
 function missileSilo(g) {
-  g.add(mesh(new THREE.BoxGeometry(3.7, 0.5, 3.7), M.concrete, 0, 0.25, 0));
-  g.add(mesh(new THREE.BoxGeometry(3.9, 0.08, 3.9), M.dark, 0, 0.04, 0));
-  g.add(mesh(new THREE.BoxGeometry(2.3, 0.04, 2.3), M.black, 0, 0.51, 0));          // pit opening
+  g.add(mesh(bevelBox(3.7, 0.5, 3.7), M.concrete, 0, 0.25, 0));
+  g.add(mesh(bevelBox(3.9, 0.08, 3.9), M.dark, 0, 0.04, 0));
+  g.add(mesh(bevelBox(2.3, 0.04, 2.3), M.black, 0, 0.51, 0));          // pit opening
+  for (const [x, z, w, d, rot] of [[0, 1.32, 2.9, 0.3, 0], [0, -1.32, 2.9, 0.3, 0], [1.32, 0, 2.34, 0.3, Math.PI / 2], [-1.32, 0, 2.34, 0.3, Math.PI / 2]]) {
+    const tape = mesh(new THREE.PlaneGeometry(w, d), M.hazard, x, 0.512, z);   // chevron tape framing the hatch
+    tape.geometry.attributes.uv.array.forEach((v, k, arr) => { if (k % 2 === 0) arr[k] = v * w * 1.4; });
+    tape.rotation.set(-Math.PI / 2, 0, rot);
+    g.add(tape);
+  }
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     g.add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.5, 8), M.amber, sx * 1.65, 0.75, sz * 1.65));
   }
-  g.add(mesh(new THREE.BoxGeometry(0.9, 0.7, 0.9), M.metal, 1.3, 0.85, 1.3));       // control shed
+  g.add(mesh(bevelBox(0.9, 0.7, 0.9), M.metal, 1.3, 0.85, 1.3));       // control shed
+  g.add(mesh(bevelBox(1.0, 0.08, 1.0), M.dark, 1.3, 1.23, 1.3));
+  g.add(mesh(bevelBox(0.34, 0.5, 0.04), M.gunmetal, 1.2, 0.78, 0.84));
+  g.add(mesh(bevelBox(0.26, 0.14, 0.03), M.window, 1.52, 0.98, 0.845));
   g.add(mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.2, 6), M.dark, 1.5, 1.7, 1.5));
   g.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), M.lens, 1.5, 2.3, 1.5));
   const doors = [];
   for (const sx of [-1, 1]) {
     const pivot = new THREE.Group();
     pivot.position.set(sx * 1.15, 0.55, 0);
-    const door = mesh(new THREE.BoxGeometry(1.15, 0.1, 2.3), M.metal, -sx * 0.575, 0, 0);
+    const door = mesh(bevelBox(1.15, 0.1, 2.3), M.metal, -sx * 0.575, 0, 0);
     pivot.add(door);
-    pivot.add(mesh(new THREE.BoxGeometry(0.15, 0.12, 2.3), M.amber, -sx * 1.1, 0.01, 0));
+    for (const z of [-0.75, 0, 0.75]) pivot.add(mesh(bevelBox(0.8, 0.05, 0.12), M.dark, -sx * 0.5, 0.06, z));   // stiffening ribs
+    pivot.add(mesh(bevelBox(0.15, 0.12, 2.3), M.amber, -sx * 1.1, 0.01, 0));
     g.add(pivot);
     doors.push({ pivot, side: sx });
   }
   const rack = new THREE.Group();
   rack.position.y = -1.6;                              // stowed: fully below the slab and doors
   g.add(rack);
-  rack.add(mesh(new THREE.BoxGeometry(1.7, 0.2, 2.1), M.dark, 0, 0, 0));
+  rack.add(mesh(bevelBox(1.7, 0.2, 2.1), M.dark, 0, 0, 0));
   const tubes = [], noses = [];
   for (const x of [-0.42, 0.42]) for (const z of [-0.65, 0, 0.65]) {
     const t = mesh(new THREE.CylinderGeometry(0.17, 0.17, 1.4, 10), M.gunmetal, x, 0.8, z);
@@ -336,10 +382,10 @@ function missileSilo(g) {
 // Railgun Battery (2x2): hazard-striped pad, bolted turntable, armoured cradle with capacitor banks and power
 // conduits, finned breech with a charge gauge on top, and twin conductor rails on a recoil sled.
 function railgun(g) {
-  g.add(mesh(new THREE.BoxGeometry(3.8, 0.12, 3.8), M.dark, 0, 0.06, 0));
-  g.add(mesh(new THREE.BoxGeometry(3.6, 0.3, 3.6), M.concrete, 0, 0.18, 0));
+  g.add(mesh(bevelBox(3.8, 0.12, 3.8), M.dark, 0, 0.06, 0));
+  g.add(mesh(bevelBox(3.6, 0.3, 3.6), M.concrete, 0, 0.18, 0));
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    g.add(mesh(new THREE.BoxGeometry(0.5, 0.05, 0.5), M.amber, sx * 1.5, 0.345, sz * 1.5));
+    g.add(mesh(bevelBox(0.5, 0.05, 0.5), M.amber, sx * 1.5, 0.345, sz * 1.5));
     g.add(mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.12, 8), M.black, sx * 1.5, 0.39, sz * 1.5));
   }
   g.add(mesh(new THREE.CylinderGeometry(1.5, 1.62, 0.4, 20), M.dark, 0, 0.53, 0));
@@ -353,13 +399,13 @@ function railgun(g) {
   head.position.y = 0.72;
   g.add(head);
   head.add(mesh(new THREE.CylinderGeometry(1.15, 1.25, 0.18, 16), M.metal, 0, 0.09, 0));
-  head.add(mesh(new THREE.BoxGeometry(1.7, 0.5, 2.0), M.metal, 0, 0.4, -0.25));          // chassis
-  head.add(mesh(new THREE.BoxGeometry(1.2, 0.3, 0.9), M.dark, 0, 0.35, 0.95));           // front glacis
+  head.add(mesh(bevelBox(1.7, 0.5, 2.0), M.metal, 0, 0.4, -0.25));          // chassis
+  head.add(mesh(bevelBox(1.2, 0.3, 0.9), M.dark, 0, 0.35, 0.95));           // front glacis
   for (const sx of [-1, 1]) {                                                              // sloped side armour
-    const plate = mesh(new THREE.BoxGeometry(0.1, 1.0, 2.1), M.dark, sx * 0.98, 0.7, -0.25);
+    const plate = mesh(bevelBox(0.1, 1.0, 2.1), M.dark, sx * 0.98, 0.7, -0.25);
     plate.rotation.z = -sx * 0.16;
     head.add(plate);
-    head.add(mesh(new THREE.BoxGeometry(0.04, 0.12, 1.9), M.amber, sx * 1.06, 0.32, -0.25));
+    head.add(mesh(bevelBox(0.04, 0.12, 1.9), M.amber, sx * 1.06, 0.32, -0.25));
   }
 
   // Capacitor banks and the conductor strips share one material whose glow follows the charge.
@@ -374,21 +420,21 @@ function railgun(g) {
   }
 
   // Breech with heat-sink fins and the charge gauge on top.
-  head.add(mesh(new THREE.BoxGeometry(0.62, 0.62, 1.7), M.dark, 0, 0.98, -0.5));
-  for (let k = 0; k < 6; k++) head.add(mesh(new THREE.BoxGeometry(0.8, 0.5, 0.05), M.gunmetal, 0, 0.98, -1.42 - k * 0.09));
-  head.add(mesh(new THREE.BoxGeometry(0.46, 0.04, 1.1), M.black, 0, 1.3, -0.5));          // gauge bezel
-  head.add(mesh(new THREE.BoxGeometry(0.34, 0.02, 0.98), M.gaugeBack, 0, 1.325, -0.5));   // dim blue track
-  const gaugeGeo = new THREE.BoxGeometry(0.3, 0.03, 0.94);
+  head.add(mesh(bevelBox(0.62, 0.62, 1.7), M.dark, 0, 0.98, -0.5));
+  for (let k = 0; k < 6; k++) head.add(mesh(bevelBox(0.8, 0.5, 0.05), M.gunmetal, 0, 0.98, -1.42 - k * 0.09));
+  head.add(mesh(bevelBox(0.46, 0.04, 1.1), M.black, 0, 1.3, -0.5));          // gauge bezel
+  head.add(mesh(bevelBox(0.34, 0.02, 0.98), M.gaugeBack, 0, 1.325, -0.5));   // dim blue track
+  const gaugeGeo = bevelBox(0.3, 0.03, 0.94);
   gaugeGeo.translate(0, 0, 0.47);                                                         // origin at the rear end
   const gauge = mesh(gaugeGeo, M.gaugeFill.clone(), 0, 1.335, -0.97);
   gauge.scale.z = 0.001;
   gauge.castShadow = false;
   head.add(gauge);
-  for (const z of [-0.735, -0.5, -0.265]) head.add(mesh(new THREE.BoxGeometry(0.34, 0.035, 0.015), M.black, 0, 1.34, z));   // quarter ticks
+  for (const z of [-0.735, -0.5, -0.265]) head.add(mesh(bevelBox(0.34, 0.035, 0.015), M.black, 0, 1.34, z));   // quarter ticks
 
   // Sensor mast.
   head.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 6), M.dark, 0.78, 1.45, -1.0));
-  head.add(mesh(new THREE.BoxGeometry(0.2, 0.16, 0.26), M.white, 0.78, 1.85, -1.0));
+  head.add(mesh(bevelBox(0.2, 0.16, 0.26), M.white, 0.78, 1.85, -1.0));
   const eye = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 10), M.lens, 0.78, 1.85, -0.86);
   eye.rotation.x = Math.PI / 2;
   head.add(eye);
@@ -398,17 +444,17 @@ function railgun(g) {
   gun.position.set(0, 0.98, 0.6);
   head.add(gun);
   for (const sx of [-1, 1]) {
-    gun.add(mesh(new THREE.BoxGeometry(0.14, 0.24, 4.6), M.gunmetal, sx * 0.23, 0, 1.7));
-    gun.add(mesh(new THREE.BoxGeometry(0.03, 0.1, 4.3), caps, sx * 0.15, 0, 1.75));
-    const prong = mesh(new THREE.BoxGeometry(0.1, 0.16, 0.5), M.black, sx * 0.23, 0, 4.2);
+    gun.add(mesh(bevelBox(0.14, 0.24, 4.6), M.gunmetal, sx * 0.23, 0, 1.7));
+    gun.add(mesh(bevelBox(0.03, 0.1, 4.3), caps, sx * 0.15, 0, 1.75));
+    const prong = mesh(bevelBox(0.1, 0.16, 0.5), M.black, sx * 0.23, 0, 4.2);
     gun.add(prong);
-    gun.add(mesh(new THREE.BoxGeometry(0.06, 0.34, 3.2), M.dark, sx * 0.34, 0, 1.4));
+    gun.add(mesh(bevelBox(0.06, 0.34, 3.2), M.dark, sx * 0.34, 0, 1.4));
   }
   for (const z of [0.0, 0.9, 1.8, 2.7, 3.6]) {
-    gun.add(mesh(new THREE.BoxGeometry(0.78, 0.1, 0.16), M.dark, 0, 0.17, z));
-    gun.add(mesh(new THREE.BoxGeometry(0.78, 0.1, 0.16), M.dark, 0, -0.17, z));
+    gun.add(mesh(bevelBox(0.78, 0.1, 0.16), M.dark, 0, 0.17, z));
+    gun.add(mesh(bevelBox(0.78, 0.1, 0.16), M.dark, 0, -0.17, z));
   }
-  gun.add(mesh(new THREE.BoxGeometry(0.2, 0.12, 3.6), M.black, 0, -0.26, 1.5));
+  gun.add(mesh(bevelBox(0.2, 0.12, 3.6), M.black, 0, -0.26, 1.5));
   const muzzle = new THREE.Object3D();
   muzzle.position.set(0, 0, 4.3);
   gun.add(muzzle);
@@ -429,13 +475,13 @@ function commandTower(g) {
   oct(2.1, 2.3, 0.35, M.gunmetal, 0.67);
   const pylons = [];
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const geo = new THREE.BoxGeometry(0.34, 2.6, 0.34);
+    const geo = bevelBox(0.34, 2.6, 0.34);
     geo.translate(0, -1.3, 0);
     const py = mesh(geo, M.metal, sx * 1.6, 2.6, sz * 1.6);
     g.add(py);
     pylons.push(py);
-    g.add(mesh(new THREE.BoxGeometry(0.5, 0.3, 0.5), M.dark, sx * 1.6, 2.6, sz * 1.6));          // pylon housing
-    const strut = mesh(new THREE.BoxGeometry(0.16, 0.16, 1.1), M.gunmetal, sx * 1.22, 2.3, sz * 1.22);
+    g.add(mesh(bevelBox(0.5, 0.3, 0.5), M.dark, sx * 1.6, 2.6, sz * 1.6));          // pylon housing
+    const strut = mesh(bevelBox(0.16, 0.16, 1.1), M.gunmetal, sx * 1.22, 2.3, sz * 1.22);
     strut.rotation.y = Math.atan2(sx, sz);
     g.add(strut);
   }
@@ -447,16 +493,16 @@ function commandTower(g) {
     const a = k * Math.PI / 2;
     const face = new THREE.Group();
     face.rotation.y = a;
-    face.add(mesh(new THREE.BoxGeometry(0.9, 0.5, 0.06), M.core, 0, 1.75, 1.66));                 // reactor glow
-    for (let v = 0; v < 4; v++) face.add(mesh(new THREE.BoxGeometry(1.0, 0.06, 0.12), M.black, 0, 1.56 + v * 0.13, 1.7));
-    face.add(mesh(new THREE.BoxGeometry(1.2, 0.08, 0.1), M.amber, 0, 1.2, 1.84));
+    face.add(mesh(bevelBox(0.9, 0.5, 0.06), M.core, 0, 1.75, 1.66));                 // reactor glow
+    for (let v = 0; v < 4; v++) face.add(mesh(bevelBox(1.0, 0.06, 0.12), M.black, 0, 1.56 + v * 0.13, 1.7));
+    face.add(mesh(bevelBox(1.2, 0.08, 0.1), M.amber, 0, 1.2, 1.84));
     g.add(face);
   }
   const door = new THREE.Group();
   door.rotation.y = Math.PI / 4;
-  door.add(mesh(new THREE.BoxGeometry(0.8, 1.0, 0.14), M.gunmetal, 0, 1.38, 1.78));
-  door.add(mesh(new THREE.BoxGeometry(0.04, 1.0, 0.16), M.black, 0, 1.38, 1.79));
-  door.add(mesh(new THREE.BoxGeometry(0.96, 0.1, 0.2), M.amber, 0, 1.95, 1.76));
+  door.add(mesh(bevelBox(0.8, 1.0, 0.14), M.gunmetal, 0, 1.38, 1.78));
+  door.add(mesh(bevelBox(0.04, 1.0, 0.16), M.black, 0, 1.38, 1.79));
+  door.add(mesh(bevelBox(0.96, 0.1, 0.2), M.amber, 0, 1.95, 1.76));
   g.add(door);
 
   // shaft with panel bands and an external conduit run
@@ -465,7 +511,7 @@ function commandTower(g) {
   for (const a of [0.4, 2.5, 4.6]) {
     g.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.9, 6), M.cable, Math.sin(a) * 1.13, 4.2, Math.cos(a) * 1.13));
   }
-  for (let k = 0; k < 3; k++) g.add(mesh(new THREE.BoxGeometry(0.22, 0.14, 0.05), M.window, 0, 3.6 + k * 0.7, 1.09 - k * 0.055));   // slit windows
+  for (let k = 0; k < 3; k++) g.add(mesh(bevelBox(0.22, 0.14, 0.05), M.window, 0, 3.6 + k * 0.7, 1.09 - k * 0.055));   // slit windows
 
   // control room: cantilevered cab, lit window band with mullions, roof overhang, walkway and railing
   oct(1.45, 1.0, 0.5, M.dark, 5.9);                                                                // corbel
@@ -479,7 +525,7 @@ function commandTower(g) {
     const pivot = new THREE.Group();
     pivot.rotation.y = a;
     const r = (corner ? 1.7 : 1.7 * Math.cos(Math.PI / 8)) * 1.015;
-    const bar = mesh(new THREE.BoxGeometry(corner ? 0.12 : 0.05, 0.56, 0.06), M.black, 0, 6.72, r);
+    const bar = mesh(bevelBox(corner ? 0.12 : 0.05, 0.56, 0.06), M.black, 0, 6.72, r);
     bar.rotation.x = tilt;
     pivot.add(bar);
     g.add(pivot);
@@ -497,13 +543,13 @@ function commandTower(g) {
   const radar = new THREE.Group();
   radar.position.set(0, 7.45, 0);
   radar.add(mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.5, 8), M.gunmetal, 0, 0.25, 0));
-  radar.add(mesh(new THREE.BoxGeometry(0.3, 0.2, 0.3), M.dark, 0, 0.55, 0));
-  const panel = mesh(new THREE.BoxGeometry(2.0, 0.6, 0.08), M.white, 0, 0.85, 0.12);
+  radar.add(mesh(bevelBox(0.3, 0.2, 0.3), M.dark, 0, 0.55, 0));
+  const panel = mesh(bevelBox(2.0, 0.6, 0.08), M.white, 0, 0.85, 0.12);
   panel.rotation.x = -0.18;
   radar.add(panel);
-  radar.add(mesh(new THREE.BoxGeometry(2.04, 0.06, 0.12), M.dark, 0, 1.15, 0.07));
-  for (const x of [-0.66, 0, 0.66]) radar.add(mesh(new THREE.BoxGeometry(0.05, 0.62, 0.1), M.dark, x, 0.85, 0.1));
-  radar.add(mesh(new THREE.BoxGeometry(0.1, 0.1, 0.5), M.gunmetal, 0, 0.62, -0.2));
+  radar.add(mesh(bevelBox(2.04, 0.06, 0.12), M.dark, 0, 1.15, 0.07));
+  for (const x of [-0.66, 0, 0.66]) radar.add(mesh(bevelBox(0.05, 0.62, 0.1), M.dark, x, 0.85, 0.1));
+  radar.add(mesh(bevelBox(0.1, 0.1, 0.5), M.gunmetal, 0, 0.62, -0.2));
   g.add(radar);
   g.add(mesh(new THREE.SphereGeometry(0.34, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.white, -1.0, 7.45, 0.75));   // radome
   const dish = new THREE.Group();
@@ -517,7 +563,7 @@ function commandTower(g) {
     g.add(mesh(new THREE.CylinderGeometry(0.018, 0.03, h, 5), M.dark, x, 7.45 + h / 2, z));
     g.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), M.lens, x, 7.45 + h, z));
   }
-  g.add(mesh(new THREE.BoxGeometry(0.5, 0.26, 0.4), M.gunmetal, -0.2, 7.58, -1.1));                // equipment locker
+  g.add(mesh(bevelBox(0.5, 0.26, 0.4), M.gunmetal, -0.2, 7.58, -1.1));                // equipment locker
 
   Object.assign(g.userData, { pylons, spin: radar, fairing: launchFairing(g) });
 }
@@ -554,12 +600,12 @@ function launchFairing(g) {
     band(8.12, 0.16, M.fairingTip);
     // separation bolts along the base ring and a hazard chevron plate on the petal face
     for (const da of [-0.55, 0, 0.55]) {
-      const geo = new THREE.BoxGeometry(0.16, 0.16, 0.1);
+      const geo = bevelBox(0.16, 0.16, 0.1);
       geo.translate(0, 5.8, R + 0.03);
       geo.rotateY(am + da);
       part(geo, M.fairingStripe);
     }
-    const plate = new THREE.BoxGeometry(0.7, 0.9, 0.06);
+    const plate = bevelBox(0.7, 0.9, 0.06);
     plate.translate(0, 7.3, R + 0.0);
     plate.rotateY(am);
     part(plate, M.fairingTip);
@@ -573,18 +619,18 @@ function launchFairing(g) {
 // Wall: a central post plus four thin arms reaching to the tile edges. Only the arms that lead to a neighbouring wall
 // are shown (setWallLinks), so runs, corners, T-junctions and crossings all join up.
 function wallSegment(g) {
-  g.add(mesh(new THREE.BoxGeometry(0.72, 1.7, 0.72), M.metal, 0, 0.85, 0));
-  g.add(mesh(new THREE.BoxGeometry(0.86, 0.16, 0.86), M.dark, 0, 1.76, 0));
-  g.add(mesh(new THREE.BoxGeometry(0.9, 0.22, 0.9), M.dark, 0, 0.11, 0));
-  g.add(mesh(new THREE.BoxGeometry(0.3, 0.06, 0.3), M.amber, 0, 1.86, 0));
+  g.add(mesh(bevelBox(0.72, 1.7, 0.72), M.metal, 0, 0.85, 0));
+  g.add(mesh(bevelBox(0.86, 0.16, 0.86), M.dark, 0, 1.76, 0));
+  g.add(mesh(bevelBox(0.9, 0.22, 0.9), M.dark, 0, 0.11, 0));
+  g.add(mesh(bevelBox(0.3, 0.06, 0.3), M.amber, 0, 1.86, 0));
   const arms = {};
   for (const [key, dx, dz] of [['e', 1, 0], ['w', -1, 0], ['s', 0, 1], ['n', 0, -1]]) {
     const arm = new THREE.Group();
     arm.rotation.y = Math.atan2(-dz, dx);                    // local +x points at the neighbour
-    arm.add(mesh(new THREE.BoxGeometry(0.72, 1.35, 0.42), M.metal, 0.68, 0.675, 0));
-    arm.add(mesh(new THREE.BoxGeometry(0.72, 0.14, 0.54), M.dark, 0.68, 1.42, 0));
-    arm.add(mesh(new THREE.BoxGeometry(0.72, 0.2, 0.56), M.dark, 0.68, 0.1, 0));
-    arm.add(mesh(new THREE.BoxGeometry(0.5, 0.5, 0.46), M.gunmetal, 0.66, 0.8, 0));   // recessed armour panel
+    arm.add(mesh(bevelBox(0.72, 1.35, 0.42), M.metal, 0.68, 0.675, 0));
+    arm.add(mesh(bevelBox(0.72, 0.14, 0.54), M.dark, 0.68, 1.42, 0));
+    arm.add(mesh(bevelBox(0.72, 0.2, 0.56), M.dark, 0.68, 0.1, 0));
+    arm.add(mesh(bevelBox(0.5, 0.5, 0.46), M.gunmetal, 0.66, 0.8, 0));   // recessed armour panel
     g.add(arm);
     arms[key] = arm;
   }
@@ -603,6 +649,100 @@ export function setWallLinks(g, links) {
   else if (count === 1) { if (n || s) n = s = true; else e = w = true; }
   arms.n.visible = !!n; arms.e.visible = !!e; arms.s.visible = !!s; arms.w.visible = !!w;
 }
+
+// Refinery (1x1): green pump house on a skid, banded storage tank with a domed cap and feed pipe, a flare stack and
+// a roof extractor fan (userData.spin) turning inside its cowl.
+function refinery(g) {
+  g.add(mesh(bevelBox(1.9, 0.16, 1.9), M.dark, 0, 0.08, 0));
+  g.add(mesh(bevelBox(1.7, 0.86, 1.7, 0.07), M.green, 0, 0.59, 0));
+  g.add(mesh(bevelBox(1.78, 0.1, 1.78), M.dark, 0, 1.05, 0));                                      // roof lip
+  g.add(mesh(bevelBox(1.72, 0.09, 0.04), M.amber, 0, 0.3, 0.86));                                  // hazard trim
+  g.add(mesh(bevelBox(0.5, 0.62, 0.05), M.gunmetal, 0.45, 0.5, 0.86));                             // service door
+  g.add(mesh(bevelBox(0.08, 0.08, 0.04), M.lens, 0.26, 0.55, 0.89));
+  for (let k = 0; k < 4; k++) g.add(mesh(bevelBox(0.6, 0.05, 0.06), M.black, -0.4, 0.42 + k * 0.12, 0.86));   // louvres
+  for (let k = 0; k < 4; k++) g.add(mesh(bevelBox(0.06, 0.05, 0.7), M.black, 0.86, 0.42 + k * 0.12, 0.2));
+
+  // storage tank: shell, bands, dome, gauge strip, feed pipe with an elbow down into the pump house
+  g.add(mesh(new THREE.CylinderGeometry(0.47, 0.47, 1.25, 20), M.metal, -0.45, 1.72, -0.4));
+  const cap = mesh(new THREE.SphereGeometry(0.47, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2), M.metal, -0.45, 2.345, -0.4);
+  cap.scale.y = 0.45;
+  g.add(cap);
+  for (const y of [1.3, 1.9]) g.add(mesh(new THREE.TorusGeometry(0.475, 0.03, 6, 24), M.dark, -0.45, y, -0.4).rotateX(Math.PI / 2));
+  g.add(mesh(bevelBox(0.05, 0.9, 0.03), M.gaugeFill, -0.45, 1.7, 0.075));
+  g.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.2, 8), M.dark, -0.45, 2.62, -0.4));
+  const pipe = mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.95, 8), M.dark, 0.02, 1.5, -0.4);
+  pipe.rotation.z = Math.PI / 2;
+  g.add(pipe);
+  g.add(mesh(new THREE.SphereGeometry(0.085, 8, 6), M.dark, 0.5, 1.5, -0.4));
+  g.add(mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.42, 8), M.dark, 0.5, 1.3, -0.4));
+  g.add(mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.05, 10), M.amber, 0.22, 1.5, -0.4).rotateZ(Math.PI / 2));   // valve wheel
+
+  // flare stack with a guard ring and a pilot glow
+  g.add(mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.3, 10), M.dark, 0.6, 1.25, 0.5));
+  g.add(mesh(new THREE.CylinderGeometry(0.11, 0.15, 1.5, 10), M.gunmetal, 0.6, 1.85, 0.5));
+  g.add(mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.16, 10), M.black, 0.6, 2.66, 0.5));
+  g.add(mesh(new THREE.TorusGeometry(0.15, 0.02, 5, 12), M.amber, 0.6, 2.2, 0.5).rotateX(Math.PI / 2));
+  g.add(mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.03, 10), M.core, 0.6, 2.735, 0.5));
+
+  // extractor fan in a cowl
+  const ring = [[0.56, 0], [0.52, 0.2], [0.46, 0.2], [0.46, 0]].map(([r, y]) => new THREE.Vector2(r, y));
+  g.add(mesh(new THREE.LatheGeometry(ring, 20), M.dark, 0.35, 1.1, -0.05));
+  g.add(mesh(new THREE.CylinderGeometry(0.47, 0.47, 0.02, 20), M.black, 0.35, 1.115, -0.05));
+  const fan = new THREE.Group();
+  fan.position.set(0.35, 1.24, -0.05);
+  fan.add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.1, 10), M.gunmetal));
+  for (let k = 0; k < 5; k++) {
+    const blade = mesh(bevelBox(0.4, 0.02, 0.15), M.amber, 0, 0, 0);
+    blade.geometry.translate(0.26, 0, 0);
+    blade.rotation.set(0.35, (k / 5) * Math.PI * 2, 0, 'YXZ');
+    fan.add(blade);
+  }
+  g.add(fan);
+  for (const a of [0, Math.PI / 2]) {                                                               // guard bars
+    const bar = mesh(bevelBox(1.0, 0.03, 0.03), M.black, 0.35, 1.31, -0.05);
+    bar.rotation.y = a;
+    g.add(bar);
+  }
+  g.userData.spin = fan;
+}
+
+// Research Lab (1x1): instrument block with lit window slots, a glass observation dome over a glowing containment core
+// on ribbed frames, and a comms mast.
+function researchLab(g) {
+  g.add(mesh(bevelBox(1.9, 0.16, 1.9), M.dark, 0, 0.08, 0));
+  g.add(mesh(bevelBox(1.72, 0.7, 1.72, 0.07), M.white, 0, 0.5, 0));
+  g.add(mesh(bevelBox(1.8, 0.1, 1.8), M.trim, 0, 0.88, 0));
+  for (let k = 0; k < 4; k++) {                                                                      // window slots and a blue trim line per face
+    const face = new THREE.Group();
+    face.rotation.y = k * Math.PI / 2;
+    face.add(mesh(bevelBox(1.74, 0.05, 0.03), M.cyan, 0, 0.22, 0.865));
+    if (k === 0) {
+      face.add(mesh(bevelBox(0.46, 0.52, 0.05), M.gunmetal, 0, 0.5, 0.87));                          // airlock door
+      face.add(mesh(bevelBox(0.2, 0.1, 0.03), M.window, 0, 0.64, 0.9));
+    } else for (const x of [-0.45, 0.45]) face.add(mesh(bevelBox(0.5, 0.16, 0.03), M.window, x, 0.58, 0.865));
+    g.add(face);
+  }
+  g.add(mesh(new THREE.CylinderGeometry(0.8, 0.84, 0.12, 24), M.trim, 0, 0.98, 0));                  // dome seat
+  g.add(mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.2, 12), M.gunmetal, 0, 1.1, 0));
+  g.add(mesh(new THREE.SphereGeometry(0.24, 16, 12), M.plasma, 0, 1.38, 0));                         // containment core
+  const halo = mesh(new THREE.TorusGeometry(0.36, 0.02, 6, 24), M.cyan, 0, 1.38, 0);
+  halo.rotation.x = Math.PI / 2 - 0.35;
+  g.add(halo);
+  const dome = mesh(new THREE.SphereGeometry(0.74, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.glass, 0, 1.03, 0);
+  g.add(dome);
+  for (let k = 0; k < 4; k++) {                                                                      // dome ribs
+    const rib = mesh(new THREE.TorusGeometry(0.75, 0.022, 5, 16, Math.PI), M.trim, 0, 1.03, 0);
+    rib.rotation.y = k * Math.PI / 4;
+    g.add(rib);
+  }
+  g.add(mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.3, 6), M.dark, 0.72, 1.55, 0.72));             // comms mast
+  g.add(mesh(bevelBox(0.18, 0.1, 0.18), M.dark, 0.72, 0.96, 0.72));
+  g.add(mesh(new THREE.SphereGeometry(0.07, 8, 6), M.cyan, 0.72, 2.24, 0.72));
+  for (const [y, w] of [[1.75, 0.42], [1.95, 0.28]]) g.add(mesh(bevelBox(w, 0.025, 0.025), M.dark, 0.72, y, 0.72));   // yagi elements
+  g.userData.dome = dome;
+}
+
+const ROUND_FOOTING = { hmg: [0.86, 8], turret: [1.16, 8], dual: [1.16, 8], flame: [1.11, 8], laser: [1.1, 24], mortar: [1.86, 20] };   // [radius, sides]
 
 export function makeBuildingMesh(type) {
   const g = new THREE.Group();
@@ -632,23 +772,23 @@ export function makeBuildingMesh(type) {
       head.position.y = 1.74;
       // Yoke: two arms rising to the trunnion axle, with a small equipment shelf between them.
       for (const sx of [-1, 1]) {
-        head.add(mesh(new THREE.BoxGeometry(0.16, 0.7, 0.42), M.white, sx * 0.44, 0.3, -0.05));
+        head.add(mesh(bevelBox(0.16, 0.7, 0.42), M.white, sx * 0.44, 0.3, -0.05));
         head.add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.06, 12), M.trim, sx * 0.55, 0.55, -0.05).rotateZ(Math.PI / 2));
       }
-      head.add(mesh(new THREE.BoxGeometry(0.72, 0.16, 0.5), M.white, 0, 0.05, -0.05));
+      head.add(mesh(bevelBox(0.72, 0.16, 0.5), M.white, 0, 0.05, -0.05));
       const axle = mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.0, 10), M.trim, 0, 0.55, -0.05);
       axle.rotation.z = Math.PI / 2;
       head.add(axle);
 
       // Sensor pods on the yoke arms: stereo camera pod on the right, single tracker on the left.
-      const pod = mesh(new THREE.BoxGeometry(0.28, 0.2, 0.34), M.white, 0.62, 0.2, 0.15);
+      const pod = mesh(bevelBox(0.28, 0.2, 0.34), M.white, 0.62, 0.2, 0.15);
       head.add(pod);
       for (const dy of [-0.05, 0.05]) {
         const cam = mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.08, 10), M.black, 0.62, 0.2 + dy, 0.35);
         cam.rotation.x = Math.PI / 2;
         head.add(cam);
       }
-      head.add(mesh(new THREE.BoxGeometry(0.22, 0.22, 0.28), M.white, -0.6, 0.2, 0.12));
+      head.add(mesh(bevelBox(0.22, 0.22, 0.28), M.white, -0.6, 0.2, 0.12));
       const tracker = mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.1, 12), M.black, -0.6, 0.2, 0.3);
       tracker.rotation.x = Math.PI / 2;
       head.add(tracker);
@@ -675,9 +815,9 @@ export function makeBuildingMesh(type) {
       lens.rotation.x = Math.PI / 2;
       pitch.add(lens);
       for (const z of [0.0, 0.45]) pitch.add(mesh(new THREE.TorusGeometry(0.31, 0.02, 6, 24), M.trim, 0, 0.05, z));
-      pitch.add(mesh(new THREE.BoxGeometry(0.5, 0.36, 0.5), M.white, 0, 0.0, -0.6));
-      pitch.add(mesh(new THREE.BoxGeometry(0.54, 0.08, 0.3), M.trim, 0, 0.24, -0.6));
-      pitch.add(mesh(new THREE.BoxGeometry(0.16, 0.14, 1.2), M.trim, 0, -0.3, 0.3));
+      pitch.add(mesh(bevelBox(0.5, 0.36, 0.5), M.white, 0, 0.0, -0.6));
+      pitch.add(mesh(bevelBox(0.54, 0.08, 0.3), M.trim, 0, 0.24, -0.6));
+      pitch.add(mesh(bevelBox(0.16, 0.14, 1.2), M.trim, 0, -0.3, 0.3));
       pitch.rotation.x = -0.25;                                  // idle: nose slightly raised
       const muzzle = new THREE.Object3D();
       muzzle.position.set(0, 0.05, 1.36);
@@ -687,25 +827,19 @@ export function makeBuildingMesh(type) {
       Object.assign(g.userData, { head, pitch, muzzle, lens, idlePitch: -0.25 });
       break;
     }
-    case 'refinery': {
-      g.add(mesh(new THREE.BoxGeometry(1.8, 1.0, 1.8), M.green, 0, 0.5, 0));
-      g.add(mesh(new THREE.CylinderGeometry(0.45, 0.45, 1.6, 12), M.metal, -0.5, 1.4, -0.4));
-      g.add(mesh(new THREE.CylinderGeometry(0.12, 0.15, 1.2, 8), M.dark, 0.6, 1.6, 0.5));
-      const fan = mesh(new THREE.BoxGeometry(0.9, 0.08, 0.15), M.amber, 0.4, 1.12, -0.4);
-      g.add(fan);
-      g.userData.spin = fan;
-      break;
-    }
-    case 'lab': {
-      g.add(mesh(new THREE.BoxGeometry(1.8, 0.8, 1.8), M.metal, 0, 0.4, 0));
-      g.add(mesh(new THREE.SphereGeometry(0.7, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.blue, 0, 0.8, 0));
-      g.add(mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 6), M.dark, 0.7, 1.4, 0.7));
-      g.add(mesh(new THREE.SphereGeometry(0.08, 8, 6), M.cyan, 0.7, 2.0, 0.7));
-      break;
-    }
+    case 'refinery': refinery(g); break;
+    case 'lab': researchLab(g); break;
     case 'core': commandTower(g); break;
   }
-  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  // Foundation sunk into the ground under everything but walls and the (air-dropped) Core, so a building on a slope
+  // shows a footing on its downhill side instead of daylight under the base plate.
+  if (type !== 'wall' && type !== 'core') {
+    const round = ROUND_FOOTING[type];
+    const [w, d] = BUILDINGS[type].size || [1, 1];
+    const geo = round ? new THREE.CylinderGeometry(round[0], round[0] * 1.05, 1.6, round[1]) : bevelBox(w * 2 - 0.2, 1.6, d * 2 - 0.2);
+    g.add(mesh(geo, M.footing, 0, -0.79, 0));
+  }
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = !o.material.transparent; o.receiveShadow = true; } });
   return g;
 }
 
@@ -855,8 +989,8 @@ export function makeBugMesh(def) {
 
 // Billboard HP bars: two sprites at the same position. The fill keeps its left edge on the background's left
 // edge by shifting its centre anchor (evaluated in screen space), so it stays aligned at any camera angle.
-const barBg = new THREE.SpriteMaterial({ color: 0x1a0000, depthTest: false, depthWrite: false, transparent: true });
-const barFg = new THREE.SpriteMaterial({ color: 0x44dd44, depthTest: false, depthWrite: false, transparent: true });
+const barBg = new THREE.SpriteMaterial({ color: 0x05070a, opacity: 0.8, depthTest: false, depthWrite: false, transparent: true });
+const barFg = new THREE.SpriteMaterial({ color: 0x6fe08a, depthTest: false, depthWrite: false, transparent: true });
 export function makeHpBar(width = 1.2) {
   const g = new THREE.Group();
   const bg = new THREE.Sprite(barBg);

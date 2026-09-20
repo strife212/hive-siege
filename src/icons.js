@@ -177,6 +177,13 @@ const DRAW = {
     p.rows(9, [[3, 10], [4, 8]], 'B').rect(6, 11, 4, 3, 'g').px(7, 12, 's').px(8, 12, 's').rect(6, 13, 4, 1, 'd');
     p.rect(1, 10, 3, 4, 'B').rect(12, 10, 3, 4, 'B').rect(1, 10, 3, 1, 'y').rect(12, 10, 3, 1, 'y');          // pauldrons
   },
+  ab_strategic(p) {
+    p.disc(7.5, 12.5, 6.4, 'B').disc(7.5, 12.5, 5.4, 'b').rect(3, 10, 3, 2, 'G').rect(8, 9, 4, 2, 'G').rect(6, 12, 3, 2, 'G');     // the world, going under
+    p.rect(0, 14, 16, 2, null);
+    p.line(12, 0, 8, 6, 'a').line(13, 1, 9, 7, 'y').px(14, 0, 'r');                                                         // exhaust streak
+    p.rect(6, 3, 3, 5, 'w').rect(6, 5, 3, 1, 'k').rect(7, 8, 1, 2, 'r').px(6, 8, 'r').px(8, 8, 'r').px(5, 3, 'd').px(9, 3, 'd');   // the ICBM, nose down
+    p.px(7, 10, 'y');
+  },
   ab_nuke(p) {
     p.disc(7.5, 7.5, 7, 'y').disc(7.5, 7.5, 6, 'a').disc(7.5, 7.5, 5.4, 'y');
     p.disc(7.5, 7.5, 1.2, 'k');

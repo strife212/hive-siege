@@ -19,7 +19,7 @@ const ear = { x: 0, z: -14 };
 const SCENES = {
   // Open map: one Gunship Pad, a loose scatter of bugs wandering in, and a chase camera on the VTOL as it hunts them.
   vtol: {
-    warm: 4, preroll: 4.4,                                        // preroll: pad rises, aircraft arms and lifts off before the take
+    warm: 4, preroll: 6.2,                                        // preroll: pad comes up out of its silo, aircraft arms and lifts off before the take
     spawnBug(far) {
       const a = Math.random() * Math.PI * 2, r = far ? 46 + Math.random() * 10 : 30 + Math.random() * 25;
       const e = spawnEnemy(Math.random() < 0.14 ? 'brute' : 'skitter', Math.cos(a) * r, Math.sin(a) * r, true);

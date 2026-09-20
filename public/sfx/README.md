@@ -42,6 +42,10 @@ Looping sounds (started and stopped by the game; files should loop cleanly):
 
 | name           | used by                                  |
 | -------------- | ---------------------------------------- |
+| air_raid       | strategic launch warning siren           |
+| silo_servo     | building elevator running (retract / deploy) |
+| blast_door     | silo blast doors slamming shut           |
+| lock_bolt      | silo lock bolts ratcheting               |
 | airship_engine | Titan airship while airborne             |
 | vtol_jet       | Gunship Pad VTOL while airborne          |
 | hub_thruster   | Core descent engines in the intro        |

@@ -5,6 +5,7 @@ import { makeTracer } from './entities.js';
 import { explode } from './effects.js';
 import { puff } from './particles.js';
 import { audio } from './audio.js';
+import { bevelBox, worn } from './surface.js';
 
 // Gunship Pad: a 2x2 pad with a heavy VTOL gunship parked on it. The aircraft lifts off, hunts the nearest bugs,
 // empties its gatling and rocket pods, then flies home and spends def.rearm seconds on the pad before going again.
@@ -40,22 +41,25 @@ const mats = {
   rocketTip: new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.5 }),
   flash: new THREE.MeshBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
 };
+for (const k of ['pad', 'padEdge']) worn(mats[k], { grime: 0.32, chips: 0.15, bump: 1.0, scale: 0.9 });
+for (const k of ['skin', 'skinDark', 'panel', 'blue', 'orange', 'pod', 'podDark', 'rocket']) worn(mats[k], { grime: 0.2, chips: 0.3 });
+for (const k of ['dark', 'metal']) worn(mats[k], { grime: 0.12, chips: 0.15, rough: 0.35 });
 const mk = (geo, mat, x, y, z, parent) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
 
 export function makeHelipad(g) {
-  mk(new THREE.BoxGeometry(3.9, 0.3, 3.9), mats.padEdge, 0, 0.15, 0, g);
+  mk(bevelBox(3.9, 0.3, 3.9), mats.padEdge, 0, 0.15, 0, g);
   mk(new THREE.CylinderGeometry(1.8, 1.8, 0.06, 40), mats.pad, 0, 0.33, 0, g).receiveShadow = true;
   mk(new THREE.TorusGeometry(1.55, 0.06, 6, 48).rotateX(Math.PI / 2), mats.paint, 0, 0.36, 0, g);
-  for (const x of [-0.42, 0.42]) mk(new THREE.BoxGeometry(0.16, 0.02, 1.3), mats.paint, x, 0.37, 0, g);        // the H
-  mk(new THREE.BoxGeometry(0.84, 0.02, 0.16), mats.paint, 0, 0.37, 0, g);
+  for (const x of [-0.42, 0.42]) mk(bevelBox(0.16, 0.02, 1.3), mats.paint, x, 0.37, 0, g);        // the H
+  mk(bevelBox(0.84, 0.02, 0.16), mats.paint, 0, 0.37, 0, g);
   const lamps = [];
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    mk(new THREE.BoxGeometry(0.7, 0.04, 0.7), mats.hazard, sx * 1.55, 0.31, sz * 1.55, g);
+    mk(bevelBox(0.7, 0.04, 0.7), mats.hazard, sx * 1.55, 0.31, sz * 1.55, g);
     mk(new THREE.CylinderGeometry(0.06, 0.08, 0.22, 8), mats.padEdge, sx * 1.75, 0.41, sz * 1.75, g);
     lamps.push(mk(new THREE.SphereGeometry(0.08, 8, 6), mats.lamp, sx * 1.75, 0.55, sz * 1.75, g));
   }
-  mk(new THREE.BoxGeometry(0.7, 0.5, 0.45), mats.padEdge, -1.45, 0.55, 0, g);                                   // ammo lockers
-  mk(new THREE.BoxGeometry(0.5, 0.06, 0.3), mats.hazard, -1.45, 0.82, 0, g);
+  mk(bevelBox(0.7, 0.5, 0.45), mats.padEdge, -1.45, 0.55, 0, g);                                   // ammo lockers
+  mk(bevelBox(0.5, 0.06, 0.3), mats.hazard, -1.45, 0.82, 0, g);
   const heli = makeHeli();
   heli.position.y = 0.36;
   g.add(heli);
@@ -94,7 +98,7 @@ export function makeHeli() {
     geo.rotateY(-Math.PI / 2);
     return geo;
   };
-  const box = (w, h, d, mat, x, y, z, parent = body) => mk(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent);
+  const box = (w, h, d, mat, x, y, z, parent = body) => mk(bevelBox(w, h, d), mat, x, y, z, parent);
 
   // hull: deep slab body, raised cockpit block, engine hump behind it, tail boom
   mk(slab([[2.45, -0.62], [2.62, -0.1], [2.3, 0.42], [1.25, 0.5], [-2.3, 0.5], [-3.3, 0.22], [-3.2, -0.3], [-1.2, -0.85], [1.7, -0.9]], 1.55), mats.skin, 0, 0, 0, body);
@@ -309,6 +313,8 @@ export function updateHeliRockets(dt) {
   }
 }
 
+const EVAC_R = 98;                                               // how far out an evacuating craft runs (the basin is 60)
+
 export function updateHeli(s, dt) {
   const def = s.def, pad = s.mesh, heli = pad.userData.heli, ud = heli.userData;
   const h = (s.heli ??= { mode: 'rearm', t: def.rearm * 0.4, rounds: def.rounds, rocketsLeft: def.rockets, rpm: 0, vx: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, gunCd: 0, rocketCd: 1.2, idle: 0, scan: 0, target: null });
@@ -336,7 +342,7 @@ export function updateHeli(s, dt) {
     h.t -= dt;
     if (h.t <= 0) {
       h.rounds = def.rounds; h.rocketsLeft = def.rockets;
-      if (nearestBug(s.x, s.z, def.range)) {                     // only scramble when there is something to shoot
+      if (!s.recall && nearestBug(s.x, s.z, def.range)) {        // only scramble when there is something to shoot (and the pad is staying up)
         h.mode = 'takeoff'; h.t = 0;
         state.scene.attach(heli);
         h.yaw = heli.rotation.y;
@@ -346,6 +352,11 @@ export function updateHeli(s, dt) {
     return;
   }
 
+  // evacuation (strategic strike): an airborne craft drops everything and runs for its own stretch of the map edge,
+  // loiters there, and goes back to work on the all clear (s.evac = { ang }, set and cleared by strategic.js)
+  if (s.evac && h.mode !== 'evac') { h.mode = 'evac'; h.target = null; }
+  if (!s.evac && h.mode === 'evac') { h.mode = 'attack'; h.idle = 0; }
+
   // pick where to be and what to face
   h.scan -= dt;
   if (h.mode === 'attack') {
@@ -354,13 +365,14 @@ export function updateHeli(s, dt) {
       h.scan = 0.4;
       h.target = nearestBug(pos.x, pos.z, 30) || nearestBug(s.x, s.z, def.range);
     }
-    if (h.rounds <= 0 && h.rocketsLeft <= 0) { h.mode = 'return'; h.target = null; }
+    if ((h.rounds <= 0 && h.rocketsLeft <= 0) || s.recall) { h.mode = 'return'; h.target = null; }   // recall: the pad wants to retract
     else if (!h.target) { h.idle += dt; if (h.idle > 2.5) h.mode = 'return'; }
     else h.idle = 0;
   }
   let gx = s.x, gz = s.z, gy = padY + ALT, faceX = null, faceZ = null;
   const e = h.mode === 'attack' ? h.target : null;
   if (h.mode === 'takeoff') { gy = padY + ALT * Math.min(1, h.t / 1.6); h.t += dt; if (h.t > 1.7) { h.mode = 'attack'; h.idle = 0; } }
+  else if (h.mode === 'evac') { gx = Math.sin(s.evac.ang) * EVAC_R; gz = Math.cos(s.evac.ang) * EVAC_R; gy = heightAt(pos.x, pos.z) + ALT + 5; }
   else if (e) {
     const dx = pos.x - e.x, dz = pos.z - e.z, d = Math.hypot(dx, dz) || 1;
     const orbit = (0.3 + (s.id % 4) * 0.22) * (s.id % 2 ? 1 : -1);   // each craft works its own arc around the target
@@ -373,7 +385,7 @@ export function updateHeli(s, dt) {
 
   // flight: accelerate toward the goal, tilt into the motion, bob in the hover
   const tx = gx - pos.x, tz = gz - pos.z, td = Math.hypot(tx, tz);
-  const want = Math.min(SPEED, td * 1.6), wx = td > 0.01 ? tx / td * want : 0, wz = td > 0.01 ? tz / td * want : 0;
+  const want = Math.min(h.mode === 'evac' ? SPEED * 1.7 : SPEED, td * 1.6), wx = td > 0.01 ? tx / td * want : 0, wz = td > 0.01 ? tz / td * want : 0;
   // keep clear of the other gunships: steer away inside AVOID, and never let two hulls actually overlap.
   // A craft that is taking off, landing, or on final approach to its own pad holds its line (pads can be closer
   // together than the cruise spacing); everyone else gives way to it.
@@ -417,7 +429,7 @@ export function updateHeli(s, dt) {
   }
   if (s.snd) s.snd.setPos(pos.x, pos.z);
 
-  if (h.mode === 'return' && td < 0.6 && speed < 1.5) h.mode = 'land';
+  if (h.mode === 'return' && td < 0.6 && speed < 1.5 && !s.padDown) h.mode = 'land';   // holds over a retracted pad until it is back up
   if (h.mode === 'land' && pos.y - padY < 0.05) {
     pad.attach(heli);
     heli.position.set(0, 0.36, 0);

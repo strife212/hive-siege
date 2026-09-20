@@ -5,6 +5,7 @@ import { makeTracer } from './entities.js';
 import { explode } from './effects.js';
 import { puff } from './particles.js';
 import { audio } from './audio.js';
+import { bevelBox, worn } from './surface.js';
 
 // Titan Support Airship: a 2x3 mooring pad and one big rigid airship. Same cycle as the gunship pad (lift off, fight
 // until the magazines are empty or nothing is left, come home, rearm), but slow, high, and carrying four weapon
@@ -37,17 +38,20 @@ const mats = {
   bomb: new THREE.MeshStandardMaterial({ color: 0x3d4a2a, roughness: 0.55, metalness: 0.3 }),
   bombBand: new THREE.MeshStandardMaterial({ color: 0xe0b020, roughness: 0.5 }),
 };
+for (const k of ['deck', 'edge']) worn(mats[k], { grime: 0.32, chips: 0.15, bump: 1.0, scale: 0.9 });
+for (const k of ['envelope', 'envelopeDark', 'fin', 'stripe', 'gondola', 'nose']) worn(mats[k], { grime: 0.24, chips: 0.2, scale: 0.35 });
+for (const k of ['rib', 'dark', 'metal', 'shell', 'bomb']) worn(mats[k], { grime: 0.12, chips: 0.15, rough: 0.35 });
 const mk = (geo, mat, x, y, z, parent) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
 const MOOR = 1.1;                                                  // gondola keel height above the deck when moored
 
 export function makeAirshipPad(g) {
-  mk(new THREE.BoxGeometry(3.9, 0.3, 5.9), mats.edge, 0, 0.15, 0, g);
-  mk(new THREE.BoxGeometry(3.5, 0.06, 5.5), mats.deck, 0, 0.33, 0, g).receiveShadow = true;
+  mk(bevelBox(3.9, 0.3, 5.9), mats.edge, 0, 0.15, 0, g);
+  mk(bevelBox(3.5, 0.06, 5.5), mats.deck, 0, 0.33, 0, g).receiveShadow = true;
   mk(new THREE.TorusGeometry(1.35, 0.06, 6, 48).rotateX(Math.PI / 2), mats.paint, 0, 0.37, 0, g);
-  mk(new THREE.BoxGeometry(0.14, 0.02, 1.5), mats.paint, -0.45, 0.38, 0, g).rotation.y = 0.32;                  // a big "A"
-  mk(new THREE.BoxGeometry(0.14, 0.02, 1.5), mats.paint, 0.45, 0.38, 0, g).rotation.y = -0.32;
-  mk(new THREE.BoxGeometry(0.7, 0.02, 0.13), mats.paint, 0, 0.38, 0.2, g);
-  for (const z of [-2.3, 2.3]) mk(new THREE.BoxGeometry(3.2, 0.02, 0.18), mats.hazard, 0, 0.37, z, g);
+  mk(bevelBox(0.14, 0.02, 1.5), mats.paint, -0.45, 0.38, 0, g).rotation.y = 0.32;                  // a big "A"
+  mk(bevelBox(0.14, 0.02, 1.5), mats.paint, 0.45, 0.38, 0, g).rotation.y = -0.32;
+  mk(bevelBox(0.7, 0.02, 0.13), mats.paint, 0, 0.38, 0.2, g);
+  for (const z of [-2.3, 2.3]) mk(bevelBox(3.2, 0.02, 0.18), mats.hazard, 0, 0.37, z, g);
   const lamps = [], cables = [];
   for (const sx of [-1, 1]) for (const sz of [-1, 0, 1]) {
     mk(new THREE.CylinderGeometry(0.06, 0.08, 0.22, 8), mats.edge, sx * 1.8, 0.41, sz * 2.75, g);
@@ -60,8 +64,8 @@ export function makeAirshipPad(g) {
     c.lookAt(new THREE.Vector3(sx * 0.7, 3.4, sz * 1.6)); c.rotateX(Math.PI / 2);
     cables.push(c);
   }
-  mk(new THREE.BoxGeometry(0.8, 0.55, 1.0), mats.edge, -1.4, 0.6, 0, g);                                        // magazine lockers
-  mk(new THREE.BoxGeometry(0.6, 0.06, 0.8), mats.hazard, -1.4, 0.9, 0, g);
+  mk(bevelBox(0.8, 0.55, 1.0), mats.edge, -1.4, 0.6, 0, g);                                        // magazine lockers
+  mk(bevelBox(0.6, 0.06, 0.8), mats.hazard, -1.4, 0.9, 0, g);
   const ship = makeAirship();
   ship.position.y = 0.36 + MOOR;
   g.add(ship);
@@ -102,11 +106,11 @@ export function makeAirship() {
   mk(new THREE.ConeGeometry(radiusAt(L - 0.55) + 0.03, 0.75, 18).rotateX(Math.PI / 2), mats.nose, 0, HULL_Y, L - 0.25, body);
   mk(new THREE.CylinderGeometry(0.05, 0.08, 0.5, 8).rotateX(Math.PI / 2), mats.metal, 0, HULL_Y, L + 0.3, body);         // mooring probe
   // solar spine along the top, name on the flanks
-  for (let k = 0; k < 6; k++) mk(new THREE.BoxGeometry(0.9, 0.04, 0.95), mats.solar, 0, HULL_Y + radiusAt(-2.7 + k * 1.08) - 0.02, -2.7 + k * 1.08, body);
+  for (let k = 0; k < 6; k++) mk(bevelBox(0.9, 0.04, 0.95), mats.solar, 0, HULL_Y + radiusAt(-2.7 + k * 1.08) - 0.02, -2.7 + k * 1.08, body);
   for (const sd of [-1, 1]) {
     const t = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.85), titanLabel);
     t.position.set(sd * (R + 0.02), HULL_Y + 0.25, 0.4); t.rotation.y = sd * Math.PI / 2; body.add(t);
-    mk(new THREE.BoxGeometry(0.03, 0.12, 3.6), mats.stripe, sd * (R - 0.02), HULL_Y - 0.45, 0.4, body);
+    mk(bevelBox(0.03, 0.12, 3.6), mats.stripe, sd * (R - 0.02), HULL_Y - 0.45, 0.4, body);
   }
   // cruciform tail: four fins with red rudder tips
   const finShape = new THREE.Shape();
@@ -127,28 +131,28 @@ export function makeAirship() {
   const car = new THREE.Group();
   car.position.set(0, 0, 0.9);
   body.add(car);
-  mk(new THREE.BoxGeometry(1.25, 0.95, 4.6), mats.gondola, 0, 0.62, 0, car);
-  mk(new THREE.BoxGeometry(1.05, 0.28, 4.2), mats.dark, 0, 0.12, 0, car);
-  mk(new THREE.BoxGeometry(1.28, 0.24, 3.9), mats.window, 0, 0.78, -0.1, car);
-  for (let k = 0; k < 9; k++) mk(new THREE.BoxGeometry(1.3, 0.26, 0.07), mats.gondola, 0, 0.78, -1.85 + k * 0.44, car);
-  const bridge = mk(new THREE.BoxGeometry(1.1, 0.5, 0.06), mats.window, 0, 0.72, 2.32, car); bridge.rotation.x = -0.3;
+  mk(bevelBox(1.25, 0.95, 4.6), mats.gondola, 0, 0.62, 0, car);
+  mk(bevelBox(1.05, 0.28, 4.2), mats.dark, 0, 0.12, 0, car);
+  mk(bevelBox(1.28, 0.24, 3.9), mats.window, 0, 0.78, -0.1, car);
+  for (let k = 0; k < 9; k++) mk(bevelBox(1.3, 0.26, 0.07), mats.gondola, 0, 0.78, -1.85 + k * 0.44, car);
+  const bridge = mk(bevelBox(1.1, 0.5, 0.06), mats.window, 0, 0.72, 2.32, car); bridge.rotation.x = -0.3;
   mk(new THREE.SphereGeometry(0.26, 12, 10), mats.dark, 0, 0.02, 1.7, car);
   mk(new THREE.SphereGeometry(0.1, 8, 6), mats.sensor, 0, -0.16, 1.82, car);
   for (const z of [-1.6, 0, 1.6]) for (const sd of [-1, 1]) mk(new THREE.CylinderGeometry(0.035, 0.035, 1.5, 5), mats.metal, sd * 0.5, 1.75, z, car).rotation.z = sd * 0.22;   // struts to the hull
   mk(new THREE.CylinderGeometry(0.012, 0.02, 1.1, 5), mats.dark, 0.4, -0.5, -1.9, car);                                  // trailing aerial
-  mk(new THREE.BoxGeometry(0.7, 0.05, 1.7), mats.dark, 0, -0.03, -0.9, car);                                              // bomb bay doors
+  mk(bevelBox(0.7, 0.05, 1.7), mats.dark, 0, -0.03, -0.9, car);                                              // bomb bay doors
   for (const sd of [-1, 1]) mk(new THREE.SphereGeometry(0.06, 6, 5), sd > 0 ? mats.navGreen : mats.navRed, sd * 0.66, 0.62, 2.2, car);
 
   // four ducted vectoring fans on outriggers
   const props = [], discs = [];
   for (const sd of [-1, 1]) for (const z of [1.9, -2.3]) {
-    mk(new THREE.BoxGeometry(1.5, 0.09, 0.3), mats.rib, sd * 1.75, HULL_Y - 1.15, z, body).rotation.z = sd * -0.35;
+    mk(bevelBox(1.5, 0.09, 0.3), mats.rib, sd * 1.75, HULL_Y - 1.15, z, body).rotation.z = sd * -0.35;
     const pod = new THREE.Group();
     pod.position.set(sd * 2.55, HULL_Y - 1.45, z);
     mk(new THREE.TorusGeometry(0.52, 0.09, 8, 20), mats.gondola, 0, 0, 0, pod);
     mk(new THREE.CylinderGeometry(0.13, 0.09, 0.6, 8).rotateX(Math.PI / 2), mats.metal, 0, 0, -0.05, pod);
     const prop = new THREE.Group();
-    for (let b = 0; b < 3; b++) { const bl = mk(new THREE.BoxGeometry(0.1, 0.95, 0.02), mats.dark, 0, 0, 0.12, prop); bl.rotation.z = b * Math.PI / 3; }
+    for (let b = 0; b < 3; b++) { const bl = mk(bevelBox(0.1, 0.95, 0.02), mats.dark, 0, 0, 0.12, prop); bl.rotation.z = b * Math.PI / 3; }
     pod.add(prop);
     const disc = new THREE.Mesh(new THREE.CircleGeometry(0.48, 20), mats.propDisc.clone());
     disc.position.z = 0.12; pod.add(disc);
@@ -173,7 +177,7 @@ export function makeAirship() {
   const artBase = new THREE.Group(); artBase.position.set(0, -0.05, 0.55); car.add(artBase);
   mk(new THREE.CylinderGeometry(0.42, 0.36, 0.24, 14), mats.dark, 0, -0.08, 0, artBase);
   const artPivot = new THREE.Group(); artPivot.position.y = -0.22; artBase.add(artPivot);
-  mk(new THREE.BoxGeometry(0.4, 0.3, 0.6), mats.gondola, 0, 0, 0.1, artPivot);
+  mk(bevelBox(0.4, 0.3, 0.6), mats.gondola, 0, 0, 0.1, artPivot);
   const artBarrel = mk(new THREE.CylinderGeometry(0.075, 0.095, 1.9, 10).rotateX(Math.PI / 2), mats.metal, 0, 0, 1.2, artPivot);
   mk(new THREE.CylinderGeometry(0.12, 0.12, 0.25, 10).rotateX(Math.PI / 2), mats.dark, 0, 0, 2.1, artPivot);
   const artMuzzle = new THREE.Object3D(); artMuzzle.position.z = 2.3; artPivot.add(artMuzzle);
@@ -271,10 +275,23 @@ export function updateAirshipOrdnance(dt) {
   }
 }
 
+const newAir = (def) => ({ mode: 'rearm', t: def.rearm * 0.5, gat: [def.gatRounds, def.gatRounds], hmg: [def.hmgRounds, def.hmgRounds], shells: def.shells, bombs: def.bombs,
+  rpm: 0, vx: 0, vz: 0, yaw: 0, idle: 0, scan: 0, focus: null, gatCd: [0, 0.03], hmgCd: [0, 0.06], gunT: [null, null, null, null], gunScan: 0, artCd: 1.5, bombCd: 0, recoil: 0 });
+
+// A new pad comes up out of its silo empty (the ship would never fit down the shaft): the Titan flies in from off the
+// map, armed, and moors once things are quiet.
+export function airshipArrive(s) {
+  const ship = s.mesh.userData.ship, A = (s.air = newAir(s.def));
+  state.scene.add(ship);
+  ship.position.set(s.x - 52, s.y + 30, s.z - 34);
+  A.mode = 'attack'; A.rpm = 1; A.yaw = Math.atan2(52, 34);
+  ship.rotation.y = A.yaw;
+  s.snd = audio.loop('airship_engine', { x: ship.position.x, z: ship.position.z, vol: 0.6 });
+}
+
 export function updateAirship(s, dt) {
   const def = s.def, pad = s.mesh, ship = pad.userData.ship, ud = ship.userData;
-  const A = (s.air ??= { mode: 'rearm', t: def.rearm * 0.5, gat: [def.gatRounds, def.gatRounds], hmg: [def.hmgRounds, def.hmgRounds], shells: def.shells, bombs: def.bombs,
-    rpm: 0, vx: 0, vz: 0, yaw: 0, idle: 0, scan: 0, focus: null, gatCd: [0, 0.03], hmgCd: [0, 0.06], gunT: [null, null, null, null], gunScan: 0, artCd: 1.5, bombCd: 0, recoil: 0 });
+  const A = (s.air ??= newAir(def));
   const moorY = s.y + 0.21 + MOOR, pos = ship.position;
   const full = A.gat[0] === def.gatRounds && A.gat[1] === def.gatRounds && A.hmg[0] === def.hmgRounds && A.hmg[1] === def.hmgRounds && A.shells === def.shells && A.bombs === def.bombs;
 
@@ -299,15 +316,19 @@ export function updateAirship(s, dt) {
     A.t -= dt;
     if (A.t <= 0) {
       A.gat = [def.gatRounds, def.gatRounds]; A.hmg = [def.hmgRounds, def.hmgRounds]; A.shells = def.shells; A.bombs = def.bombs;
-      if (densest(s.x, s.z, def.range)) {
-        A.mode = 'takeoff'; A.t = 0;
-        state.scene.attach(ship);
-        A.yaw = ship.rotation.y;
-        if (!s.snd) s.snd = audio.loop('airship_engine', { x: s.x, z: s.z, vol: 0.6 });
-      }
+    }
+    if ((A.t <= 0 && densest(s.x, s.z, def.range)) || s.castOff) {   // castOff: the pad is about to retract (retract.js)
+      A.mode = 'takeoff'; A.t = 0;
+      state.scene.attach(ship);
+      A.yaw = ship.rotation.y;
+      if (!s.snd) s.snd = audio.loop('airship_engine', { x: s.x, z: s.z, vol: 0.6 });
     }
     return;
   }
+
+  // evacuation (strategic strike): run for the map edge on its own heading, hold there, back to work on the all clear
+  if (s.evac && A.mode !== 'evac') { A.mode = 'evac'; A.focus = null; }
+  if (!s.evac && A.mode === 'evac') { A.mode = 'attack'; A.idle = 0; }
 
   // where to go: park over the thickest knot of bugs so the bomb bay can work, guns cover everything around
   const empty = A.gat[0] + A.gat[1] + A.hmg[0] + A.hmg[1] + A.shells + A.bombs === 0;
@@ -323,10 +344,11 @@ export function updateAirship(s, dt) {
   else if (A.mode === 'attack') {
     if (A.focus) { gx = A.focus.x; gz = A.focus.z; } else { gx = pos.x; gz = pos.z; }
     gy = Math.max(heightAt(pos.x, pos.z), heightAt(gx, gz)) + ALT;
-  } else if (A.mode === 'land') gy = moorY;
+  } else if (A.mode === 'evac') { gx = Math.sin(s.evac.ang) * 98; gz = Math.cos(s.evac.ang) * 98; gy = heightAt(pos.x, pos.z) + ALT + 4; }
+  else if (A.mode === 'land') gy = moorY;
 
   const tx = gx - pos.x, tz = gz - pos.z, td = Math.hypot(tx, tz);
-  const want = Math.min(SPEED, td * 0.8), acc = Math.min(1, dt * 0.7);
+  const want = Math.min(A.mode === 'evac' ? SPEED * 2.4 : SPEED, td * 0.8), acc = Math.min(1, dt * (A.mode === 'evac' ? 1.2 : 0.7));   // full emergency power
   A.vx += ((td > 0.01 ? tx / td * want : 0) - A.vx) * acc; A.vz += ((td > 0.01 ? tz / td * want : 0) - A.vz) * acc;
   pos.x += A.vx * dt; pos.z += A.vz * dt;
   const floor = heightAt(pos.x, pos.z) + (A.mode === 'land' || A.mode === 'takeoff' ? 0 : 6);
@@ -339,7 +361,8 @@ export function updateAirship(s, dt) {
   ud.body.position.y = Math.sin(state.time * 0.8) * 0.08;
   if (s.snd) s.snd.setPos(pos.x, pos.z);
 
-  if (A.mode === 'return' && td < 0.5 && speed < 0.8) A.mode = 'land';
+  if (A.mode === 'land' && (s.castOff || s.padDown)) A.mode = 'return';      // waved off: hold over the pad until it is back up
+  if (A.mode === 'return' && td < 0.5 && speed < 0.8 && !s.castOff && !s.padDown) A.mode = 'land';
   if (A.mode === 'land' && pos.y - moorY < 0.06 && Math.abs(wrap(A.yaw)) < 0.08) {
     pad.attach(ship);
     ship.position.set(0, 0.36 + MOOR, 0); ship.rotation.set(0, 0, 0);
@@ -401,7 +424,7 @@ export function updateAirship(s, dt) {
       const m = new THREE.Group();
       mk(new THREE.CapsuleGeometry(0.17, 0.5, 4, 10), mats.bomb, 0, 0, 0, m);
       mk(new THREE.CylinderGeometry(0.178, 0.178, 0.09, 10), mats.bombBand, 0, -0.18, 0, m);
-      for (let k = 0; k < 2; k++) mk(new THREE.BoxGeometry(0.42, 0.26, 0.02), mats.shell, 0, 0.42, 0, m).rotation.y = k * Math.PI / 2;
+      for (let k = 0; k < 2; k++) mk(bevelBox(0.42, 0.26, 0.02), mats.shell, 0, 0.42, 0, m).rotation.y = k * Math.PI / 2;
       ship.localToWorld(m.position.set(rnd(-0.2, 0.2), -0.1, rnd(-0.6, 0.3)));
       state.scene.add(m);
       bombs.push({ m, vx: A.vx + rnd(-0.6, 0.6), vy: -1, vz: A.vz + rnd(-0.6, 0.6), dmg: def.bombDamage, splash: def.bombSplash });

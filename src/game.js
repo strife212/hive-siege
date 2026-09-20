@@ -11,7 +11,8 @@ import { audio } from './audio.js';
 import { flow } from './flowfield.js';
 import { updateHeli, updateHeliRockets, removeHeli } from './heli.js';
 import { boss } from './boss.js';
-import { updateAirship, updateAirshipOrdnance, removeAirship } from './airship.js';
+import { retract } from './retract.js';
+import { updateAirship, updateAirshipOrdnance, removeAirship, airshipArrive } from './airship.js';
 import { spatial } from './spatial.js';
 import { swarm } from './swarm.js';
 import { gore } from './gore.js';
@@ -77,7 +78,8 @@ export function init(scene) {
     core.cells.push([i, j]);
   }
   core.mesh = makeBuildingMesh('core');
-  core.mesh.position.set(0, core.y - 0.2, 0);
+  core.baseY = core.y - 0.2;
+  core.mesh.position.set(0, core.baseY, 0);
   scene.add(core.mesh);
   core.bar = makeHpBar(4);
   core.bar.position.set(0, core.y + 10.2, 0);
@@ -147,22 +149,26 @@ function refreshWalls(i, j) {
   }
 }
 
-export function placeStructure(type, i, j) {
+// opts.instant: the building is simply there, fully deployed (title demo set dressing): no silo cycle, no dirt burst.
+export function placeStructure(type, i, j, opts = {}) {
   const def = BUILDINGS[type];
   const { x, z } = footprintCenter(type, i, j);
   const y = heightAt(x, z);
   const maxHp = def.hp * (type === 'wall' && state.research.plating ? 2 : 1);
-  const s = { id: nextId++, type, def, name: def.name, i, j, x, y, z, hp: maxHp, maxHp, cooldown: 0, target: null, rise: 0, cells: footprintCells(type, i, j) };
+  const s = { id: nextId++, type, def, name: def.name, i, j, x, y, z, hp: maxHp, maxHp, cooldown: 0, target: null, cells: footprintCells(type, i, j) };
   s.mesh = makeBuildingMesh(type);
   s.baseY = y - 0.15;
-  s.sink = new THREE.Box3().setFromObject(s.mesh).max.y + 0.3;   // start fully buried, rise into place
-  s.mesh.position.set(x, s.baseY - s.sink, z);
+  s.mesh.position.set(x, s.baseY, z);
   state.scene.add(s.mesh);
-  burst(x, y + 0.2, z, 'soil', 8 * s.cells.length, 3 + s.cells.length);
   s.bar = makeHpBar(1.2 + 0.4 * s.cells.length);
-  s.bar.position.set(x, y + s.sink + 0.2, z);
+  s.bar.position.set(x, y + new THREE.Box3().setFromObject(s.mesh).max.y - s.baseY + 0.5, z);
   s.bar.visible = false;
   state.scene.add(s.bar);
+  if (!opts.instant) {
+    if (def.kind === 'airship') airshipArrive(s);                // the pad comes up empty; its ship flies in
+    retract.install(s);                                          // arrives locked down in its silo and deploys (retract.js)
+    burst(x, y + 0.2, z, 'soil', 8 * s.cells.length, 3 + s.cells.length);
+  }
   for (const [ci, cj] of s.cells) state.occ.set(cellKey(ci, cj), s);
   state.flowDirty = true;
   state.structures.push(s);
@@ -172,11 +178,12 @@ export function placeStructure(type, i, j) {
 }
 
 export function sellStructure(s) {
-  if (s.type === 'core' || s.hp <= 0) return;
+  if (s.type === 'core' || s.hp <= 0 || s.selling) return;
   const refund = Math.floor(s.def.cost * 0.5);
   state.credits += refund;
   log(`Sold ${s.name} for ${refund} credits`);
-  removeStructure(s);
+  s.selling = true;
+  retract.sell(s, () => removeStructure(s));                     // it retracts into its silo, then the site is cleared
 }
 
 function removeStructure(s) {
@@ -184,6 +191,7 @@ function removeStructure(s) {
   if (s.def?.kind === 'heli') removeHeli(s);
   if (s.def?.kind === 'airship') removeAirship(s);
   if (s.snd) { s.snd.stop(); s.snd = null; }
+  retract.drop(s);
   state.scene.remove(s.mesh, s.bar);
   if (s.cells) for (const [i, j] of s.cells) state.occ.delete(cellKey(i, j));
   else state.occ.delete(cellKey(s.i, s.j));
@@ -194,7 +202,7 @@ function removeStructure(s) {
 }
 
 export function damageStructure(s, dmg) {
-  if (s.hp <= 0) return;
+  if (s.hp <= 0 || s.buried) return;                        // nothing reaches a building under its blast doors
   if (s === state.core && MAPS[MAP].invincibleCore) return;
   s.hp -= dmg;
   s.bar.visible = true;
@@ -399,7 +407,6 @@ function traverse(s, t, dt, tol = 0.07) {
 }
 
 function updateTower(s, dt) {
-  if (s.rise < 1) return;                 // still rising out of the ground
   const def = s.def;
   if (def.kind === 'mortar') return updateMortar(s, dt);
   if (def.kind === 'missile') return updateSilo(s, dt);
@@ -419,7 +426,7 @@ function updateTower(s, dt) {
     if (aligned && !s.snd) s.snd = audio.loop('flame_loop', { x: s.x, z: s.z });
     if (!aligned && s.snd) { s.snd.stop(); s.snd = null; }
     const ud = s.mesh.userData;
-    ud.pilot.scale.setScalar(0.25 + Math.random() * 0.12);
+    ud.pilot.scale.setScalar(0.16 + Math.random() * 0.08);
     if (aligned) flameStream(s, dt);
     return;
   }
@@ -504,7 +511,7 @@ function aimPitch(s, t, dt) {
   ud.pitch.rotation.x += (goal - ud.pitch.rotation.x) * Math.min(1, dt * 6);
   if (ud.lens) {
     const firing = t && s.cooldown > 0 ? 1 : 0;
-    const want = 0.9 + firing * 3.2;
+    const want = 0.35 + firing * 3.6;                 // dark glass at rest, hot when lasing (it blooms)
     ud.lens.material.emissiveIntensity += (want - ud.lens.material.emissiveIntensity) * Math.min(1, dt * 10);
   }
 }
@@ -782,10 +789,11 @@ function updateCasings(dt) {
 
 // ---------------------------------------------------------------- enemy AI
 const _dir = { x: 0, z: 0 };
+const blocker = (i, j) => { const st = state.occ.get(cellKey(i, j)); return st && !st.buried ? st : null; };   // retracted buildings are not in the way
 const PREY_RANGE = 16;                 // bugs this close to a trooper go for it before anything else
 function updateEnemies(dt) {
   if (state.flowDirty || state.time - state.flowBuilt > 1.5) {
-    flow.build(state.structures, state.core);
+    flow.build(state.structures.filter((s) => !s.buried || s === state.core), state.core);   // bugs walk straight over closed blast doors
     state.flowDirty = false;
     state.flowBuilt = state.time;
   }
@@ -822,11 +830,11 @@ function updateEnemies(dt) {
       // Only charge straight at the trooper when the way is open. Behind a wall, keep following the normal route in
       // (or keep chewing) instead of piling up against the nearest structure.
       const pc = worldToCell(e.x + _dir.x * 0.9, e.z + _dir.z * 0.9), here = worldToCell(e.x, e.z);
-      if (state.occ.has(cellKey(pc.i, pc.j)) || state.occ.has(cellKey(here.i, here.j))) prey = null;
+      if (blocker(pc.i, pc.j) || blocker(here.i, here.j)) prey = null;
       else e.target = null;
     }
 
-    if (e.target && e.target.hp > 0) {
+    if (e.target && e.target.hp > 0 && !e.target.buried) {
       e.fx = e.target.x - e.x; e.fz = e.target.z - e.z;
       if (e.attackCd <= 0) {
         e.attackCd = 1 / e.def.attackRate;
@@ -844,8 +852,8 @@ function updateEnemies(dt) {
 
     // Anything in the cell ahead (or the one we stand in) blocks us: chew through it.
     let c = worldToCell(e.x + dx * 0.9, e.z + dz * 0.9);
-    let st = state.occ.get(cellKey(c.i, c.j));
-    if (!st) { c = worldToCell(e.x, e.z); st = state.occ.get(cellKey(c.i, c.j)); }
+    let st = blocker(c.i, c.j);
+    if (!st) { c = worldToCell(e.x, e.z); st = blocker(c.i, c.j); }
     if (st) { e.target = st; continue; }
 
     e.x = Math.max(-limX, Math.min(limX, e.x + dx * e.speed * dt));
@@ -901,12 +909,13 @@ export function update(dt) {
   state.time += dt;
   updateWave(dt);
   for (const s of state.structures) {
-    if (s.rise < 1) {
-      s.rise = Math.min(1, s.rise + dt / 0.75);
-      const e = 1 - Math.pow(1 - s.rise, 3);
-      s.mesh.position.y = s.baseY - s.sink * (1 - e);
-      if (s.rise >= 1) burst(s.x, s.y + 0.3, s.z, 'soil', 6, 4);
+    if (retract.update(s, dt)) {                             // stowed, moving or locked down: the building is offline
+      s.padDown = true;
+      if (s.def?.kind === 'airship') updateAirship(s, dt);    // its ship is aloft and carries on without the pad
+      else if (s.def?.kind === 'heli' && s.heli && s.mesh.userData.heli.parent !== s.mesh) updateHeli(s, dt);   // so is an evacuated gunship
+      continue;
     }
+    s.padDown = false;
     if (s.def?.kind) updateTower(s, dt);
     if (s.mesh.userData.guns) updateRecoil(s, dt);
     if (s.mesh.userData.pitch && !s.target) aimPitch(s, null, dt);
@@ -915,6 +924,7 @@ export function update(dt) {
     const spin = s.mesh.userData.spin;
     if (spin) spin.rotation.y += dt * (s.type === 'refinery' ? 6 : 1.2);
   }
+  retract.tick(dt);
   updateProjectiles(dt);
   updateHeliRockets(dt);
   updateAirshipOrdnance(dt);

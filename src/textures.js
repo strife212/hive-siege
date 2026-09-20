@@ -18,16 +18,21 @@ function soil(u, v, out) {
 
 function rock(u, v, out) {
   const h1 = fbmP(u * 5, v * 5, 5, 4, 11);
-  const crack1 = sm(0.86, 0.97, 1 - Math.abs(perlinP(u * 7, v * 7, 7, 12)));
-  const crack2 = sm(0.9, 0.98, 1 - Math.abs(perlinP(u * 15, v * 15, 15, 13))) * 0.6;
+  // Fractures: ridge lines of a domain-warped field (jagged, not the smooth loops a single octave gives), and only
+  // where a broad mask allows, so the face reads as slabs split by a few breaks rather than an all-over squiggle.
+  const wx = fbmP(u * 9, v * 9, 9, 3, 16) * 0.09, wy = fbmP(u * 9 + 3.3, v * 9 + 1.7, 9, 3, 17) * 0.09;
+  const mask1 = sm(-0.15, 0.25, fbmP(u * 3, v * 3, 3, 2, 18));
+  const crack1 = sm(0.9, 0.985, 1 - Math.abs(fbmP((u + wx) * 5, (v + wy) * 5, 5, 3, 12))) * mask1;
+  const crack2 = sm(0.93, 0.99, 1 - Math.abs(fbmP((u - wy) * 11, (v + wx) * 11, 11, 2, 13))) * 0.5 * (1 - mask1 * 0.6);
   const cracks = Math.min(1, crack1 + crack2);
+  const slab = fbmP(u * 2, v * 2, 2, 3, 19);                       // big tonal plates between the breaks
   const fine = fbmP(u * 30, v * 30, 30, 2, 14);
   const lichen = sm(0.5, 0.7, perlinP(u * 10, v * 10, 10, 15)) * 0.35;
-  out.h = h1 * 0.5 - cracks * 0.9 + fine * 0.08;
-  let c = mix([0.33, 0.35, 0.40], [0.52, 0.52, 0.55], h1 * 0.5 + 0.5);
+  out.h = h1 * 0.5 + slab * 0.25 - cracks * 0.9 + fine * 0.08;
+  let c = mix([0.33, 0.35, 0.40], [0.52, 0.52, 0.55], h1 * 0.35 + slab * 0.3 + 0.5);
   c = [c[0] + fine * 0.05, c[1] + fine * 0.05, c[2] + fine * 0.05];
   c = mix(c, [0.42, 0.48, 0.30], lichen);
-  out.c = mix(c, [0.10, 0.10, 0.13], cracks);
+  out.c = mix(c, [0.10, 0.10, 0.13], cracks * 0.85);
 }
 
 function moss(u, v, out) {
@@ -80,9 +85,11 @@ function toTexture(data, srgb, anisotropy) {
   return tex;
 }
 
+let cache = null;
+export const terrainTextures = () => cache;                      // available once the terrain has been built
 export function generateTerrainTextures(renderer) {
   const aniso = renderer.capabilities.getMaxAnisotropy();
-  return {
+  return cache ||= {
     soil: build(soil, 9, aniso),
     rock: build(rock, 7, aniso),
     moss: build(moss, 6, aniso),
