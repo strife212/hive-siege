@@ -310,8 +310,43 @@ body.intro #debug { display: none; }
   filter: drop-shadow(0 0 26px rgba(242, 177, 68, .45)) drop-shadow(0 4px 0 rgba(0, 0, 0, .7));
 }
 #deploy i { display: block; width: min(440px, 50vw); height: 1px; margin: 4px 0 8px; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
-#deploy span { font-size: 13px; font-weight: 600; letter-spacing: .42em; margin-right: -.42em; color: var(--text); text-shadow: 0 0 10px #000, 0 1px 2px #000; animation: deployPulse 1.8s ease-in-out infinite; }
-@keyframes deployPulse { 50% { opacity: .35; } }
+/* map choice: two panels side by side; hovering (or keyboard focus) unfolds a card with a shot of that map */
+#deploy .maps { display: flex; align-items: flex-start; justify-content: center; gap: 18px; margin-top: 4px; pointer-events: auto; }
+#deploy .map {
+  width: min(320px, 42vw); padding: 0; border: 0; cursor: pointer; text-align: left; color: var(--text);
+  background: linear-gradient(180deg, rgba(22, 29, 40, .93), rgba(8, 10, 14, .95));
+  clip-path: var(--notch);
+  box-shadow: inset 0 0 0 1px rgba(242, 177, 68, .38), 0 10px 30px rgba(0, 0, 0, .55);
+  transition: box-shadow .2s, background .2s;
+}
+#deploy .map .label {
+  display: flex; align-items: center; justify-content: center; gap: 12px; padding: 13px 16px 12px;
+  font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: .2em; margin-right: -.2em; text-transform: uppercase;
+  color: var(--accent-hi); text-shadow: 0 0 14px rgba(242, 177, 68, .35);
+}
+#deploy .map .label::before, #deploy .map .label::after {   /* diamond studs that light up on hover */
+  content: ""; width: 6px; height: 6px; background: var(--accent-lo); transform: rotate(45deg);
+  transition: background .2s, box-shadow .2s;
+}
+#deploy .map .reveal { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .4s var(--ease); }
+#deploy .map .inner { min-height: 0; overflow: hidden; }
+#deploy .map img {
+  display: block; width: calc(100% - 16px); height: auto; aspect-ratio: 16 / 9; margin: 0 8px; object-fit: cover;
+  outline: 1px solid rgba(160, 190, 230, .22); outline-offset: -1px;
+}
+#deploy .map .foot { display: flex; align-items: flex-end; gap: 12px; padding: 9px 14px 12px; }
+#deploy .map em { flex: 1; font-style: normal; font-size: 13px; line-height: 1.35; color: var(--muted); }
+#deploy .map strong { font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: .24em; color: var(--accent); white-space: nowrap; }
+#deploy .map:hover, #deploy .map:focus-visible {
+  outline: none; background: linear-gradient(180deg, rgba(34, 32, 26, .95), rgba(10, 10, 12, .96));
+  box-shadow: inset 0 0 0 1px var(--accent), 0 14px 40px rgba(0, 0, 0, .6);
+}
+#deploy .map:hover .reveal, #deploy .map:focus-visible .reveal { grid-template-rows: 1fr; }
+#deploy .map:hover .label::before, #deploy .map:hover .label::after,
+#deploy .map:focus-visible .label::before, #deploy .map:focus-visible .label::after { background: var(--accent-hi); box-shadow: 0 0 8px var(--accent); }
+#deploy .map:active { filter: brightness(1.1); }
+@media (hover: none) { #deploy .map .reveal { grid-template-rows: 1fr; } }   /* touch: no hover, so the cards start open */
+@media (max-width: 680px) { #deploy .maps { flex-direction: column; align-items: center; } #deploy .map { width: min(340px, calc(100vw - 32px)); } }
 body.demo #overlay, body.demo #skip { display: none !important; }
 body.demo #deploy { justify-content: flex-start; padding-top: 9vh; }
 

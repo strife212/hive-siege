@@ -66,7 +66,24 @@
   <div id="abilities"></div>
   <div id="flash"></div>
   <div id="fade"></div>
-  <div id="deploy"><small>ORBITAL COMMAND</small><b>HIVE SIEGE</b><i></i><span>CLICK OR PRESS ANY KEY TO DEPLOY</span></div>
+  <div id="deploy" hidden><small>ORBITAL COMMAND</small><b>HIVE SIEGE</b><i></i>
+    <div class="maps">
+      <button class="map" type="button" data-map="basin">
+        <span class="label">Plains Defense</span>
+        <span class="reveal"><span class="inner">
+          <img src="/src/menu/plains.webp" alt="" width="640" height="360" decoding="async" />
+          <span class="foot"><em>Open ground. The swarm comes from every side.</em><strong>DEPLOY</strong></span>
+        </span></span>
+      </button>
+      <button class="map" type="button" data-map="canyon">
+        <span class="label">Canyon Siege</span>
+        <span class="reveal"><span class="inner">
+          <img src="/src/menu/canyon.webp" alt="" width="640" height="360" decoding="async" />
+          <span class="foot"><em>One way in. Hold the choke as the horde marches up the canyon.</em><strong>DEPLOY</strong></span>
+        </span></span>
+      </button>
+    </div>
+  </div>
   <div id="skip">PRESS ANY KEY TO SKIP</div>
 
   <script type="module" src="/src/main.js"></script>

@@ -111,8 +111,11 @@ anything between them and your Core.
   every 3-6 s, 2 HP: a small bug's bite costs 1, a brute or spitter takes both. They are the bugs' top priority: any bug within 16 units with a
   clear run at a trooper drops what it is doing (even a structure it was chewing) and hunts him.
 - **Title screen**: a fresh visit opens on an attract-mode battle (`src/demo.js`): a self-repairing fortress in the canyon under an
-  endless swarm, with strafing runs and artillery called in alternately, silent and dimmed. The first click or key reloads into
-  the real game on the selected map; if the demo Core falls the scene restarts. `?nointro` and `?stress` skip it.
+  endless swarm, with strafing runs and artillery called in alternately, silent and dimmed. Two buttons under the title,
+  *Plains Defense* (the open basin) and *Canyon Siege*, each unfold on hover or keyboard focus into a card with a shot
+  of that map (`src/menu/*.webp`, captured in-engine). Clicking one loads the game on that map. On touch screens the
+  cards start open, and on narrow screens the buttons stack. If the demo Core falls, the scene restarts. `?nointro`
+  and `?stress` skip the title screen.
 - **Icons**: every building, research item and ability has a 16x16 pixel-art icon drawn in code (`src/icons.js`), no image files.
 - **Maps**: `?map=canyon` loads Deadrock Canyon, a box canyon with the Core at the closed end, a choke point in front of it
   and nests only at the mouth (`MAPS` in `src/config.js`, canyon shape in `src/terrain.js`). Default is the open basin.

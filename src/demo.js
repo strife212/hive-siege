@@ -4,8 +4,8 @@ import { canyonDist, canyonCenter } from './terrain.js';
 import { DEPLOY_KEY, RECORD } from './config.js';
 
 // Title-screen attract mode: a fortified canyon under a never-ending swarm, with strafing runs and artillery called
-// in alternately. It runs the real simulation (silently) behind a dimmed overlay. The first key or click reloads
-// into the actual game; if the demo Core falls the page reloads and the scene starts over.
+// in alternately. It runs the real simulation (silently) behind a dimmed overlay. The two map buttons on the title
+// (Plains Defense, Canyon Siege) load the actual game on that map; if the demo Core falls the scene starts over.
 const POPULATION = 330;
 
 let instant = false;                                   // the opening fortress is already standing; later rebuilds deploy normally
@@ -40,6 +40,10 @@ export function startDemo({ camera, controls }) {
   state.demo = true;
   controls.enabled = false;
   document.body.classList.add('demo');
+  // The title starts hidden in the HTML (a page loading straight into a map shows plain black), so reveal it here.
+  // The game UI waits offscreen behind it: keep that out of the tab order so the map buttons come first.
+  document.getElementById('deploy').hidden = false;
+  for (const el of document.body.children) if (el.id !== 'deploy') el.inert = true;
   const fade = document.getElementById('fade');
   fade.style.transition = 'opacity .45s';
   fade.style.opacity = '0.4';
@@ -55,22 +59,26 @@ export function startDemo({ camera, controls }) {
   scatterBugs(POPULATION);
 
   let t = 0, spawnT = 0, repairT = 3, callT = 5, strafeNext = true, leaving = false;
-  function leave(deploy) {
+  // map: deploy onto that map (maps are built at load, so it is a navigation); none: just restart the demo
+  function leave(map) {
     if (leaving) return;
     leaving = true;
-    if (deploy) { try { sessionStorage.setItem(DEPLOY_KEY, '1'); } catch { /* fine */ } }
+    if (map) { try { sessionStorage.setItem(DEPLOY_KEY, '1'); } catch { /* fine */ } }
     document.getElementById('deploy').hidden = true;
     fade.style.opacity = '1';
-    setTimeout(() => location.reload(), 480);
+    setTimeout(() => {
+      if (!map) return location.reload();
+      const q = new URLSearchParams(location.search);
+      q.set('map', map);
+      location.search = q.toString();
+    }, 480);
   }
-  const onGesture = (e) => { if (e.isTrusted !== false && !RECORD) leave(true); };
-  addEventListener('pointerdown', onGesture);
-  addEventListener('keydown', onGesture);
+  for (const b of document.querySelectorAll('#deploy .map')) b.addEventListener('click', () => { if (!RECORD) leave(b.dataset.map); });
 
   return {
     update(dt) {
       t += dt;
-      if ((state.gameOver || state.core.hp <= 0) && !RECORD) return leave(false);
+      if ((state.gameOver || state.core.hp <= 0) && !RECORD) return leave(null);
       state.credits = 1e9;
 
       // field engineers: damaged structures mend and lost ones are rebuilt, so the siege can run indefinitely
