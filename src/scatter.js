@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { sampleTerrain, EXTENT, isScenery } from './terrain.js';
 import { HALF, FLAT, MAP } from './config.js';
 import { terrainTextures } from './textures.js';
+import { WEATHER_U } from './surface.js';
 
 // Instanced decoration: low-poly rocks everywhere (bigger in the mountains) and glowing crystals on moss.
 function seeded(seed) {
@@ -33,6 +34,7 @@ function rockMaterial() {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.tRock = { value: tex.rock.map };
     shader.uniforms.uCanyon = { value: MAP === 'canyon' ? 1 : 0 };
+    shader.uniforms.uWet = WEATHER_U.wet;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         varying vec3 vRockPos; varying float vRockY;`)
@@ -45,7 +47,7 @@ function rockMaterial() {
         vRockY = position.y;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
-        uniform sampler2D tRock; uniform float uCanyon; varying vec3 vRockPos; varying float vRockY;`)
+        uniform sampler2D tRock; uniform float uCanyon, uWet; varying vec3 vRockPos; varying float vRockY;`)
       .replace('#include <map_fragment>', `
         vec3 rn = abs(normalize(cross(dFdx(vRockPos), dFdy(vRockPos))));
         vec3 rw = pow(rn, vec3(4.0)); rw /= (rw.x + rw.y + rw.z);
@@ -53,7 +55,8 @@ function rockMaterial() {
         float band = sin(vRockPos.y * 2.6 + sin(vRockPos.x * 0.11 + vRockPos.z * 0.07) * 2.0) * 0.5 + 0.5;
         vec3 strata = mix(vec3(1.18, 0.78, 0.55), vec3(1.5, 1.12, 0.82), band) * (0.8 + 0.2 * (1.0 - rn.y));
         rockC *= mix(vec3(1.0), strata, uCanyon);
-        diffuseColor.rgb *= rockC * 1.12 * mix(0.5, 1.0, smoothstep(-0.55, 0.25, vRockY));`);
+        diffuseColor.rgb *= rockC * 1.12 * mix(0.5, 1.0, smoothstep(-0.55, 0.25, vRockY)) * (1.0 - 0.38 * uWet);`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n        roughnessFactor = mix(roughnessFactor, 0.38, uWet);');
   };
   return mat;
 }

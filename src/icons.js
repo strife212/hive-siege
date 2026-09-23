@@ -184,6 +184,12 @@ const DRAW = {
     p.rect(6, 3, 3, 5, 'w').rect(6, 5, 3, 1, 'k').rect(7, 8, 1, 2, 'r').px(6, 8, 'r').px(8, 8, 'r').px(5, 3, 'd').px(9, 3, 'd');   // the ICBM, nose down
     p.px(7, 10, 'y');
   },
+  ab_blackhole(p) {
+    p.disc(7.5, 9.5, 6.4, 'B').disc(7.5, 9.5, 5.6, 'b').disc(7.5, 9.5, 4.6, 'p');                                  // accretion disk, blue rim to violet
+    p.disc(7.5, 9.5, 3.1, 'k');                                                                                     // the horizon
+    p.px(4, 7, 'w').px(5, 6, 'w').px(6, 6, 'c').px(3, 9, 'c').px(11, 12, 'c').px(10, 13, 'w').px(9, 13, 'c');   // photon ring glints
+    p.rect(11, 0, 2, 4, 'g').px(11, 0, 'r').px(12, 0, 'r').px(10, 3, 'd').px(13, 3, 'd').px(11, 4, 'p').px(12, 4, 'p');   // the bomb coming down
+  },
   ab_nuke(p) {
     p.disc(7.5, 7.5, 7, 'y').disc(7.5, 7.5, 6, 'a').disc(7.5, 7.5, 5.4, 'y');
     p.disc(7.5, 7.5, 1.2, 'k');

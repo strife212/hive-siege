@@ -9,11 +9,11 @@ import { ENEMIES } from './config.js';
 // (plus one for shadows) instead of thirty meshes each.
 
 const CAPACITY = 4096;
-const PART = { BODY: 0, FEMUR: 1, TIBIA: 2, MANDIBLE: 3, ANTENNA: 4 };
+const PART = { BODY: 0, FEMUR: 1, TIBIA: 2, MANDIBLE: 3, ANTENNA: 4, CANNON: 5, SAC: 6 };
 
 // ---------------------------------------------------------------- rig construction (low-poly, then baked)
 function tag(mesh, o) { mesh.userData.rig = o; return mesh; }
-function m(geo, color, x = 0, y = 0, z = 0, emissive = 0x000000) {
+function m(geo, color, x = 0, y = 0, z = 0, emissive = 0x000000) {   // emissive: any non-zero value makes the part glow in its colour
   const mesh = new THREE.Mesh(geo);
   mesh.position.set(x, y, z);
   return tag(mesh, { part: PART.BODY, color, emissive, side: 1, phase: 0 });
@@ -24,6 +24,43 @@ function plate(color, x, y, z, sx, sy, sz, tilt = 0) {
   p.scale.set(sx, sy, sz);
   p.rotation.x = tilt;
   return p;
+}
+
+// Acid Spitter hardware: a glowing acid sac strapped over the abdomen, fed by a hose to a turret on the thorax. The
+// turret (PART.CANNON) traverses on its own and its barrel kicks back when it fires; the sac (PART.SAC) sloshes with
+// the gait, swells as a shot charges and squeezes when it goes. Both glow brighter with the charge.
+function addAcidCannon(body, def) {
+  const sacAt = new THREE.Group();
+  sacAt.position.set(0, 0.98, -0.72);
+  body.add(sacAt);
+  const sac = m(new THREE.SphereGeometry(0.3, 12, 8), def.accent, 0, 0, 0, def.accent);
+  sac.scale.set(0.95, 0.78, 1.3);
+  const parts = [sac];
+  for (const z of [-0.14, 0.13]) {                       // chitin straps holding it down
+    const strap = m(new THREE.TorusGeometry(0.265, 0.035, 4, 12), def.plate, 0, 0, z);
+    strap.scale.set(1.04, 0.87, 1);
+    parts.push(strap);
+  }
+  for (const p of parts) { Object.assign(p.userData.rig, { part: PART.SAC, pivot: sacAt }); sacAt.add(p); }
+  const hose = m(new THREE.CylinderGeometry(0.055, 0.07, 0.42, 6), def.legColor, 0, 0.96, -0.26);
+  hose.rotation.x = Math.PI / 2 + 0.15;
+  body.add(hose);
+
+  const mount = new THREE.Group();
+  mount.position.set(0, 0.97, -0.02);
+  body.add(mount);
+  const base = m(new THREE.CylinderGeometry(0.16, 0.21, 0.13, 8), def.plate, 0, 0.02, 0);
+  const dome = plate(def.color, 0, 0.08, -0.02, 0.15, 0.1, 0.17);
+  const tilt = 0.24, dir = new THREE.Vector3(0, Math.sin(tilt), Math.cos(tilt));
+  const along = (d, part) => { part.position.copy(dir).multiplyScalar(d).add(new THREE.Vector3(0, 0.1, 0)); part.rotation.x = Math.PI / 2 - tilt; return part; };
+  const barrel = along(0.34, m(new THREE.CylinderGeometry(0.065, 0.1, 0.58, 8), def.color));
+  const rib1 = along(0.2, m(new THREE.TorusGeometry(0.098, 0.028, 4, 10), def.plate));
+  const rib2 = along(0.42, m(new THREE.TorusGeometry(0.08, 0.026, 4, 10), def.plate));
+  const muzzle = along(0.64, m(new THREE.TorusGeometry(0.075, 0.032, 5, 12), def.accent, 0, 0, 0, def.accent));
+  for (const p of [rib1, rib2, muzzle]) p.rotation.x -= Math.PI / 2;     // torus rings lie across the barrel
+  for (const p of [base, dome]) Object.assign(p.userData.rig, { part: PART.CANNON, pivot: mount, phase: 0 });
+  for (const p of [barrel, rib1, rib2, muzzle]) Object.assign(p.userData.rig, { part: PART.CANNON, pivot: mount, phase: 1 });   // phase 1: recoils
+  mount.add(base, dome, barrel, rib1, rib2, muzzle);
 }
 
 function buildRig(def) {
@@ -59,6 +96,15 @@ function buildRig(def) {
     crest.rotation.x = -0.6;
     body.add(crest);
   }
+  if (def.fins) {                                        // Darter: a row of thin blades swept back along the spine
+    for (const [z, y, r] of [[0.05, 0.58, 0.36], ...segs]) {
+      const fin = m(new THREE.ConeGeometry(r * 0.17, r * 1.4, 4), def.accent, 0, y + r * 0.98, z - r * 0.3);
+      fin.rotation.x = -0.95;
+      fin.scale.x = 0.35;
+      body.add(fin);
+    }
+  }
+  if (def.cannon) addAcidCannon(body, def);
 
   const head = new THREE.Group();
   head.position.set(0, 0.62, 0.52);
@@ -187,6 +233,7 @@ const RIG_GLSL = `
   #define aSide aRig.z
   attribute vec4 iAnim;      // theta, amp (1 walking / 0.22 idle), chomp, dead
   attribute float iBurn;
+  attribute vec3 iAim;       // acid cannon: yaw relative to the body, recoil 1..0, charge 0..1
   uniform float uTime;
   mat3 rotAxis(vec3 a, float ang) {
     float c = cos(ang), s = sin(ang), t = 1.0 - c;
@@ -201,9 +248,15 @@ const RIG_GLSL = `
       if (aPart > 2.5 && aPart < 3.5) {                       // mandible chomp
         mat3 rm = rotAxis(vec3(0.0, 1.0, 0.0), aSide * (0.55 * chomp * (1.0 - dead) + 0.5 * dead));
         p = rm * (p - aPivot) + aPivot; r = rm;
-      } else if (aPart > 3.5) {                              // antenna twitch
+      } else if (aPart > 3.5 && aPart < 4.5) {                // antenna twitch
         mat3 ra = rotAxis(vec3(1.0, 0.0, 0.0), 0.18 * sin(uTime * 5.0 + aPhase + theta * 0.05));
         p = ra * (p - aPivot) + aPivot; r = ra;
+      } else if (aPart > 4.5 && aPart < 5.5) {                // acid cannon: traverses on its mount, the barrel kicks back
+        mat3 rc = rotAxis(vec3(0.0, 1.0, 0.0), iAim.x);
+        p = rc * (p - aPivot + vec3(0.0, -0.03, -0.14) * iAim.y * aPhase) + aPivot; r = rc;
+      } else if (aPart > 5.5) {                              // acid sac: sloshes, swells with the charge, squeezes on the shot
+        float sw = 1.0 + 0.035 * sin(theta * 0.5) + 0.1 * iAim.z - 0.22 * iAim.y;
+        p = (p - aPivot) * vec3(sw, sw * sw, sw) + aPivot;
       }
       float bob = step(0.5, amp) * (1.0 - dead);             // body bob and roll while walking
       mat3 rb = rotAxis(vec3(0.0, 0.0, 1.0), 0.05 * sin(theta) * bob) * rotAxis(vec3(1.0, 0.0, 0.0), 0.02 * sin(theta * 2.0) * bob);
@@ -223,6 +276,7 @@ const RIG_GLSL = `
 
 function injectRig(shader, withNormals) {
   shader.uniforms.uTime = uTime;
+  shader.uniforms.uRim = uRim;
   if (!withNormals) {                                   // shadow depth pass: geometry only
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
@@ -234,15 +288,22 @@ ${RIG_GLSL}`)
     .replace('#include <common>', `#include <common>
 ${RIG_GLSL}
 varying vec3 vEmissive; varying float vBurn;`)
-    .replace('#include <begin_vertex>', `vec3 bugP; mat3 bugR; bugAnim(bugP, bugR); vec3 transformed = bugP; vEmissive = color * aRig.w; vBurn = iBurn;`)
+    .replace('#include <begin_vertex>', `vec3 bugP; mat3 bugR; bugAnim(bugP, bugR); vec3 transformed = bugP; vEmissive = color * aRig.w * (aPart > 4.5 ? 0.35 + 1.1 * iAim.z + 1.3 * iAim.y : 1.0); vBurn = iBurn;`)
     .replace('#include <beginnormal_vertex>', `vec3 bugP0; mat3 bugR0; bugAnim(bugP0, bugR0); vec3 objectNormal = bugR0 * vec3(normal);`);
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>
-varying vec3 vEmissive; varying float vBurn;`)
+varying vec3 vEmissive; varying float vBurn; uniform float uRim;`)
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-totalEmissiveRadiance += vEmissive + vec3(1.0, 0.30, 0.03) * vBurn * 0.28;`);
+totalEmissiveRadiance += vEmissive + vec3(1.0, 0.30, 0.03) * vBurn * 0.28;
+// Sky rim: a thin cool edge along the top of every silhouette, so dark chitin separates from the dark ground at
+// strategy-camera distance.
+{
+  float rim = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
+  totalEmissiveRadiance += vec3(0.26, 0.32, 0.52) * rim * smoothstep(-0.2, 0.7, normal.y) * uRim;
+}`);
 }
 const uTime = { value: 0 };
+const uRim = { value: 1.2 };                             // sky rim strength on every bug
 
 // ---------------------------------------------------------------- HP bars (one instanced mesh for all bugs)
 function makeBarMesh() {
@@ -287,7 +348,8 @@ function makeBarMesh() {
 const species = {};
 let scene = null, bars = null;
 const _pos = new THREE.Vector3(), _qy = new THREE.Quaternion(), _qr = new THREE.Quaternion(), _sc = new THREE.Vector3(), _m = new THREE.Matrix4();
-const Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
+const Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1), X = new THREE.Vector3(1, 0, 0);
+const _qp = new THREE.Quaternion();
 
 export const swarm = {
   init(s) {
@@ -297,8 +359,10 @@ export const swarm = {
       const geo = bake(def);
       const iAnim = new THREE.InstancedBufferAttribute(new Float32Array(CAPACITY * 4), 4).setUsage(THREE.DynamicDrawUsage);
       const iBurn = new THREE.InstancedBufferAttribute(new Float32Array(CAPACITY), 1).setUsage(THREE.DynamicDrawUsage);
+      const iAim = new THREE.InstancedBufferAttribute(new Float32Array(CAPACITY * 3), 3).setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute('iAnim', iAnim);
       geo.setAttribute('iBurn', iBurn);
+      geo.setAttribute('iAim', iAim);
       const mat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.12, clearcoat: 0.6, clearcoatRoughness: 0.3 });
       mat.onBeforeCompile = (sh) => injectRig(sh, true);
       mat.customProgramCacheKey = () => 'bug-rig';
@@ -309,10 +373,11 @@ export const swarm = {
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.customDepthMaterial = depth;
       mesh.castShadow = true;
+      mesh.receiveShadow = true;                        // darken in the shade of buildings and aircraft
       mesh.frustumCulled = false;
       mesh.count = 0;
       scene.add(mesh);
-      species[key] = { mesh, iAnim, iBurn, n: 0, verts: geo.attributes.position.count };
+      species[key] = { mesh, iAnim, iBurn, iAim, armed: !!def.cannon, n: 0, verts: geo.attributes.position.count };
     }
     bars = makeBarMesh();
     scene.add(bars);
@@ -331,8 +396,10 @@ export const swarm = {
       const sc = e.def.scale;
       const y = heightAt(e.x, e.z);
       const fl = Math.hypot(e.fx, e.fz) || 1;
-      let px = e.x, py = y, pz = e.z, roll = 0;
-      if (dead) {
+      let px = e.x, py = y, pz = e.z, roll = 0, pitch = 0;
+      if (!dead && e.held) {                                  // in a black hole's grip: lifted and tumbling
+        py = y + e.held.lift; roll = e.held.roll; pitch = e.held.pitch;
+      } else if (dead) {
         const flip = 1 - Math.pow(1 - Math.min(1, e.deadT / 0.35), 3);
         const sink = Math.max(0, (e.deadT - 0.8) / 0.7);
         py = y + 0.55 * sc * flip - 1.4 * sc * sink * sink;
@@ -344,6 +411,7 @@ export const swarm = {
         py = y - 1.3 * sc * (1 - emergeUp);
       }
       _qy.setFromAxisAngle(Y, Math.atan2(e.fx, e.fz));
+      if (pitch) { _qp.setFromAxisAngle(X, pitch); _qy.multiply(_qp); }
       if (roll) { _qr.setFromAxisAngle(Z, roll); _qy.multiply(_qr); }
       _m.compose(_pos.set(px, py, pz), _qy, _sc.set(sc, sc, sc));
       sp.mesh.setMatrixAt(k, _m);
@@ -352,8 +420,9 @@ export const swarm = {
       const deadAmt = dead ? Math.min(1, e.deadT / 0.35) : 0;
       sp.iAnim.setXYZW(k, theta, moving ? 1 : 0.22, Math.sin(Math.min(1, e.lunge) * Math.PI), deadAmt);
       sp.iBurn.setX(k, e.burn ? 1 : 0);
+      if (sp.armed) sp.iAim.setXYZ(k, e.aimYaw, e.recoil, e.charge);
       if (!dead && e.hp < e.maxHp && nb < CAPACITY * 2) {
-        iBar.setXYZW(nb, e.x, y + 1.35 * sc, e.z, 1.0 * sc);
+        iBar.setXYZW(nb, e.x, (e.held ? py : y) + 1.35 * sc, e.z, 1.0 * sc);
         iHp.setX(nb, Math.max(0, e.hp / e.maxHp));
         nb++;
       }
@@ -366,6 +435,7 @@ export const swarm = {
       sp.mesh.instanceMatrix.needsUpdate = true;
       sp.iAnim.needsUpdate = true;
       sp.iBurn.needsUpdate = true;
+      if (sp.armed) sp.iAim.needsUpdate = true;
       sp.mesh.castShadow = total < 900;          // shadows for a horde cost a second full pass
     }
     bars.geometry.instanceCount = nb;
@@ -373,5 +443,6 @@ export const swarm = {
     iHp.needsUpdate = true;
   },
 
+  rim: uRim,
   stats() { return Object.fromEntries(Object.entries(species).map(([k, s]) => [k, { count: s.n, vertsPerBug: s.verts }])); },
 };

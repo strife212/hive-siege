@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MAPS, BOSS_EVERY, BUILDINGS, ENEMIES, RESEARCH, START_CREDITS, CELLS, MAX_SLOPE, SPAWN_RADIUS, CELL, HALF, FLAT, MAP } from './config.js';
+import { MAPS, BOSS_EVERY, BUILDINGS, ENEMIES, SPECIALS, RESEARCH, START_CREDITS, CELLS, MAX_SLOPE, SPAWN_RADIUS, CELL, HALF, FLAT, MAP } from './config.js';
 import { heightAt, cellToWorld, worldToCell, cellKey, inBounds, cellSlope, nestPosition, confine, walkInPoint, approachDir, isScenery } from './terrain.js';
 import {
   makeBuildingMesh, makeHpBar, setHpBar, setWallLinks,
@@ -18,6 +18,8 @@ import { swarm } from './swarm.js';
 import { gore } from './gore.js';
 import { flame } from './flame.js';
 import { puff } from './particles.js';
+import { acid } from './acid.js';
+import { flashes } from './flashes.js';
 
 export const state = {
   scene: null,
@@ -67,6 +69,7 @@ export function init(scene) {
   state.scene = scene;
   swarm.init(scene);
   gore.init(scene);
+  acid.init(scene);
   flame.init(scene);
   const core = {
     id: nextId++, type: 'core', name: 'Core', hp: 1000, maxHp: 1000,
@@ -247,6 +250,7 @@ export function spawnEnemy(type, x, z, walkIn = false) {
     jit: (Math.random() - 0.5) * 0.35, burn: null, deadT: 0,
   };
   e.fx = -x; e.fz = -z;                                  // face the Core as it burrows out
+  if (def.acid) Object.assign(e, { aimYaw: 0, recoil: 0, charge: 0, spitCd: 0.5 + Math.random(), scanT: Math.random() * 0.4, aim: null });
   if (def.boss) boss.init(e);
   else if (walkIn) { e.emerge = 1; e.fx = 0; e.fz = 1; }       // already above ground, marching in
   else burst(x, heightAt(x, z) + 0.2, z, 'soil', 4, 4);
@@ -274,15 +278,18 @@ export function damageEnemy(e, dmg) {
   if (e.hp <= 0) killEnemy(e);
 }
 
-function killEnemy(e) {
+// quiet: no splatter, gibs or pop (something else ate it: the black hole)
+function killEnemy(e, quiet = false) {
   e.dead = true;
   state.credits += e.def.reward;
   state.kills++;
   if (e.boss) boss.die(e);
-  else { spawnSplatter(state.scene, e.x, e.z, e.def.scale); gore.spawnDeath(e); }
+  else if (!quiet) { spawnSplatter(state.scene, e.x, e.z, e.def.scale); gore.spawnDeath(e); audio.play('bug_pop', { x: e.x, z: e.z, vol: 0.4, size: e.def.scale }); }
   e.target = null;
+  e.held = null;
   state.deadCount++;                                     // compacted out of state.enemies at end of frame
 }
+export const consumeEnemy = (e) => { if (!e.dead) killEnemy(e, true); };
 
 const MAX_GIBS = 400;
 export function burst(x, y, z, kind, n, spread = 8) {
@@ -313,13 +320,20 @@ export function startWave(force = false) {
   const count = 6 + n * 3 + Math.floor(n * n * 0.6);       // 9, 14, 20 ... wave 10: 96, wave 20: 306, wave 30: 666
   for (let k = 0; k < count; k++) q.push('skitter');
   if (n >= 3) for (let k = 0; k < Math.floor((n - 2) * 1.5 + n * n * 0.08); k++) q.push('brute');
+  if (n >= SPECIALS.from) {                                // specials stand in for skitterers, alternating Darter / Spitter
+    const sp = Math.max(2, Math.round(q.length * SPECIALS.share));
+    for (let k = 0; k < sp; k++) q[k] = k % 2 ? 'spitter' : 'darter';
+  }
   for (let k = q.length - 1; k > 0; k--) { const r = Math.floor(Math.random() * (k + 1)); [q[k], q[r]] = [q[r], q[k]]; }
   state.spawnQueue = q;
   // Canyon: on top of the nests, a horde walks in across the whole width of the open end.
   state.walkQueue = [];
   if (MAP === 'canyon') {
     const extra = Math.ceil(q.length * 0.6);
-    for (let k = 0; k < extra; k++) state.walkQueue.push(n >= 3 && k % 9 === 8 ? 'brute' : 'skitter');
+    const special = n >= SPECIALS.from ? Math.round(1 / SPECIALS.share) : 0;    // every tenth walker is a special
+    for (let k = 0; k < extra; k++) {
+      state.walkQueue.push(special && k % special === 4 ? (k % (special * 2) === 4 ? 'darter' : 'spitter') : n >= 3 && k % 9 === 8 ? 'brute' : 'skitter');
+    }
   }
   state.spawnTimer = 1.5;
   state.nests = [];
@@ -446,6 +460,7 @@ function updateTower(s, dt) {
       state.projectiles.push({ mesh: m, target: t, speed: 30, damage: def.damage, life: 3 });
       ejectCasing(s, gp);
     }
+    flashes.add(_a.x, _a.y, _a.z, { color: 0xffc070, power: 9, range: 6, life: 0.1, key: s });
     audio.play('autocannon_fire', { x: s.x, z: s.z, vol: 0.4 });
     if (ud.guns.length > 1) audio.play('autocannon_fire', { x: s.x, z: s.z, vol: 0.35, delay: 0.05 });
     s.recoilT = 0;
@@ -460,6 +475,7 @@ function updateTower(s, dt) {
       if (Math.random() < 0.3) burst(_b.x, _b.y, _b.z, 'ichor', 1, 3);
       ejectCasing(s, gp);
     }
+    flashes.add(_a.x, _a.y, _a.z, { color: 0xffc070, power: 5, range: 5, life: 0.08, flicker: 0.4, key: s });
     audio.play('hmg_fire', { x: s.x, z: s.z, vol: 0.55 });
     s.recoilT = 0;
   } else {
@@ -467,6 +483,7 @@ function updateTower(s, dt) {
     _b.set(t.x, aimY(t), t.z);
     const beam = makeBeam(_a, _b);
     state.scene.add(beam);
+    flashes.add(_b.x, _b.y + 0.3, _b.z, { color: 0x7fb8ff, power: 5, range: 5, life: 0.14, key: s });
     state.beams.push({ mesh: beam, life: 0.12 });
     damageEnemy(t, def.damage * (state.research.optics ? 1.5 : 1));
   }
@@ -543,6 +560,7 @@ function updateMortar(s, dt) {
   shell.position.copy(_a);
   state.scene.add(shell);
   state.shells.push({ mesh: shell, start: _a.clone(), end: new THREE.Vector3(ex, heightAt(ex, ez), ez), t: 0, dur, h: 9 + dist * 0.28, dmg: def.damage, splash: def.splash, whistled: false });
+  flashes.add(_a.x, _a.y + 0.5, _a.z, { color: 0xffb060, power: 22, range: 8, life: 0.18 });
   for (let q = 0; q < 3; q++) puff(_a.x, _a.y, _a.z, { color: 0xd8d0c8, size: 0.8, grow: 2, life: 0.9, opacity: 0.5, vy: 2 + Math.random() * 2, vx: (Math.random() - 0.5) * 2, vz: (Math.random() - 0.5) * 2 });
   audio.play('mortar_fire', { x: s.x, z: s.z });
 }
@@ -697,6 +715,7 @@ function flameStream(s, dt) {
     if (d < 0.01 || (dx * fx + dz * fz) / d < cosCone) return;
     e.burn = { dps: def.damage, t: def.burn };
   });
+  flashes.add(_nz.x + fx * 3, _nz.y + 0.4, _nz.z + fz * 3, { color: 0xff7a2a, power: 22, range: 9, life: 0.15, flicker: 0.35, key: s });
   s.flameAcc = (s.flameAcc || 0) + dt * 64;
   while (s.flameAcc >= 1) {
     s.flameAcc--;
@@ -788,6 +807,42 @@ function updateCasings(dt) {
 }
 
 // ---------------------------------------------------------------- enemy AI
+// Acid Spitter: the cannon on its back tracks the nearest building in reach and fires while the bug keeps walking (or
+// chewing). Walls are beneath its notice: it lobs straight over them at whatever they protect.
+function acidTarget(e, range) {
+  let best = null, bd = range;
+  for (const s of state.structures) {
+    if (s.type === 'wall' || s.buried || s.hp <= 0) continue;
+    const d = Math.hypot(s.x - e.x, s.z - e.z) - (s.cells && s.cells.length > 1 ? 1.6 : 0.7);    // to its near side
+    if (d < bd) { bd = d; best = s; }
+  }
+  return best;
+}
+function updateSpitter(e, dt) {
+  const A = e.def.acid, sc = e.def.scale;
+  e.recoil = Math.max(0, e.recoil - dt * 3.5);
+  e.scanT -= dt;
+  if (e.scanT <= 0) { e.scanT = 0.4; e.aim = acidTarget(e, A.range); }
+  if (e.aim && (e.aim.hp <= 0 || e.aim.buried)) e.aim = null;
+  const body = Math.atan2(e.fx, e.fz);
+  const want = e.aim ? Math.atan2(e.aim.x - e.x, e.aim.z - e.z) - body : 0;     // no target: face front
+  let diff = want - e.aimYaw;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+  const step = A.turn * dt;
+  e.aimYaw += Math.max(-step, Math.min(step, diff));
+  e.aimYaw = Math.atan2(Math.sin(e.aimYaw), Math.cos(e.aimYaw));
+  e.spitCd -= dt;
+  const charge = e.aim ? Math.min(1, Math.max(0, 1 - e.spitCd / 0.8)) : 0;   // the sac fills over the last 0.8 s
+  e.charge += (charge - e.charge) * Math.min(1, dt * 8);
+  if (e.aim && e.spitCd <= 0 && Math.abs(diff) < 0.15) {
+    e.spitCd = (0.9 + Math.random() * 0.2) / A.rate;
+    e.recoil = 1;
+    e.charge = 0;
+    const w = body + e.aimYaw;
+    acid.fire(e.x + Math.sin(w) * 0.66 * sc, heightAt(e.x, e.z) + 1.18 * sc, e.z + Math.cos(w) * 0.66 * sc, e.aim, A.damage);
+  }
+}
+
 const _dir = { x: 0, z: 0 };
 const blocker = (i, j) => { const st = state.occ.get(cellKey(i, j)); return st && !st.buried ? st : null; };   // retracted buildings are not in the way
 const PREY_RANGE = 16;                 // bugs this close to a trooper go for it before anything else
@@ -804,12 +859,15 @@ function updateEnemies(dt) {
     const e = en[idx];
     if (e.dead) continue;
     if (e.boss) { boss.update(e, dt); continue; }
+    if (e.held) continue;                                   // in a black hole's grip: blackhole.js moves it
+    if (e.stun > 0) { e.stun -= dt; e.lunge = Math.max(0, e.lunge - dt * 4); continue; }   // just landed, getting its legs back
     if (e.emerge < 1) { e.emerge = Math.min(1, e.emerge + dt / 0.6); continue; }
     e.attackCd -= dt;
     e.lunge = Math.max(0, e.lunge - dt * 4);
+    if (e.def.acid) updateSpitter(e, dt);
 
     // Troopers are the bugs' top priority: anything within PREY_RANGE drops what it is doing and hunts the nearest
-    // one (a skitter bite costs 1 HP, a brute takes 2), only chewing a structure when it is actually in the way.
+    // one (a small bug's bite costs 1 HP, a brute or spitter takes 2), only chewing a structure when it is actually in the way.
     let prey = null, pd = PREY_RANGE * PREY_RANGE;
     for (let k = 0; k < state.troopers.length; k++) {
       const tr = state.troopers[k];
@@ -822,7 +880,7 @@ function updateEnemies(dt) {
       if (pd < reach * reach) {
         e.target = null;
         e.fx = prey.x - e.x; e.fz = prey.z - e.z;
-        if (e.attackCd <= 0) { e.attackCd = 1 / e.def.attackRate; e.lunge = 1; prey.hp -= e.type === 'brute' ? 2 : 1; }
+        if (e.attackCd <= 0) { e.attackCd = 1 / e.def.attackRate; e.lunge = 1; prey.hp -= e.def.scale >= 1 ? 2 : 1; }
         continue;
       }
       const l = Math.sqrt(pd) || 1;
@@ -865,7 +923,7 @@ function updateEnemies(dt) {
 
   // Soft separation so bugs swarm instead of stacking (spatial hash: each nearby pair once).
   spatial.pairs(2.4, (a, b) => {
-    if (a.boss || b.boss) return;                           // the swarm runs between the Colossus's legs
+    if (a.boss || b.boss || a.held || b.held) return;       // the swarm runs between the Colossus's legs; held bugs are off the ground
     const r = 0.75 * (a.def.scale + b.def.scale);
     let dx = b.x - a.x, dz = b.z - a.z;
     const d2 = dx * dx + dz * dz;
@@ -928,6 +986,7 @@ export function update(dt) {
   updateProjectiles(dt);
   updateHeliRockets(dt);
   updateAirshipOrdnance(dt);
+  acid.update(dt, damageStructure);
   boss.updateDying(dt);
   updateShells(dt);
   updateMissiles(dt);

@@ -14,7 +14,7 @@ import { createScatter } from './scatter.js';
 import { playIntro } from './intro.js';
 import { abilities } from './abilities.js';
 import { audio } from './audio.js';
-import { initParticles } from './particles.js';
+import { initParticles, particleCount } from './particles.js';
 import { initEffects, updateEffects } from './effects.js';
 import { initDebug } from './debug.js';
 import { DEMO, DEPLOY_KEY, RECORD, MAP, MAPS } from './config.js';
@@ -22,8 +22,12 @@ import { startDemo } from './demo.js';
 import { iconImg } from './icons.js';
 import { troopers } from './troopers.js';
 import { retract } from './retract.js';
+import { weather } from './weather.js';
+import { flashes } from './flashes.js';
+import { perf } from './perf.js';
 
-const { renderer, scene, camera, controls, updateCamera, render } = createScene(document.getElementById('app'));
+const { renderer, scene, camera, controls, updateCamera, render: drawFrame } = createScene(document.getElementById('app'));
+const render = () => { perf.renderStart(); drawFrame(); perf.renderEnd(); };     // timed for the perf overlay
 const terrain = createTerrain(renderer);
 scene.add(terrain);
 scene.add(createScatter());
@@ -34,10 +38,13 @@ const ui = createUI({ onSelectBuild: (type) => input.setBuild(type) });
 input = createInput({ renderer, camera, scene, terrain, ui });
 initParticles(scene);
 initEffects(scene);
+flashes.init(scene, camera);
+perf.init(renderer, () => `${state.enemies.length} bugs · ${particleCount()} particles`);
 abilities.init({ scene, ui, camera, controls });
 troopers.init(scene);
 try { sessionStorage.removeItem(DEPLOY_KEY); } catch { /* fine */ }      // a manual refresh shows the title screen again
 if (!DEMO && !RECORD) audio.init({ getListener: () => controls.target });   // the demo plays silent; the recorder owns the audio graph
+weather.init({ scene, camera, renderer, auto: !DEMO && !RECORD });   // ?weather=rain starts in the rain
 initDebug();
 const muteBtn = document.getElementById('mute');
 audio.onMute((m) => { muteBtn.innerHTML = iconImg(m ? 'sound_off' : 'sound_on', 16); muteBtn.classList.toggle('off', m); });
@@ -65,6 +72,7 @@ const stress = Number(new URLSearchParams(location.search).get('stress'));
 if (stress > 0) setTimeout(() => { spawnMany(stress); log(`Stress test: ${stress} bugs`, true); }, 500);
 
 function tick(dt) {
+  weather.update(dt);
   if (demo) demo.update(dt);
   else if (state.intro) {
     intro.update(dt);
@@ -77,6 +85,7 @@ function tick(dt) {
   if (MAPS[MAP].population && state.enemies.length < MAPS[MAP].population) spawnMany(Math.min(25, MAPS[MAP].population - state.enemies.length));   // test range refills from the rim
   abilities.update(dt);
   updateEffects(dt);
+  flashes.update(dt);
   audio.update();
   ui.refresh();
   // Camera shake: applied only for the render so it never feeds back into the controls.
@@ -92,8 +101,10 @@ const timer = new THREE.Timer();
 if (RECORD) import('./record.js').then((m) => m.record({ seconds: RECORD, tick, renderer, camera, scene, setDirector: (f) => { director = f; } }));
 function frame() {
   if (RECORD) return;                                     // record.js drives the ticks
+  perf.frameStart();
   timer.update();
   tick(Math.min(timer.getDelta(), 0.05));
+  perf.frameEnd();
   requestAnimationFrame(frame);
 }
 frame();
@@ -108,5 +119,6 @@ window.__audio = audio;
 window.__swarm = swarm;
 window.__spawnMany = spawnMany;
 window.__place = placeStructure;
-window.__retract = retract;                            // retract(s) / deploy(s) / snap(s, down); works on state.core too (cinematics)
+window.__retract = retract;
+window.__weather = weather;                            // set('rain' | 'clear', instant), cycle(), strike(near)                            // retract(s) / deploy(s) / snap(s, down); works on state.core too (cinematics)
 window.__step = (dt = 1 / 60, n = 1) => { for (let k = 0; k < n; k++) tick(dt); };

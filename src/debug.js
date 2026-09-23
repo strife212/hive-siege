@@ -2,6 +2,8 @@ import { state, log, spawnEnemy, startWave } from './game.js';
 import { SPAWN_RADIUS } from './config.js';
 import { nestPosition } from './terrain.js';
 import { retract } from './retract.js';
+import { weather } from './weather.js';
+import { perf } from './perf.js';
 import { MAP, MAPS, DEPLOY_KEY, TEST_KEY } from './config.js';
 
 // Debug popup (Z): cheat credits and cycle the map. Maps are built at load, so changing one reloads the page.
@@ -17,6 +19,18 @@ export function initDebug() {
   document.getElementById('dbgCash').onclick = () => { state.credits += 1000; log('Debug: +1000 credits'); };
   document.getElementById('dbgWave').onclick = () => startWave(true);
   document.getElementById('dbgBoss').onclick = () => { const p = nestPosition(0, 1, Math.random() * 6.28, SPAWN_RADIUS); spawnEnemy('colossus', p.x, p.z); };
+  document.getElementById('dbgSpecial').onclick = () => {        // a pack of each special from one nest
+    const p = nestPosition(0, 1, Math.random() * 6.28, SPAWN_RADIUS);
+    for (let k = 0; k < 18; k++) { const a = Math.random() * 6.28, r = Math.random() * 5; spawnEnemy(k < 12 ? 'darter' : 'spitter', p.x + Math.cos(a) * r, p.z + Math.sin(a) * r); }
+  };
+  const perfBtn = document.getElementById('dbgPerf');
+  const perfLabel = () => { perfBtn.textContent = `Performance stats: ${perf.on ? 'ON' : 'OFF'}`; perfBtn.classList.toggle('on', perf.on); };
+  perfLabel();
+  perfBtn.onclick = () => { perf.toggle(); perfLabel(); };
+  const wxBtn = document.getElementById('dbgWeather');
+  const wxLabel = () => { wxBtn.textContent = `Change weather (${weather.name(weather.current)})`; };
+  wxLabel();
+  wxBtn.onclick = () => { const next = weather.cycle(); wxLabel(); log(`Debug: weather turning to ${weather.name(next).toLowerCase()}`); };
   document.getElementById('dbgSilo').onclick = () => {         // city-wide drill: everything down, or everything back up
     const list = state.structures.filter((s) => s !== state.core && !s.selling);
     const anyUp = list.some((s) => !s.pending && !(s.silo && s.silo.target > 0));

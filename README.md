@@ -73,7 +73,15 @@ anything between them and your Core.
   spawn in batches; `?stress=2000` drops 2000 bugs at once for testing (`__spawnMany(n)` in the console).
 - **Enemies**: procedural insectoids built from a small rig: segmented abdomen with glossy chitin plates,
   six two-segment legs (hip / femur / knee), mandibles, antennae, glow spots or spikes. Skitterers (fast,
-  weak, purple with bioluminescent spots) and Brutes (from wave 3: armoured, horned, bone spikes).
+  weak, purple with bioluminescent spots) and Brutes (from wave 3: armoured, horned, bone spikes). From wave 3
+  about one bug in ten is a special (`SPECIALS` in `src/config.js`), alternating between two kinds:
+  - **Darter**: skitterer-sized, twice as fast and more fragile. Teal with cyan glow spots and cyan blades swept
+    back along its spine.
+  - **Acid Spitter**: brute-sized, olive-yellow, with a glowing acid sac strapped to its abdomen that feeds a cannon
+    turret on its back. It keeps walking for the Core while the turret tracks the nearest building within 8 units
+    (it ignores walls and lobs straight over them). The sac swells and brightens as a shot charges and squeezes
+    when it fires. The glob (`src/acid.js`) arcs in trailing fumes, splashes on the face of the building for 14
+    damage and leaves it sizzling. The sac bursts when the spitter dies.
   They burrow out of the ground at their nest, walk with a tripod gait (legs sweep at the hip and lift at
   the knee in the swing phase, body bobs), snap their mandibles when attacking, and burst into chunks when
   killed: instanced head, abdomen and leg pieces (`src/gore.js`) fly out, tumble, bounce and skid on the terrain,
@@ -100,7 +108,7 @@ anything between them and your Core.
   wingtips, twin fins) flies that line across the entire map and lays a stick of heavy bombs you can watch fall.
 - **Shock Troopers** (ability 6, `src/troopers.js`): five drop pods slam down (crushing bugs underneath) and unload three troopers each.
   Drag a box to select them, click to move, right-click or ESC to release. Light machine gun (15 dps vs the HMG turret's 35), a grenade
-  every 3-6 s, 2 HP: a skitter bite costs 1, a brute takes both. They are the bugs' top priority: any bug within 16 units with a
+  every 3-6 s, 2 HP: a small bug's bite costs 1, a brute or spitter takes both. They are the bugs' top priority: any bug within 16 units with a
   clear run at a trooper drops what it is doing (even a structure it was chewing) and hunts him.
 - **Title screen**: a fresh visit opens on an attract-mode battle (`src/demo.js`): a self-repairing fortress in the canyon under an
   endless swarm, with strafing runs and artillery called in alternately, silent and dimmed. The first click or key reloads into
@@ -108,8 +116,15 @@ anything between them and your Core.
 - **Icons**: every building, research item and ability has a 16x16 pixel-art icon drawn in code (`src/icons.js`), no image files.
 - **Maps**: `?map=canyon` loads Deadrock Canyon, a box canyon with the Core at the closed end, a choke point in front of it
   and nests only at the mouth (`MAPS` in `src/config.js`, canyon shape in `src/terrain.js`). Default is the open basin.
-- **Debug menu**: press `Z` for a popup (bottom left) with *Add 1000 cash*, *Spawn next wave*, *Spawn boss*, *Change map* and *Test map*
+- **Debug menu**: press `Z` for a popup (bottom left) with *Add 1000 cash*, *Spawn next wave*, *Spawn boss*, *Spawn darters + spitters*, *Change map* and *Test map*
   (a debug-only basin kept at 1200 bugs with an invincible Core and 50,000 credits; it cannot be opened from the URL alone) (`src/debug.js`; changing map reloads).
+  *Performance stats* toggles an overlay in the top left (`src/perf.js`, remembered per browser):
+  - FPS, the average frame time and the worst frame in the last ~2.7 s, over a graph with one bar per frame.
+  - CPU time for the game's own code, split into simulation and render submission.
+  - GPU time, from a WebGL timer query. Chromium supports it; Firefox usually shows *no timer*.
+  - Draw calls and triangles for the whole frame, including the shadow and post-processing passes, plus bug and
+    particle counts.
+
 - **Active abilities** (`src/abilities.js`): five commander powers on a bottom-centre bar (keys 1-5), each with
   a terrain-draped targeting reticle and a cooldown. Orbital Lance (five beams spiral inward and merge into one
   strike), Orbital Laser (sustained beam that follows the cursor for 6 s, scorching a trail), Strafing Run
@@ -117,7 +132,28 @@ anything between them and your Core.
   wingtip missiles and rocket pods fly in from the map edge and rake an oriented strip with rockets and splash-damage cannon fire), Artillery
   Strike (10-12 shells from off-screen), Tactical Nuke (10 s countdown, ICBM, white-out flash, fireball,
   double shockwave, mushroom cloud, huge radius). Explosions leave scorch decals and shake the camera.
-- **Strategic Nuclear Strike** (key 9, `src/strategic.js`): an instant, untargeted last resort played as a cinematic.
+- **Weather** (`src/weather.js`): Clear (the normal dusk sky) and Rain, blended through one `storm` value so a change
+  rolls in over about six seconds: the overcast comes over first (a cloud deck in the sky shader, stars and planet
+  hidden, fog pulled in and greyed, the sun dimmed and cooled), then the rain. Rain is 50,000 GPU streaks in a box that
+  follows the camera, world-fixed and wrapped, stretched along their wind-slanted velocity and never thinner than a pixel
+  (thinned alpha instead, so distant rain does not shimmer), with splash crowns popping on the ground around the view,
+  low mist drifting through, and a rain ambience loop. The ground soaks through over ~14 s and dries over ~30 s: the
+  terrain darkens and turns glossy, puddles collect on flat ground in the hollows and ripple with raindrops, and
+  buildings and boulders go dark with water running down their faces (shared uniforms `WEATHER_U` in surface.js).
+  Lightning flickers through the cloud deck every few seconds, lighting the scene and the rain, with bolts beyond the
+  mountains (biased toward where the camera looks) and now and then a strike right in view with a crack of thunder and a
+  scorch mark. The game changes weather by itself every few minutes (not in the title demo or recordings); the debug
+  menu (Z) has *Change weather*, `?weather=rain` starts in the rain, and `window.__weather` has `set`, `cycle`, `strike`.
+- **Micro-Singularity Gravity Bomb** (key 9, `src/blackhole.js`): a small missile drops on the target and a singularity opens above the
+  ground: a black horizon inside a swirling accretion disk (shader), a photon-ring rim, a halo, sparks spiralling down the
+  drain, lightning tendrils lashing the ground and rings pulsing inward. Every bug inside the radius is torn off its
+  feet and spirals in, tumbling and taking damage; skitterers and darters are crushed at the horizon (a flash, no corpse), brutes and spitters are
+  held in a tight orbit and the Colossus is dragged across the ground toward it, legs scrambling. After about four
+  seconds the hole strains, collapses and blows, and every survivor is flung on an arc back to the spot it was taken
+  from, landing dazed. Held bugs are still valid targets for towers. `e.held` (moved by blackhole.js, skipped by the
+  AI and the separation pass, lifted and tumbled by the swarm renderer) and `e.stun`.
+- **Strategic Nuclear Strike** (key 0, `src/strategic.js`): a last resort played as a cinematic. It arms like the other
+  call-ins, with INITIATE STRATEGIC LAUNCH riding above the cursor (no ground marker); any click on the map launches it.
   Every structure and the Core retract into their silos; then a 10 s beeping countdown ("STRATEGIC LAUNCH DETECTED /
   IMPACT IN n") while a giant ICBM comes down on the centre of the map. With 7 s to go the camera leaves the player,
   rides alongside the missile, then races ahead to watch it land. The shock front crosses the whole map killing every
@@ -125,7 +161,7 @@ anything between them and your Core.
   camera pulls back to the mushroom cloud, the cloud thins, the view returns to where the player left it and everything
   the strike sent below redeploys. Aircraft do not shelter: every gunship in the air and the Titan (cast off first if it
   was moored) scatter to the map edge on separate headings at emergency power, loiter there, and return to work on the
-  all clear, landing once their pads are back up; a gunship sitting on its pad rides down with it. Abilities flagged `instant` fire on the key press; a strike that wants the camera
+  all clear, landing once their pads are back up; a gunship sitting on its pad rides down with it. A strike that wants the camera
   registers a driver through `abilities.cinematic`, which main.js runs in place of the player's controls (`body.cine`
   slides the HUD away and brings in letterbox bars).
 - **Sound** (`src/audio.js`): every turret and ability has a procedurally synthesised Web Audio effect
@@ -140,6 +176,15 @@ anything between them and your Core.
   come from a probe that matches the world (dusk horizon, hot sun spot, cool fill) and the frame goes through an HDR
   chain: 4x MSAA, bloom on anything brighter than white, ACES tone map, light vignette and a dither against banding.
   Add `?lowfx` to the URL to skip the chain on weak GPUs. The UI uses bundled fonts (Rajdhani, Barlow Semi Condensed).
+  - **Battle light** (`src/flashes.js`): explosions, muzzle blasts, the flamethrower, railgun bolts, laser hits and
+    acid splashes light the ground and buildings around them. A fixed pool of six point lights goes to the flashes
+    that matter most right now (bright, near the camera, on screen), so shaders never recompile mid-fight.
+  - **View-fitted shadows** (`fitShadow` in `src/scene.js`): the sun's shadow map covers only the ground in view,
+    out to 1.15x the view distance, and fades out at its edge. That makes shadows about 1.8x sharper than the old
+    whole-map box at the default zoom and about 3.3x zoomed in. Bugs, gore, troopers and the Colossus now receive
+    shadows as well as casting them.
+  - **Sky rim on bugs**: a cool rim along the top of each bug's silhouette (`swarm.rim`), so dark shells stand out
+    from the dark ground at strategy-camera distance.
 - **Retractable buildings** (`src/retract.js`): every structure (and the Core) stands on an elevator in its own silo.
   One reversible timeline drives the whole cycle: collar lock bolts spin free, weapons stow pointing straight up (rail
   sled stands on end, mortar tube goes vertical, silo hatches shut, wall link arms pull in, Core pylons draw up), the
@@ -167,6 +212,8 @@ anything between them and your Core.
     src/textures.js  procedural tileable albedo/normal maps
     src/sky.js       sky dome shader
     src/scatter.js   instanced rocks and crystals
+    src/weather.js   weather: storm blend, GPU rain and splashes, lightning, wet-surface uniforms
+    src/blackhole.js the Micro-Singularity Gravity Bomb: singularity visuals, capture / orbit / consume / fling of held bugs
     src/strategic.js the Strategic Nuclear Strike cinematic (giant ICBM, camera choreography, map-wide blast)
     src/retract.js   retractable-building silos: timeline, stow poses, shaft/door/lock hardware
     src/surface.js   bevelled boxes and the triplanar wear shader shared by all built models
@@ -178,6 +225,8 @@ anything between them and your Core.
     src/swarm.js     instanced bug renderer (vertex-shader gait) + instanced HP bars
     src/flowfield.js Dijkstra flow field for bug pathing
     src/spatial.js   spatial hash for enemies
+    src/acid.js      Acid Spitter globs: ballistic arc, trail, splash, sizzle
+    src/flashes.js   pooled point lights for explosions, muzzle flashes and fire
     src/abilities.js active abilities, their effects and the bottom bar
     src/entities.js  procedural meshes (buildings, bugs, HP bars, beams, gibs)
     src/scene.js     renderer, lights, reflection probe, post chain (bloom/tone map), RTS camera controls

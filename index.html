@@ -36,6 +36,9 @@
     <button id="dbgTest">Test map (bug flood)</button>
     <button id="dbgWave">Spawn next wave</button>
     <button id="dbgBoss">Spawn boss</button>
+    <button id="dbgSpecial">Spawn darters + spitters</button>
+    <button id="dbgPerf">Performance stats</button>
+    <button id="dbgWeather">Change weather</button>
     <button id="dbgSilo">Retract / deploy all</button>
     <button id="dbgCore">Core silo (cinematic test)</button>
     <small id="dbgMapName"></small>
@@ -43,7 +46,7 @@
   <div id="help">
     <span><kbd>LMB</kbd>place / select</span><span><kbd>LMB</kbd>drag: select troopers</span><span><kbd>RMB</kbd>rotate</span>
     <span><kbd>MMB</kbd><kbd>WASD</kbd>pan</span><span><kbd>WHEEL</kbd>zoom</span><span><kbd>Q</kbd><kbd>E</kbd>turn</span>
-    <span><kbd>1</kbd>-<kbd>9</kbd>call-ins</span><span><kbd>R</kbd>retract / deploy</span><span><kbd>ESC</kbd>cancel</span><span><kbd>M</kbd>mute</span>
+    <span><kbd>1</kbd>-<kbd>0</kbd>call-ins</span><span><kbd>R</kbd>retract / deploy</span><span><kbd>ESC</kbd>cancel</span><span><kbd>M</kbd>mute</span>
   </div>
   </div>
 
@@ -58,6 +61,7 @@
   <div id="bossbar" hidden><span id="bossname">COLOSSUS</span><div class="track"><div id="bossfill"></div></div></div>
   <div id="wavebanner"><b></b><span></span></div>
   <div id="strategic"><b></b><span></span></div>
+  <div id="cursorhint" hidden></div>
   <div id="selbox"></div>
   <div id="abilities"></div>
   <div id="flash"></div>

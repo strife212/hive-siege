@@ -20,7 +20,7 @@ function makeKind(name, geo) {
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
   mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
-  mesh.castShadow = true;
+  mesh.castShadow = mesh.receiveShadow = true;
   mesh.frustumCulled = false;
   mesh.count = 0;
   scene.add(mesh);
@@ -62,7 +62,7 @@ export const gore = {
   // Blow a bug apart at its current position, flinging chunks away from an impulse origin (or randomly).
   spawnDeath(e) {
     if (live.length >= MAX_LIVE) live.splice(0, MAX_LIVE >> 3);          // evict the oldest eighth in one go
-    const sc = e.def.scale, y = heightAt(e.x, e.z);
+    const sc = e.def.scale, y = heightAt(e.x, e.z) + (e.held ? e.held.lift : 0);
     const fl = Math.hypot(e.fx, e.fz) || 1, fx = e.fx / fl, fz = e.fz / fl;
     const body = e.def.color, leg = e.def.legColor;
     const add = (kind, ox, oy, oz, size, color, spinK) => {
@@ -86,6 +86,15 @@ export const gore = {
       puff(e.x, y + 0.5 * sc, e.z, { color: 0x8fe33a, size: 0.35 * sc, life: rnd(0.35, 0.7), opacity: 0.9, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: rnd(2, 6), grav: 18, drag: 0.6 });
     }
     puff(e.x, y + 0.5 * sc, e.z, { color: 0xc8ff70, size: 1.6 * sc, grow: 3, life: 0.18, opacity: 0.7, additive: true });
+    if (e.def.cannon) {                                                  // the acid sac ruptures too
+      const bx = e.x - fx * 0.72 * sc, bz = e.z - fz * 0.72 * sc, by = y + 1.0 * sc;
+      puff(bx, by, bz, { color: 0xd4ff7a, size: 2.2 * sc, grow: 4, life: 0.25, opacity: 0.8, additive: true });
+      for (let k = 0; k < 10; k++) {
+        const a = rnd(0, 6.3), sp = rnd(2, 5) * sc;
+        puff(bx, by, bz, { color: 0xa6ff2e, size: rnd(0.2, 0.4) * sc, life: rnd(0.4, 0.8), opacity: 0.9, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: rnd(3, 7), grav: 18, drag: 0.6 });
+      }
+      for (let k = 0; k < 3; k++) puff(bx + rnd(-0.5, 0.5), by, bz + rnd(-0.5, 0.5), { color: 0x94b85a, color2: 0x4a5040, size: 0.8 * sc, grow: 1.5, life: 1.4, opacity: 0.35, fadeIn: 0.15, vy: 1, drag: 1 });
+    }
   },
 
   update(dt) {

@@ -8,7 +8,7 @@ export function createSky() {
     side: THREE.BackSide,
     depthWrite: false,
     fog: false,
-    uniforms: { uHorizon: { value: HORIZON } },
+    uniforms: { uHorizon: { value: HORIZON }, uStorm: { value: 0 }, uFlash: { value: 0 }, uTime: { value: 0 }, uFlashDir: { value: new THREE.Vector3(0, 1, 0) } },   // storm + lightning driven by weather.js
     vertexShader: `
       varying vec3 vDir;
       void main() {
@@ -17,7 +17,8 @@ export function createSky() {
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
-      uniform vec3 uHorizon;
+      uniform vec3 uHorizon, uFlashDir;
+      uniform float uStorm, uFlash, uTime;
       varying vec3 vDir;
       float hash13(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y) * p.z); }
       float noise3(vec3 p) {
@@ -50,7 +51,21 @@ export function createSky() {
         float lit = clamp(dot(pn, lightDir), 0.0, 1.0);
         float bands = 0.7 + 0.3 * sin(pn.y * 22.0 + fbm3(pn * 4.0) * 3.0);
         vec3 pcol = mix(vec3(0.35, 0.22, 0.14), vec3(0.75, 0.55, 0.35), bands) * (0.08 + lit * 1.1);
-        col = mix(col, pcol, disc);
+        col = mix(col, pcol, disc * (1.0 - uStorm));
+        // Storm: a low, heavy overcast rolling across the whole sky, dark bellies and paler seams, blending into the
+        // fog colour at the horizon; lightning lights the cloud deck from inside, brightest toward the strike.
+        if (uStorm > 0.001) {
+          vec2 cuv = d.xz / (max(d.y, 0.0) + 0.14) * 0.8 + vec2(uTime * 0.018, uTime * 0.007);
+          float c1 = fbm3(vec3(cuv * 1.2, uTime * 0.015));
+          float c2 = fbm3(vec3(cuv * 3.4 + 4.0, uTime * 0.03));
+          float dens = smoothstep(0.32, 0.78, c1 * 0.72 + c2 * 0.28);
+          vec3 base = mix(uHorizon * 1.08, vec3(0.05, 0.053, 0.066), pow(smoothstep(0.0, 0.7, t), 0.7));
+          vec3 cloud = mix(base + vec3(0.018, 0.02, 0.026), base * 0.42, dens);
+          vec3 storm = mix(uHorizon, cloud, smoothstep(-0.02, 0.22, t));
+          float glow = pow(max(dot(d, uFlashDir), 0.0), 6.0);
+          storm += uFlash * (0.22 + 1.9 * glow) * mix(vec3(0.3, 0.33, 0.46), vec3(0.78, 0.84, 1.0), dens) * (0.35 + dens);
+          col = mix(col, storm, uStorm);
+        }
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

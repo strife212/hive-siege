@@ -20,4 +20,5 @@ const saveRecordings = {
   },
 };
 
-export default defineConfig({ plugins: [saveRecordings] });
+// Relative base: the build runs from any subpath (GitHub Pages serves it at imperialspaceforce.com/hive-siege/).
+export default defineConfig({ base: './', plugins: [saveRecordings] });

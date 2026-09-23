@@ -42,7 +42,7 @@ function makeBoss() {
   const root = new THREE.Group();                                // stays at the world origin: legs are posed in world space
   const body = new THREE.Group();
   root.add(body);
-  const add = (g, mat, x, y, z, sx, sy, sz, parent = body) => { const o = new THREE.Mesh(g, mat); o.position.set(x, y, z); o.scale.set(sx, sy, sz); o.castShadow = true; parent.add(o); return o; };
+  const add = (g, mat, x, y, z, sx, sy, sz, parent = body) => { const o = new THREE.Mesh(g, mat); o.position.set(x, y, z); o.scale.set(sx, sy, sz); o.castShadow = o.receiveShadow = true; parent.add(o); return o; };
 
   add(geo.unit, m.chitin, 0, 0, 0.4, 1.7, 1.25, 2.3);                                         // thorax
   add(geo.plate, m.plate, 0, 0.35, 0.5, 1.85, 1.2, 2.5);
@@ -163,9 +163,10 @@ export const boss = {
 
     // --- walk straight at the Core, over anything in the way; stop within striking distance
     const dx = core.x - e.x, dz = core.z - e.z, dist = Math.hypot(dx, dz) || 1;
-    const attacking = dist < REACH;
+    const attacking = dist < REACH && !e.held;
     let speed = 0;
-    if (e.emerge >= 1 && !attacking) {
+    if (e.held) { height += e.held.lift; e.walk += dt * 6; }  // hauled across the ground by a black hole (blackhole.js moves it)
+    else if (e.emerge >= 1 && !attacking) {
       speed = e.def.speed;
       e.x += dx / dist * speed * dt; e.z += dz / dist * speed * dt;
       confine(e);
@@ -191,7 +192,7 @@ export const boss = {
     e.aimH = rig.body.position.y - ground;
 
     // hit flash: the shell flares where rounds are landing
-    if (e.hp < e.lastHp) e.flash = Math.min(1, (e.flash ?? 0) + 0.35);
+    if (e.lastHp - e.hp > 4) e.flash = Math.min(1, (e.flash ?? 0) + 0.35);   // real hits flash; damage-over-time (fire, black hole) does not
     e.lastHp = e.hp;
     e.flash = Math.max(0, (e.flash ?? 0) - dt * 4);
     rig.mats.chitin.emissiveIntensity = rig.mats.plate.emissiveIntensity = e.flash * 0.9 + (e.burn ? 0.25 : 0);

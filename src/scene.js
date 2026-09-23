@@ -8,6 +8,24 @@ import { FLAT, MAP, MAPS, RECORD } from './config.js';
 import { createSky, HORIZON } from './sky.js';
 
 const SUN_DIR = new THREE.Vector3(45, 38, 18).normalize();
+const SHADOW_RES = 3072;
+const SHADOW_REACH = 1.15;                    // shadows reach this many view distances from the screen centre
+
+// The sun's shadow map is fitted to the view (fitShadow), so it stops short of the far edge of the screen. Instead of
+// cutting off there, shadows fade out over the last few percent of the map, like a shadow distance in any engine.
+// Patched into the shared shader chunk before anything compiles, so every lit material gets it.
+{
+  const src = THREE.ShaderChunk.shadowmap_pars_fragment;
+  const at = src.indexOf('float getShadow( sampler2DShadow');
+  const ret = 'return mix( 1.0, shadow, shadowIntensity );';
+  const k = at < 0 ? -1 : src.indexOf(ret, at);
+  if (k >= 0) {
+    THREE.ShaderChunk.shadowmap_pars_fragment = src.slice(0, k)
+      + 'vec2 shadowEdge = min( shadowCoord.xy, 1.0 - shadowCoord.xy );\n'
+      + 'return mix( 1.0, shadow, shadowIntensity * smoothstep( 0.0, 0.08, min( shadowEdge.x, shadowEdge.y ) ) );'
+      + src.slice(k + ret.length);
+  }
+}
 
 export function createScene(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -38,11 +56,51 @@ export function createScene(container) {
   const sun = new THREE.DirectionalLight(0xffdcb0, 2.6);
   sun.position.copy(SUN_DIR).multiplyScalar(62);
   sun.castShadow = true;
-  Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 1, far: 220 });
-  sun.shadow.mapSize.set(3072, 3072);
+  Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 1, far: 280 });
+  sun.shadow.mapSize.set(SHADOW_RES, SHADOW_RES);
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
+
+  // Fit the sun's shadow box to the ground the camera is looking at: every point on screen out to SHADOW_REACH x the
+  // view distance from the point at the centre of the screen (the rest fades out, see the chunk patch above). The
+  // closer the camera, the smaller the box and the finer the shadows. The box moves in whole shadow texels along the
+  // shadow camera's own axes, and its size in steps, so shadow edges do not crawl while the camera pans.
+  const lx = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), SUN_DIR).normalize();   // the shadow camera's
+  const ly = new THREE.Vector3().crossVectors(SUN_DIR, lx);                                      // right and up axes
+  const _ray = new THREE.Vector3(), _hit = new THREE.Vector3(), _focus = new THREE.Vector3(), _c = new THREE.Vector3();
+  // Where a screen point's ray meets y = 0, or `far` units out across the ground if it meets it later or never.
+  const groundAt = (sx, sy, out, far) => {
+    _ray.set(sx, sy, 0.5).unproject(camera).sub(camera.position).normalize();
+    const t = _ray.y < -0.001 ? camera.position.y / -_ray.y : Infinity;
+    return out.copy(camera.position).addScaledVector(_ray, Math.min(t, far / Math.max(Math.hypot(_ray.x, _ray.z), 0.05)));
+  };
+  let shadowHalf = 0;
+  function fitShadow() {
+    camera.updateMatrixWorld();
+    groundAt(0, 0, _focus, 70);                             // looking out at the horizon (cinematics): mid-distance
+    const reach = THREE.MathUtils.clamp(camera.position.distanceTo(_focus) * SHADOW_REACH, 16, 95);
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (let sy = -1; sy <= 1; sy++) for (let sx = -1; sx <= 1; sx++) {
+      groundAt(sx, sy, _hit, 400);
+      _hit.y = 0;
+      _c.set(_hit.x - _focus.x, 0, _hit.z - _focus.z);
+      if (_c.length() > reach) _hit.copy(_focus).addScaledVector(_c.normalize(), reach);
+      const px = _hit.dot(lx), py = _hit.dot(ly);
+      x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+    }
+    const half = THREE.MathUtils.clamp(Math.ceil((Math.max(x1 - x0, y1 - y0) / 2 + 4) / 3) * 3, 15, 96);
+    const texel = (2 * half) / SHADOW_RES;
+    const cx = Math.round((x0 + x1) / 2 / texel) * texel, cy = Math.round((y0 + y1) / 2 / texel) * texel;
+    const cz = Math.round(_focus.dot(SUN_DIR) / 0.5) * 0.5;
+    sun.target.position.copy(lx).multiplyScalar(cx).addScaledVector(ly, cy).addScaledVector(SUN_DIR, cz);
+    sun.position.copy(sun.target.position).addScaledVector(SUN_DIR, 140);
+    if (half !== shadowHalf) {
+      shadowHalf = half;
+      Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half });
+      sun.shadow.camera.updateProjectionMatrix();
+    }
+  }
 
   // RTS camera: MMB pan, RMB rotate, wheel zoom, WASD pan, Q/E rotate. LMB is left free for the game.
   const controls = new MapControls(camera, renderer.domElement);
@@ -124,6 +182,7 @@ export function createScene(container) {
   }
   const bufSize = new THREE.Vector2(), lastSize = new THREE.Vector2();
   function render() {
+    fitShadow();
     if (!composer) return renderer.render(scene, camera);
     renderer.getDrawingBufferSize(bufSize);
     if (!bufSize.equals(lastSize)) { lastSize.copy(bufSize); composer.setSize(bufSize.x, bufSize.y); }

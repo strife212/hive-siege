@@ -11,6 +11,7 @@ import { troopers } from './troopers.js';
 import { bombingRun, lineSpan } from './bomber.js';
 import { EXTENT } from './terrain.js';
 import { strategicStrike } from './strategic.js';
+import { blackHoleBomb } from './blackhole.js';
 
 // ---------------------------------------------------------------- definitions
 export const ABILITIES = {
@@ -22,8 +23,10 @@ export const ABILITIES = {
   bomber:    { name: 'Strategic Bomber', key: '6', cooldown: 90, width: 9.9, line: true, desc: 'Click a point, then a direction: a heavy bomber carpets that line across the entire map.' },
   nuke:      { name: 'Tactical Nuke',    key: '7', cooldown: 60, radius: 13.2, desc: '10 s countdown, then an ICBM levels the whole area. Bugs in the outer ring are set ablaze for 5 s.' },
   archangel: { name: 'Archangel Lance',  key: '8', cooldown: 60, radius: 13.2, desc: 'The ultimate orbital strike: a dozen beams spiral inward and merge into one colossal lance that swells until it detonates.' },
-  // instant: no targeting, it fires the moment it is called (the whole map is the target)
-  strategic: { name: 'Strategic Nuclear Strike', key: '9', cooldown: 300, instant: true, desc: 'Last resort. Every structure retracts into its silo, then a 10 s countdown and a giant ICBM hits the centre of the map: everything on the surface dies. The base redeploys once the cloud clears.' },
+  // global: nothing to aim (ground zero is the centre of the map). It arms like the rest and any click on the map
+  // launches it; `hint` is the prompt that rides above the cursor while it is armed.
+  blackhole: { name: 'Micro-Singularity Gravity Bomb', key: '9', cooldown: 45, radius: 9, desc: 'A bomb opens a singularity that drags every bug in the area in, crushing the small ones and holding the rest in orbit, then collapses and spits the survivors back out.' },
+  strategic: { name: 'Strategic Nuclear Strike', key: '0', cooldown: 300, global: true, hint: 'INITIATE STRATEGIC LAUNCH', desc: 'Last resort. Click anywhere on the map to launch. Every structure retracts into its silo, then a 10 s countdown and a giant ICBM hits the centre of the map: everything on the surface dies. The base redeploys once the cloud clears.' },
 };
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -975,8 +978,9 @@ function archangelLance(cx, cz, R) {
 // ---------------------------------------------------------------- targeting / activation
 function buildReticle(key, p) {
   const def = ABILITIES[key];
-  const color = key === 'nuke' ? 0xff4040 : key === 'strafe' ? 0xffb040 : key === 'artillery' ? 0xff8040 : key === 'troopers' ? 0x5dff8a : key === 'bomber' ? 0xff5a30 : key === 'archangel' ? 0xffe08a : 0x7fe0ff;
+  const color = key === 'nuke' ? 0xff4040 : key === 'strafe' ? 0xffb040 : key === 'artillery' ? 0xff8040 : key === 'troopers' ? 0x5dff8a : key === 'bomber' ? 0xff5a30 : key === 'archangel' ? 0xffe08a : key === 'blackhole' ? 0xa878ff : 0x7fe0ff;
   const g = new THREE.Group();
+  if (def.global) return g;                                    // nothing to aim and nothing drawn: the cursor prompt is the whole UI
   if (def.line) {
     // Two-step targeting: before the first click just mark the spot; after it, show the full run through the anchor.
     const a = ab.anchor || p, d = lineDir(a, p);
@@ -1025,6 +1029,7 @@ export const abilities = {
     ab.camera = camera; ab.controls = controls;
     for (const k of Object.keys(ABILITIES)) ab.cooldowns[k] = 0;
     buildBar();
+    addEventListener('pointermove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; if (ab.armed) showHint(); });
     addEventListener('keydown', (e) => {
       if (state.intro || state.gameOver) return;
       const hit = Object.entries(ABILITIES).find(([, d]) => d.key === e.key);
@@ -1040,17 +1045,14 @@ export const abilities = {
     abilities.cancel();
     ab.ui.cancel();
     ab.ui.showSelected(null);
-    if (ABILITIES[key].instant) {                              // nothing to aim: it goes now
-      ab.effects.push(strategicStrike({ scene: ab.scene, camera: ab.camera, controls: ab.controls, setCinematic: (fn) => { ab.cine = fn; } }));
-      ab.cooldowns[key] = ABILITIES[key].cooldown;
-      return refreshBar();
-    }
     ab.armed = key;
+    showHint();
     refreshBar();
   },
   cancel() {
     ab.armed = null;
     ab.anchor = null;
+    showHint();
     if (ab.reticle) { disposeGroup(ab.reticle); ab.reticle = null; }
     refreshBar();
   },
@@ -1085,6 +1087,8 @@ export const abilities = {
     else if (key === 'nuke') fx = nuclearStrike(p.x, p.z, def.radius);
     else if (key === 'troopers') fx = troopers.dropPods(p.x, p.z, def.radius);
     else if (key === 'archangel') fx = archangelLance(p.x, p.z, def.radius);
+    else if (key === 'blackhole') fx = blackHoleBomb(ab.scene, p.x, p.z, def.radius);
+    else if (key === 'strategic') fx = strategicStrike({ scene: ab.scene, camera: ab.camera, controls: ab.controls, setCinematic: (fn) => { ab.cine = fn; } });
     else if (key === 'bomber') { const d = lineDir(ab.anchor, p); fx = bombingRun(ab.scene, ab.anchor.x, ab.anchor.z, d.x, d.z, def.width); }
     ab.effects.push(fx);
     ab.cooldowns[key] = def.cooldown;
@@ -1099,13 +1103,24 @@ export const abilities = {
   },
 };
 
+// Prompt that rides just above the cursor while an ability with a `hint` is armed.
+const mouse = { x: innerWidth / 2, y: innerHeight / 2 };
+function showHint() {
+  const el = document.getElementById('cursorhint'), text = ab.armed ? ABILITIES[ab.armed].hint : null;
+  if (!text) { if (!el.hidden) el.hidden = true; return; }
+  if (el.textContent !== text) el.textContent = text;
+  el.hidden = false;
+  el.style.left = `${mouse.x}px`;
+  el.style.top = `${mouse.y}px`;
+}
+
 // ---------------------------------------------------------------- bottom bar UI
 function buildBar() {
   const bar = document.getElementById('abilities');
   for (const [key, def] of Object.entries(ABILITIES)) {
     const b = document.createElement('button');
     b.className = 'ability';
-    b.innerHTML = `<span class="key">${def.key}</span><span class="icon">${iconImg(`ab_${key}`)}</span><span class="name">${def.name}</span><span class="cd"></span><span class="cdtext"></span>`;
+    b.innerHTML = `<span class="key">${def.key}</span><span class="icon">${iconImg(`ab_${key}`)}</span><span class="name${def.name.length > 22 ? ' long' : ''}">${def.name}</span><span class="cd"></span><span class="cdtext"></span>`;
     b.title = def.desc;
     b.addEventListener('click', () => abilities.arm(key));
     bar.appendChild(b);

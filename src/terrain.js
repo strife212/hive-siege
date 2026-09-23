@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { simplex, fbm, ridged } from './noise.js';
 import { HALF, CELL, CELLS, FLAT, MAP } from './config.js';
 import { generateTerrainTextures } from './textures.js';
+import { WEATHER_U } from './surface.js';
 
 export const EXTENT = FLAT + 60;    // half-size of the rendered world (basin is FLAT, build area is HALF)
 const SPACING = 0.5;
@@ -244,6 +245,7 @@ function createTerrainMaterial(renderer) {
       uGrid: { value: 0 },
       uCanyon: { value: MAP === 'canyon' ? 1 : 0 },
       tHoles: { value: holeTex }, uHoleHalf: { value: HOLE_HALF },
+      uWet: WEATHER_U.wet, uRainAmt: WEATHER_U.rain, uRainT: WEATHER_U.time, uSkyRefl: WEATHER_U.sky,
     });
     mat.userData.setGrid = (v) => { shader.uniforms.uGrid.value = v; };
     shader.vertexShader = shader.vertexShader
@@ -259,6 +261,29 @@ function createTerrainMaterial(renderer) {
         uniform sampler2D tSoil, tSoilN, tRock, tRockN, tMoss, tMossN;
         uniform float uBound; uniform float uFlat; uniform float uGrid; uniform float uCanyon;
         uniform sampler2D tHoles; uniform float uHoleHalf;
+        uniform float uWet, uRainAmt, uRainT; uniform vec3 uSkyRefl;
+        float gPuddle = 0.0; vec3 gPuddleN = vec3(0.0, 1.0, 0.0);
+        float wHash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+        float wNoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(wHash(i), wHash(i + vec2(1.0, 0.0)), f.x), mix(wHash(i + vec2(0.0, 1.0)), wHash(i + vec2(1.0, 1.0)), f.x), f.y); }
+        // Raindrop rings on standing water: each cell of two offset grids drops a ring on its own beat. Returns the
+        // horizontal slope of the ripple field, used to tilt the puddle normal.
+        vec2 ripples(vec2 p, float t) {
+          vec2 acc = vec2(0.0);
+          for (int k = 0; k < 2; k++) {
+            vec2 q = p * 1.7 + float(k) * vec2(0.37, 0.61);
+            vec2 cell = floor(q), f = fract(q);
+            for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+              vec2 c = cell + vec2(float(i), float(j)) + float(k) * 17.0;
+              float ph = fract(t * 1.25 + wHash(c));
+              vec2 dd = f - (vec2(float(i), float(j)) + vec2(wHash(c + 3.1), wHash(c + 7.7)));
+              float r = length(dd), R = ph * 0.85;
+              float ring = sin((r - R) * 34.0) * exp(-pow((r - R) * 8.0, 2.0)) * (1.0 - ph) * (1.0 - ph);
+              acc += dd / max(r, 1e-3) * ring;
+            }
+          }
+          return acc;
+        }
         varying vec3 vSplat; varying vec3 vWorldPos; varying vec3 vWNormal;
         vec3 sample2(sampler2D t, vec2 a, vec2 b) { return mix(texture2D(t, a).rgb, texture2D(t, b).rgb, 0.5); }`)
       .replace('#include <map_fragment>', `
@@ -282,6 +307,15 @@ function createTerrainMaterial(renderer) {
         float bd = max(abs(vWorldPos.x), abs(vWorldPos.z));
         albedo *= mix(1.0, 0.86, smoothstep(uBound, uBound + 6.0, bd));
         albedo *= mix(1.0, 0.6, smoothstep(uFlat, uFlat + 12.0, bd));
+        // rain: soaked ground darkens, and standing water collects on flat ground in the hollows (not on bare rock)
+        if (uWet > 0.001) {
+          float flatG = smoothstep(0.9, 0.985, normalize(vWNormal).y);
+          float pn = wNoise(vWorldPos.xz * 0.11) * 0.65 + wNoise(vWorldPos.xz * 0.37 + 5.3) * 0.35;
+          float low = 1.0 - smoothstep(0.8, 1.02, (vColor.r + vColor.g) * 0.5);           // baked cavity AO: hollows are darker
+          gPuddle = smoothstep(0.7, 0.78, pn + low * 0.4) * flatG * smoothstep(0.35, 1.0, uWet) * (1.0 - w.y);
+          albedo *= mix(1.0, 0.6, uWet);
+          albedo *= mix(1.0, 0.42, gPuddle);
+        }
         diffuseColor.rgb *= albedo;`)
       .replace('#include <normal_fragment_maps>', `
         vec3 mapN = (sample2(tSoilN, uvA, uvB) * w.x + sample2(tRockN, uvA, uvB) * w.y + sample2(tMossN, uvA, uvB) * w.z) * 2.0 - 1.0;
@@ -289,7 +323,17 @@ function createTerrainMaterial(renderer) {
         vec3 Bw = normalize(cross(vec3(1.0, 0.0, 0.0), Nw));
         vec3 Tw = normalize(cross(Nw, Bw));
         vec3 wn = normalize(Tw * mapN.x + Bw * mapN.y + Nw * mapN.z);
+        if (gPuddle > 0.01) {                                             // standing water: flat, and pocked by raindrops
+          vec2 rp = uRainAmt > 0.01 ? ripples(vWorldPos.xz, uRainT) * uRainAmt : vec2(0.0);
+          gPuddleN = normalize(vec3(-rp.x * 0.3, 1.0, -rp.y * 0.3));
+          wn = normalize(mix(wn, gPuddleN, gPuddle));
+        }
         normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.42, uWet * 0.85);
+        roughnessFactor = mix(roughnessFactor, 0.08, gPuddle);`)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        reflectedLight.indirectSpecular *= 1.0 - 0.75 * gPuddle;   // the probe is a clear dusk sky: puddles reflect the overcast instead (emissive below)`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         float edge = smoothstep(0.35, 0.0, abs(bd - uBound));
         edge *= 1.0 - uCanyon * smoothstep(2.5, 6.0, vWorldPos.y);      // no build-limit line up on the mesa
@@ -299,7 +343,12 @@ function createTerrainMaterial(renderer) {
         float aa = fwidth(gd);
         float gridLine = (1.0 - smoothstep(0.015, 0.015 + aa * 1.5, gd)) * min(1.0, 0.03 / max(aa, 1e-4));
         gridLine *= step(bd, uBound) * uGrid;
-        totalEmissiveRadiance += vec3(0.2, 0.5, 0.7) * gridLine * 0.18;`);
+        totalEmissiveRadiance += vec3(0.2, 0.5, 0.7) * gridLine * 0.18;
+        if (gPuddle > 0.01) {                                             // standing water mirrors the sky
+          vec3 V = normalize(cameraPosition - vWorldPos);
+          float fres = 0.08 + 0.5 * pow(1.0 - max(dot(gPuddleN, V), 0.0), 5.0);
+          totalEmissiveRadiance += uSkyRefl * fres * gPuddle * (0.8 + 0.8 * min(1.0, (1.0 - gPuddleN.y) * 40.0));
+        }`);
   };
   return mat;
 }

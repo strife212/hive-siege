@@ -374,24 +374,22 @@ export const retract = {
       begin(s, 1, DROP_RATE);
       openHole(s, true);
       dust(s, s.silo.o.lite ? 2 : 6);
-      audio.play('lock_bolt', { x: s.x, z: s.z, vol: 0.5 });
     }
     const si = s.silo;
     if (!si) return false;
     const prev = si.t, sg = si.seg;
     si.t = si.target > si.t ? Math.min(si.target, si.t + dt * si.rate) : Math.max(si.target, si.t - dt * si.rate);
     const t = si.t, crossed = (x) => (prev < x) !== (t < x), down = t > prev;
-    if (crossed(sg.c[0])) { if (down) { steam(s); audio.play('silo_servo', { x: s.x, z: s.z, vol: 0.55 }); } else { dust(s, 4); audio.play('blast_door', { x: s.x, z: s.z, vol: 0.35 }); } }
-    if (crossed(sg.c[1]) && !down) { steam(s); audio.play('silo_servo', { x: s.x, z: s.z, vol: 0.55 }); }
+    if (crossed(sg.c[0])) { if (down) { steam(s); audio.play('silo_servo', { x: s.x, z: s.z, vol: 0.3 }); } else { dust(s, 4); audio.play('blast_door', { x: s.x, z: s.z, vol: 0.2 }); } }
+    if (crossed(sg.c[1]) && !down) { steam(s); audio.play('silo_servo', { x: s.x, z: s.z, vol: 0.3 }); }
     if (crossed(sg.d1[1])) {                                        // doors meet / doors part
       s.buried = down;
       s.mesh.visible = !down;
       si.works.visible = !down;
       state.flowDirty = true;
-      if (down) { dust(s, si.o.lite ? 4 : 12, 1.3); burst(s.x, s.y + 0.3, s.z, 'soil', si.o.lite ? 2 : 6, 5); audio.play('blast_door', { x: s.x, z: s.z, vol: 0.8 }); }
-      else audio.play('silo_hatch', { x: s.x, z: s.z, vol: 0.6 });
+      if (down) { dust(s, si.o.lite ? 4 : 12, 1.3); burst(s.x, s.y + 0.3, s.z, 'soil', si.o.lite ? 2 : 6, 5); audio.play('blast_door', { x: s.x, z: s.z, vol: 0.3 }); }
+      else audio.play('silo_doors', { x: s.x, z: s.z, vol: 0.3 });
     }
-    if (crossed(sg.e[0]) || (crossed(sg.e[1] - 0.001) && down)) audio.play('lock_bolt', { x: s.x, z: s.z, vol: 0.5 });
     s.bar.visible = false;
     pose(s);
     if (t <= 0 && si.target === 0) { finishDeploy(s); return false; }

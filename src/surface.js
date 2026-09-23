@@ -18,6 +18,10 @@ export function softBox(w, h, d, r) {
   return new RoundedBoxGeometry(w, h, d, 3, r ?? Math.min(w, h, d) * 0.42);
 }
 
+// Weather state shared by every material that reacts to rain (weather.js writes it): wet 0..1 soaks surfaces darker and
+// glossier, rain 0..1 is how hard it is coming down right now (streaks, ripples), time drives the running water.
+export const WEATHER_U = { wet: { value: 0 }, rain: { value: 0 }, time: { value: 0 }, sky: { value: new THREE.Color(0.12, 0.12, 0.15) } };   // sky: what puddles reflect
+
 const S = 256;
 let wearTex = null;
 function wearTexture() {
@@ -56,6 +60,7 @@ export function worn(mat, { grime = 0.22, rough = 0.22, chips = 0.5, bump = 0.5,
     uWear: { value: wearTexture() },
     uWearP: { value: new THREE.Vector4(grime, rough, chips, bump) },
     uWearScale: { value: scale },
+    uWetW: WEATHER_U.wet, uRainW: WEATHER_U.rain, uRainTW: WEATHER_U.time,
   };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
@@ -65,8 +70,9 @@ export function worn(mat, { grime = 0.22, rough = 0.22, chips = 0.5, bump = 0.5,
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform sampler2D uWear; uniform vec4 uWearP; uniform float uWearScale;
+        uniform float uWetW, uRainW, uRainTW;
         varying vec3 vWearPos; varying vec3 vWearNrm;
-        vec3 wearSample;`)
+        vec3 wearSample; float wetStreak = 0.0;`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         {
           vec3 w = pow(abs(normalize(vWearNrm)), vec3(6.0)); w /= (w.x + w.y + w.z);
@@ -76,9 +82,16 @@ export function worn(mat, { grime = 0.22, rough = 0.22, chips = 0.5, bump = 0.5,
           diffuseColor.rgb *= 1.0 - uWearP.x * dirt;
           diffuseColor.rgb *= 0.96 + 0.08 * wearSample.g;
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.43, 0.45), wearSample.b * uWearP.z);
+          // rain: soaked surfaces go darker, and water runs down the vertical faces in streaks
+          if (uWetW > 0.001) {
+            float run = texture2D(uWear, vec2((vWearPos.x + vWearPos.z) * 2.3, vWearPos.y * 0.22 + uRainTW * 0.32)).g;
+            wetStreak = smoothstep(0.56, 0.74, run) * (1.0 - w.y) * uRainW;
+            diffuseColor.rgb *= (1.0 - 0.24 * uWetW) * (1.0 - 0.16 * wetStreak);
+          }
         }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        roughnessFactor = clamp(roughnessFactor + (wearSample.g - 0.55) * uWearP.y + (1.0 - wearSample.r) * 0.12 * uWearP.y - wearSample.b * 0.25 * uWearP.z, 0.06, 1.0);`)
+        roughnessFactor = clamp(roughnessFactor + (wearSample.g - 0.55) * uWearP.y + (1.0 - wearSample.r) * 0.12 * uWearP.y - wearSample.b * 0.25 * uWearP.z, 0.06, 1.0);
+        roughnessFactor = mix(roughnessFactor, roughnessFactor * 0.42, uWetW) * (1.0 - 0.5 * wetStreak);`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
         metalnessFactor = mix(metalnessFactor, 0.85, wearSample.b * uWearP.z);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>

@@ -4,6 +4,7 @@ import { state, damageEnemy, burst, eachEnemy } from './game.js';
 import { spawnScorch } from './decals.js';
 import { puff } from './particles.js';
 import { audio } from './audio.js';
+import { flashes } from './flashes.js';
 
 // Shared combat effects: explosions, impact rings, railgun beams. Used by turrets and abilities alike.
 const fx = [];
@@ -49,6 +50,7 @@ export function impactRing(x, y, z, radius) {
 export function explode(x, z, size, dmg, radius, o = {}) {
   const y = heightAt(x, z);
   puff(x, y + size * 0.4, z, { color: 0xfff2c0, size: size * 3, life: 0.16, opacity: 1, additive: true });
+  flashes.add(x, y + 1 + size * 0.5, z, { color: o.color ?? 0xff9a48, power: 24 * size, range: 7 + 5 * size, life: 0.35 + size * 0.12 });   // lights up its surroundings
   const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12),
     new THREE.MeshBasicMaterial({ color: o.color ?? 0xff8a30, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
   ball.position.set(x, y + size * 0.35, z);
@@ -91,6 +93,7 @@ export function explode(x, z, size, dmg, radius, o = {}) {
 // Railgun bolt: a thick white core with a cyan sheath along a line, sparks where it passes, fades in 0.4 s.
 export function railBeam(from, to) {
   const g = new THREE.Group();
+  flashes.add(from.x, from.y, from.z, { color: 0x8fdcff, power: 40, range: 12, life: 0.4 });
   const core = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 1, 8, 1, true),
     new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
   const sheath = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1, 12, 1, true),

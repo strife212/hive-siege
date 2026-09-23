@@ -62,7 +62,7 @@ const geo = {
   nadeCap: new THREE.CylinderGeometry(0.03, 0.04, 0.06, 8).translate(0, 0.095, 0),
   nadeLever: bevelBox(0.02, 0.1, 0.025).translate(0.05, 0.065, 0),
 };
-const part = (g, m, x, y, z, parent) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; parent.add(o); return o; };
+const part = (g, m, x, y, z, parent) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; parent.add(o); return o; };
 
 // Small green frag grenade (unit size ~0.1; scaled by the caller).
 function makeGrenadeMesh() {

@@ -42,10 +42,17 @@ Looping sounds (started and stopped by the game; files should loop cleanly):
 
 | name           | used by                                  |
 | -------------- | ---------------------------------------- |
+| rain           | rain ambience while it rains (loop)      |
+| thunder        | thunder (near strikes crack first)       |
+| bh_open        | black hole opening (implosion + boom)    |
+| bh_consume     | a bug crushed in the black hole          |
+| bh_burst       | black hole collapsing                    |
+| blackhole_hum  | black hole drone while it is open (loop) |
+| bug_pop        | a bug dying (rate-limited; `size` = bug scale) |
 | air_raid       | strategic launch warning siren           |
-| silo_servo     | building elevator running (retract / deploy) |
-| blast_door     | silo blast doors slamming shut           |
-| lock_bolt      | silo lock bolts ratcheting               |
+| silo_servo     | building elevator running: soft mid-low hum, kept quiet |
+| blast_door     | silo blast doors meeting: muffled thump  |
+| silo_doors     | silo blast doors swinging open           |
 | airship_engine | Titan airship while airborne             |
 | vtol_jet       | Gunship Pad VTOL while airborne          |
 | hub_thruster   | Core descent engines in the intro        |

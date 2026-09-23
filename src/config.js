@@ -119,4 +119,16 @@ export const ENEMIES = {
     name: 'Brute', hpCapWave: 10, hp: 280, speed: 2.4, damage: 24, attackRate: 0.7, reward: 45, scale: 1.5,
     color: 0x5a2430, plate: 0x2b1016, legColor: 0x24101a, accent: 0xd9c9a8, eye: 0xff7a20, spikes: true, legR: 1.7,
   },
+  // Specials (see SPECIALS): a skitterer-sized sprinter, and a brute-sized bug with an acid cannon on its back.
+  darter: {
+    name: 'Darter', hpCapWave: 5, hp: 32, speed: 9.6, damage: 5, attackRate: 1.6, reward: 14, scale: 0.7,
+    color: 0x2a93ad, plate: 0x0f4556, legColor: 0x0d2c38, accent: 0x55f0ff, eye: 0xffd23a, spikes: false, legR: 0.85, fins: true,
+  },
+  spitter: {
+    name: 'Acid Spitter', hpCapWave: 10, hp: 240, speed: 2.5, damage: 16, attackRate: 0.8, reward: 55, scale: 1.5,
+    color: 0x86821a, plate: 0x34360a, legColor: 0x262809, accent: 0xa6ff2e, eye: 0xff4a1a, spikes: false, legR: 1.6, cannon: true,
+    // Lobs a glob at the nearest building within range (walls excepted: it arcs straight over them) while it walks.
+    acid: { range: 8, damage: 14, rate: 0.45, turn: 4.5 },
+  },
 };
+export const SPECIALS = { from: 3, share: 0.1 };   // from wave 3, about one bug in ten is a Darter or an Acid Spitter

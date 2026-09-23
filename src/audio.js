@@ -181,6 +181,51 @@ const SYNTH = {
     osc(c, o, t + 0.02, { type: 'square', f0: 210, f1: 150, dur: 0.35, gain: 0.08, lp: 900 });
     osc(c, o, t + 0.22, { type: 'sine', f0: 60, f1: 30, dur: 0.5, gain: 0.35 });        // settle bounce
   } },
+  thunder: { min: 0.4, fn: (c, o, t, p) => {               // size: 1 = right on top of you (a crack first), 0 = far off (just the roll)
+    const near = p.size ?? 0.3;
+    if (near > 0.5) {
+      noise(c, o, t, { dur: 0.14, type: 'highpass', f0: 1200, gain: 0.55 * near, a: 0.001 });
+      osc(c, o, t, { type: 'sawtooth', f0: 180, f1: 45, dur: 0.35, gain: 0.12 * near, a: 0.002, lp: 900 });
+    }
+    osc(c, o, t, { type: 'sine', f0: 62, f1: 28, dur: 2.4, gain: 0.34 + 0.3 * near, a: 0.04 + (1 - near) * 0.45 });
+    noise(c, o, t, { dur: 3.4, type: 'lowpass', f0: 380 + near * 1600, f1: 80, gain: 0.5, a: 0.02 + (1 - near) * 0.5 });
+    noise(c, o, t + 0.7 + Math.random() * 0.8, { dur: 2.6, type: 'lowpass', f0: 280, f1: 60, gain: 0.32, a: 0.25 });   // the second roll
+  } },
+  bh_open: { min: 0.3, fn: (c, o, t) => {                  // singularity opening: an implosive suck, then a deep settling boom
+    noise(c, o, t, { dur: 0.08, type: 'bandpass', f0: 240, f1: 3200, q: 1.4, gain: 0.35, a: 0.55 });
+    osc(c, o, t, { type: 'sine', f0: 140, f1: 900, dur: 0.05, gain: 0.12, a: 0.55 });
+    osc(c, o, t + 0.6, { type: 'sine', f0: 120, f1: 30, dur: 0.9, gain: 0.7, a: 0.004 });
+    noise(c, o, t + 0.6, { dur: 0.5, type: 'lowpass', f0: 900, f1: 120, gain: 0.35, a: 0.003 });
+  } },
+  bh_consume: { min: 0.05, fn: (c, o, t) => {              // a bug crushed at the horizon: a short zap and squelch
+    osc(c, o, t, { type: 'square', f0: 700, f1: 160, dur: 0.07, gain: 0.08, a: 0.002, lp: 1600 });
+    osc(c, o, t, { type: 'sine', f0: 320, f1: 50, dur: 0.11, gain: 0.22, a: 0.002 });
+    noise(c, o, t, { dur: 0.06, type: 'lowpass', f0: 1200, f1: 300, gain: 0.12, a: 0.002 });
+  } },
+  bh_burst: { min: 0.3, fn: (c, o, t) => {                 // collapse: a crack, a deep boom and a ringing sweep outward
+    noise(c, o, t, { dur: 0.05, type: 'highpass', f0: 1800, gain: 0.5, a: 0.001 });
+    osc(c, o, t, { type: 'sine', f0: 95, f1: 30, dur: 0.75, gain: 0.85, a: 0.003 });
+    noise(c, o, t, { dur: 0.6, type: 'lowpass', f0: 2600, f1: 160, gain: 0.55, a: 0.003 });
+    osc(c, o, t + 0.02, { type: 'sawtooth', f0: 260, f1: 70, dur: 0.35, gain: 0.08, a: 0.01, lp: 900 });
+    osc(c, o, t + 0.05, { type: 'sine', f0: 480, f1: 1900, dur: 0.5, gain: 0.05, a: 0.02 });
+  } },
+  acid_spit: { min: 0.06, fn: (c, o, t) => {              // the spitter's cannon: a soft, throaty gulp and thwop
+    osc(c, o, t, { type: 'sine', f0: 150, f1: 62, dur: 0.14, gain: 0.4, a: 0.005 });
+    osc(c, o, t, { type: 'triangle', f0: 340, f1: 140, dur: 0.07, gain: 0.07, a: 0.004, lp: 900 });
+    noise(c, o, t + 0.01, { dur: 0.12, type: 'bandpass', f0: 520, f1: 240, q: 1.2, gain: 0.2, a: 0.005 });
+  } },
+  acid_hit: { min: 0.06, fn: (c, o, t) => {               // splat, then a short, low hiss as it eats in (kept dull: it repeats a lot)
+    noise(c, o, t, { dur: 0.08, type: 'lowpass', f0: 1100, f1: 260, gain: 0.26, a: 0.003 });
+    osc(c, o, t, { type: 'sine', f0: 190, f1: 90, dur: 0.06, gain: 0.12, a: 0.003 });
+    noise(c, o, t + 0.04, { dur: 0.55, type: 'bandpass', f0: 1700, f1: 1300, q: 0.9, gain: 0.05, a: 0.06 });
+  } },
+  bug_pop: { min: 0.035, fn: (c, o, t, p) => {             // a bug bursting: a round, wet pop. Every one lands on a slightly
+    // different note (so a stream of kills ripples like bubble wrap) and bigger bugs pop lower and fatter.
+    const s = p.size ?? 1, f = (380 + Math.random() * 170) / Math.sqrt(s);
+    osc(c, o, t, { type: 'sine', f0: f, f1: f * 0.27, dur: 0.075 * Math.sqrt(s), gain: 0.55, a: 0.002 });
+    osc(c, o, t, { type: 'triangle', f0: f * 1.5, f1: f * 0.5, dur: 0.04, gain: 0.12, a: 0.002, lp: 1400 });   // the snap at the front
+    noise(c, o, t + 0.008, { dur: 0.06 * s, type: 'lowpass', f0: 1000, f1: 280, gain: 0.13, a: 0.004 });        // the splat behind it
+  } },
   explosion: { min: 0.04, fn: (c, o, t, p) => {
     const s = p.size ?? 1;
     osc(c, o, t, { type: 'sine', f0: 110 / Math.sqrt(s), f1: 28, dur: 0.5 * s, gain: 0.8 });
@@ -209,21 +254,26 @@ const SYNTH = {
       }
     }
   } },
-  silo_servo: { min: 0.12, fn: (c, o, t) => {                        // elevator drive: a geared whine that winds up, runs and winds down
-    osc(c, o, t, { type: 'sawtooth', f0: 70, f1: 150, dur: 0.5, gain: 0.1, a: 0.25, hold: 0.9, lp: 900 });
-    osc(c, o, t, { type: 'square', f0: 210, f1: 430, dur: 0.5, gain: 0.03, a: 0.25, hold: 0.9, lp: 1400 });
-    noise(c, o, t, { dur: 0.6, type: 'bandpass', f0: 500, f1: 900, q: 1.5, gain: 0.07, a: 0.2, hold: 0.8 });
+  silo_servo: { min: 0.12, fn: (c, o, t) => {                        // elevator drive, kept in the background: a soft mid-low motor hum that
+    // eases in and out over some rumble, with a muffled release at the start and a gentle stop at the end. No whine, no grit.
+    const run = { a: 0.5, hold: 0.8, dur: 0.8 };
+    osc(c, o, t, { type: 'sine', f0: 62, f1: 56, gain: 0.16, ...run });
+    osc(c, o, t, { type: 'triangle', f0: 84, f1: 92, gain: 0.12, lp: 420, ...run });
+    osc(c, o, t, { type: 'sawtooth', f0: 126.5, f1: 138, gain: 0.025, lp: 480, ...run });          // a fifth up, slightly off: slow beating
+    noise(c, o, t, { type: 'lowpass', f0: 420, f1: 300, gain: 0.09, ...run });
+    osc(c, o, t, { type: 'sine', f0: 100, f1: 52, dur: 0.16, gain: 0.16, a: 0.01 });               // brakes off
+    osc(c, o, t + 1.85, { type: 'sine', f0: 86, f1: 46, dur: 0.22, gain: 0.13, a: 0.01 });         // platform seats
   } },
-  blast_door: { min: 0.12, fn: (c, o, t) => {                        // heavy plate slamming into its seat
-    osc(c, o, t, { type: 'sine', f0: 95, f1: 38, dur: 0.45, gain: 0.6, a: 0.002 });
-    noise(c, o, t, { dur: 0.22, type: 'lowpass', f0: 1200, f1: 200, gain: 0.5, a: 0.001 });
-    osc(c, o, t + 0.01, { type: 'square', f0: 320, f1: 250, dur: 0.5, gain: 0.05, lp: 1200 });
-    osc(c, o, t + 0.01, { type: 'triangle', f0: 517, f1: 480, dur: 0.7, gain: 0.04 });
+  // Blast doors, in the same soft, low voice as the elevator: nothing buzzy or ringing, just weight.
+  blast_door: { min: 0.12, fn: (c, o, t) => {                        // doors meeting: a muffled heavy thump
+    osc(c, o, t, { type: 'sine', f0: 82, f1: 40, dur: 0.42, gain: 0.4, a: 0.004 });
+    osc(c, o, t, { type: 'triangle', f0: 124, f1: 70, dur: 0.26, gain: 0.11, a: 0.004, lp: 400 });
+    noise(c, o, t, { dur: 0.24, type: 'lowpass', f0: 480, f1: 160, gain: 0.18, a: 0.003 });
   } },
-  lock_bolt: { min: 0.12, fn: (c, o, t) => {                         // ratcheting lock bolts, then a final seat
-    for (let k = 0; k < 6; k++) noise(c, o, t + k * 0.075, { dur: 0.03, type: 'bandpass', f0: 2400 - k * 120, q: 3, gain: 0.16, a: 0.001 });
-    osc(c, o, t, { type: 'sawtooth', f0: 240, f1: 300, dur: 0.1, gain: 0.04, a: 0.05, hold: 0.35, lp: 1500 });
-    osc(c, o, t + 0.5, { type: 'sine', f0: 140, f1: 70, dur: 0.12, gain: 0.3, a: 0.002 });
+  silo_doors: { min: 0.12, fn: (c, o, t) => {                        // doors swinging open: a release thud, then a short hydraulic hum
+    osc(c, o, t, { type: 'sine', f0: 92, f1: 50, dur: 0.16, gain: 0.14, a: 0.008 });
+    osc(c, o, t + 0.05, { type: 'triangle', f0: 72, f1: 86, dur: 0.4, gain: 0.1, a: 0.22, hold: 0.25, lp: 380 });
+    noise(c, o, t + 0.05, { dur: 0.4, type: 'lowpass', f0: 380, f1: 260, gain: 0.06, a: 0.22, hold: 0.25 });
   } },
   silo_hatch: { fn: (c, o, t) => {
     osc(c, o, t, { type: 'sawtooth', f0: 110, f1: 95, dur: 0.8, gain: 0.12, a: 0.05, lp: 600 });
@@ -343,6 +393,41 @@ LOOPS.airship_engine = (c, out) => {
   n.connect(bp).connect(ng).connect(g); nodes.push(n, lfo);
   nodes.forEach((x) => x.start());
   return { gain: g, level: 0.4, nodes };
+};
+
+// Rain: a wide hiss with a softer body under it and a slow swell, like a downpour on open ground.
+LOOPS.rain = (c, out) => {
+  const g = c.createGain(); g.gain.value = 0; g.connect(out);
+  const nodes = [];
+  const src = (rate) => { const n = c.createBufferSource(); n.buffer = noiseBuffer(c); n.loop = true; n.playbackRate.value = rate; nodes.push(n); return n; };
+  const band = (input, type, f, q, gain) => { const b = c.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; const bg = c.createGain(); bg.gain.value = gain; input.connect(b).connect(bg).connect(g); return bg; };
+  band(src(1), 'bandpass', 2600, 0.45, 0.55);                    // the hiss
+  band(src(0.83), 'lowpass', 650, 0.7, 0.4);                     // the body
+  const patter = band(src(1.17), 'bandpass', 5200, 1.2, 0.12);   // fine patter on top
+  const lfo = c.createOscillator(); lfo.frequency.value = 0.11; const lg = c.createGain(); lg.gain.value = 0.1; lfo.connect(lg).connect(g.gain); nodes.push(lfo);
+  const lfo2 = c.createOscillator(); lfo2.frequency.value = 7.3; const lg2 = c.createGain(); lg2.gain.value = 0.05; lfo2.connect(lg2).connect(patter.gain); nodes.push(lfo2);
+  nodes.forEach((x) => x.start());
+  return { gain: g, level: 0.4, nodes };
+};
+
+// Black hole: a deep uneasy drone with a slow throb and a thin high whistle riding on top.
+LOOPS.blackhole_hum = (c, out) => {
+  const g = c.createGain(); g.gain.value = 0; g.connect(out);
+  const nodes = [];
+  for (const [f, gn, type] of [[38, 0.5, 'sine'], [57.5, 0.22, 'sawtooth'], [76, 0.12, 'sine']]) {
+    const o = c.createOscillator(); o.type = type; o.frequency.value = f;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220;
+    const og = c.createGain(); og.gain.value = gn; o.connect(lp).connect(og).connect(g); nodes.push(o);
+  }
+  const hi = c.createOscillator(); hi.type = 'sine'; hi.frequency.value = 1860;
+  const hg = c.createGain(); hg.gain.value = 0.012; hi.connect(hg).connect(g); nodes.push(hi);
+  const n = c.createBufferSource(); n.buffer = noiseBuffer(c); n.loop = true;
+  const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = 1.2;
+  const ng = c.createGain(); ng.gain.value = 0.08; n.connect(bp).connect(ng).connect(g); nodes.push(n);
+  const lfo = c.createOscillator(); lfo.frequency.value = 0.9; const lg = c.createGain(); lg.gain.value = 0.14; lfo.connect(lg).connect(g.gain); nodes.push(lfo);
+  const lfo2 = c.createOscillator(); lfo2.frequency.value = 6; const lg2 = c.createGain(); lg2.gain.value = 300; lfo2.connect(lg2).connect(bp.frequency); nodes.push(lfo2);
+  nodes.forEach((x) => x.start());
+  return { gain: g, level: 0.5, nodes };
 };
 
 // VTOL gunship: twin lift jets, a broadband roar under a steady turbine whine with a slow beat between the engines.
