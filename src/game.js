@@ -654,10 +654,28 @@ function updateMissiles(dt) {
 }
 
 // ---------------------------------------------------------------- Railgun Battery
+// Railgun priority: the Colossus whenever it is in range, then medium bugs (brutes, spitters), then small ones, nearest
+// first within a class. Rechecked four times a second, so a boss or a brute walking into range takes over the gun;
+// a target is only dropped for a better class, never for another of the same one.
+const railTier = (e) => (e.boss ? 2 : e.def.scale >= 1 ? 1 : 0);
+function railTarget(x, z, range) {
+  let best = null, bt = -1, bd = Infinity;
+  spatial.each(x, z, range, (e, d) => {
+    const t = railTier(e);
+    if (t > bt || (t === bt && d < bd)) { bt = t; bd = d; best = e; }
+  });
+  return best;
+}
+
 function updateRailgun(s, dt) {
   const def = s.def, ud = s.mesh.userData;
   if (s.target && (s.target.dead || Math.hypot(s.target.x - s.x, s.target.z - s.z) > def.range)) s.target = null;
-  if (!s.target) s.target = nearestEnemy(s.x, s.z, def.range);
+  s.scan = (s.scan ?? 0) - dt;
+  if (!s.target || s.scan <= 0) {
+    s.scan = 0.25;
+    const best = railTarget(s.x, s.z, def.range);
+    if (best && (!s.target || railTier(best) > railTier(s.target))) s.target = best;
+  }
   const t = s.target;
   s.charge = s.charge ?? 0;
   s.yaw = s.yaw ?? ud.head.rotation.y;
@@ -981,6 +999,7 @@ export function update(dt) {
     if (s.def?.income) state.credits += s.def.income * dt;
     const spin = s.mesh.userData.spin;
     if (spin) spin.rotation.y += dt * (s.type === 'refinery' ? 6 : 1.2);
+    s.mesh.userData.tick?.(dt, state.time);                  // idle animation (the uplink's dish and aviation lights)
   }
   retract.tick(dt);
   updateProjectiles(dt);

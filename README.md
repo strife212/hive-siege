@@ -55,7 +55,8 @@ anything between them and your Core.
   splash), Missile Silo (hatches open and a rack rises, six corkscrewing homing rockets every 6 s at the densest
   cluster), Railgun Battery (capacitor banks glow as it charges for 3 s, then a bolt pierces every bug along a
   60-unit line for up to 400; the mount traverses at a fixed rate and holds its charge until aligned, and a blue
-  gauge on the breech fills with the charge; needs a lab).
+  gauge on the breech fills with the charge; target priority is the Colossus whenever it is in range, then medium
+  bugs (brutes, spitters), then small ones, nearest first within a class; needs a lab).
 - **Fire shader** (`src/flame.js`): flamethrower streams and burning bugs are one instanced quad mesh whose fragment
   shader shapes each flame from scrolling fbm noise, erodes it with age and ramps white-hot to orange, red and sooty
   smoke; premultiplied blending makes the core add light while the smoke occludes.
@@ -63,6 +64,14 @@ anything between them and your Core.
   casings from both sides), Flamethrower (short-range gravity-arced fire stream; every bug in its 24° cone is
   set burning for 3 s at 14 damage/s, refreshed while it stays in the stream, with flames on the bug), Laser Tower (hitscan beam, needs a Research Lab),
   Refinery (+3 credits/s), Research Lab (unlocks laser + tech).
+- **Strategic Uplink Tower** (SUPPORT, 2x2, 2000 credits): a very tall comms tower. An armoured equipment hall carries a
+  red-and-white banded lattice mast about 15 units high, bristling with hardware:
+  - parabolic dishes, microwave drums, two rings of cellular panels, a yagi, crossed dipoles and whips
+  - three railed walkway platforms, guy wires, and blinking red aviation lights
+  - a big uplink dish on the roof that slowly slews to hold its link
+
+  The Strategic Nuclear Strike stays locked until one stands, and locks again if it is lost. It sinks whole into a
+  deep silo like everything else.
 - **Research**: Reinforced Plating (walls x2 HP), Overcharged Optics (laser +50%), HE Rounds (turret splash).
 - **Scale**: bugs are rendered as one instanced draw per species (`src/swarm.js`): the rig is baked into a single
   low-poly geometry with per-vertex pivot/axis/phase attributes and the gait, chomp, bob, burn glow and death curl
@@ -95,7 +104,7 @@ anything between them and your Core.
   straight over walls and towers and stabs the Core with its front legs. 5200 HP (scaled by wave), boss bar at the top. Turrets, the railgun
   and the flamethrower elevate to hit its hull. Death: convulsions and ruptures, legs buckle, it crashes down, the abdomen swells and bursts
   (damaging nearby bugs), and the husk sinks away. Debug menu (Z) has a *Spawn boss* button.
-- **Titan Airship Pad** (2x3, 1000 credits, limit 1, `src/airship.js`): a big rigid airship (ring-framed cigar hull, cruciform tail, long lit
+- **Titan Airship Pad** (2x3, 5000 credits, limit 1, `src/airship.js`): a big rigid airship (ring-framed cigar hull, cruciform tail, long lit
   gondola, four ducted fans, solar spine) that parks over the thickest knot of bugs. Twin gatlings (500 rds each), twin HMGs (250 each), a
   belly howitzer (25 shells, big splash) and a bomb bay that drops 30 bombs straight down. Returns when empty or idle, rearms moored for 8 s.
 - **Gunship Pad** (2x2 tower, `src/heli.js`): a heavy off-white VTOL gunship (wingtip lift-jet nacelles that vector with the flight, multi-tube
@@ -155,7 +164,7 @@ anything between them and your Core.
   seconds the hole strains, collapses and blows, and every survivor is flung on an arc back to the spot it was taken
   from, landing dazed. Held bugs are still valid targets for towers. `e.held` (moved by blackhole.js, skipped by the
   AI and the separation pass, lifted and tumbled by the swarm renderer) and `e.stun`.
-- **Strategic Nuclear Strike** (key 0, `src/strategic.js`): a last resort played as a cinematic. It arms like the other
+- **Strategic Nuclear Strike** (key 0, `src/strategic.js`, needs a Strategic Uplink Tower): a last resort played as a cinematic. It arms like the other
   call-ins, with INITIATE STRATEGIC LAUNCH riding above the cursor (no ground marker); any click on the map launches it.
   Every structure and the Core retract into their silos; then a 10 s beeping countdown ("STRATEGIC LAUNCH DETECTED /
   IMPACT IN n") while a giant ICBM comes down on the centre of the map. With 7 s to go the camera leaves the player,

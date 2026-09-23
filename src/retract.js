@@ -28,7 +28,7 @@ const DROP_RATE = 1, BUILD_RATE = 1.6;     // a new building comes up faster tha
 // Walls use a thin lip that exactly fills their tile so a run of them reads as one segmented trench.
 const OPEN = {
   wall: [1, 1, 0.03, 0.03], hmg: [1.25, 1.25], turret: [1.5, 1.5], dual: [1.5, 1.5], flame: [1.5, 1.5], laser: [1.5, 1.5],
-  refinery: [1.25, 1.25], lab: [1.25, 1.25], mortar: [2.5, 2.5], missile: [2.25, 2.25], rail: [2.25, 2.25], heli: [2.25, 2.25],
+  refinery: [1.25, 1.25], lab: [1.25, 1.25], mortar: [2.5, 2.5], missile: [2.25, 2.25], rail: [2.25, 2.25], heli: [2.25, 2.25], uplink: [2.25, 2.25],
   airship: [2.25, 3.25], core: [3, 3],
 };
 function opening(type) {

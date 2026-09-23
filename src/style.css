@@ -257,6 +257,10 @@ body.intro #abilities { opacity: 0; pointer-events: none; }
 .ability.cooling { cursor: default; transform: none; border-color: var(--line); background: rgba(0, 0, 0, .35); }
 .ability.cooling::after { opacity: 0; }
 .ability.cooling .name { color: var(--dim); }
+.ability.locked { cursor: not-allowed; transform: none; border-color: var(--line); background: rgba(0, 0, 0, .35); }   /* needs a building first */
+.ability.locked::after { opacity: 0; }
+.ability.locked .name, .ability.locked .key { color: var(--dim); }
+.ability.locked .cdtext { inset: 0 0 26px; font-size: 11px; letter-spacing: .16em; color: var(--muted); }
 .ability .key {
   position: absolute; top: 2px; left: 3px; min-width: 14px; padding: 0 3px; font: 700 10px/13px var(--font-display); text-align: center;
   color: var(--accent); background: rgba(0, 0, 0, .55); border: 1px solid var(--accent-lo);
@@ -364,7 +368,7 @@ body.demo #mute { display: none; }
 
 /* pixel-art icons (src/icons.js) */
 .pxicon { image-rendering: pixelated; image-rendering: crisp-edges; display: block; margin: 0 auto; pointer-events: none; user-select: none; }
-.card.locked .pxicon, .card.maxed .pxicon, .ability.cooling .pxicon { filter: grayscale(.85) brightness(.65); }
+.card.locked .pxicon, .card.maxed .pxicon, .ability.cooling .pxicon, .ability.locked .pxicon { filter: grayscale(.85) brightness(.65); }
 
 /* trooper drag-select box */
 #selbox { position: fixed; display: none; z-index: 12; pointer-events: none; border: 1px solid #5dff8a; background: rgba(93, 255, 138, .1); box-shadow: 0 0 10px rgba(93, 255, 138, .35), inset 0 0 12px rgba(93, 255, 138, .12); }

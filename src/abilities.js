@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { heightAt } from './terrain.js';
 import { iconImg } from './icons.js';
-import { state, damageEnemy, eachEnemy, burst, log } from './game.js';
+import { state, damageEnemy, eachEnemy, burst, log, hasBuilding } from './game.js';
+import { BUILDINGS } from './config.js';
 import { flame } from './flame.js';
 import { spawnScorch, spawnScar } from './decals.js';
 import { puff, killPuff, updateParticles } from './particles.js';
@@ -26,7 +27,7 @@ export const ABILITIES = {
   // global: nothing to aim (ground zero is the centre of the map). It arms like the rest and any click on the map
   // launches it; `hint` is the prompt that rides above the cursor while it is armed.
   blackhole: { name: 'Micro-Singularity Gravity Bomb', key: '9', cooldown: 45, radius: 9, desc: 'A bomb opens a singularity that drags every bug in the area in, crushing the small ones and holding the rest in orbit, then collapses and spits the survivors back out.' },
-  strategic: { name: 'Strategic Nuclear Strike', key: '0', cooldown: 300, global: true, hint: 'INITIATE STRATEGIC LAUNCH', desc: 'Last resort. Click anywhere on the map to launch. Every structure retracts into its silo, then a 10 s countdown and a giant ICBM hits the centre of the map: everything on the surface dies. The base redeploys once the cloud clears.' },
+  strategic: { name: 'Strategic Nuclear Strike', key: '0', cooldown: 300, global: true, requires: 'uplink', hint: 'INITIATE STRATEGIC LAUNCH', desc: 'Requires a Strategic Uplink Tower. Last resort. Click anywhere on the map to launch. Every structure retracts into its silo, then a 10 s countdown and a giant ICBM hits the centre of the map: everything on the surface dies. The base redeploys once the cloud clears.' },
 };
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -1040,6 +1041,7 @@ export const abilities = {
   get cinematic() { return ab.cine; },                          // camera driver while a cinematic strike owns the view (main.js)
   get laserActive() { return !!ab.laser; },
   arm(key) {
+    if (locked(key)) return log(`${ABILITIES[key].name} requires a ${BUILDINGS[ABILITIES[key].requires].name}`, true);
     if (ab.cooldowns[key] > 0) return log(`${ABILITIES[key].name} recharging (${Math.ceil(ab.cooldowns[key])} s)`, true);
     if (ab.armed === key) return abilities.cancel();
     abilities.cancel();
@@ -1099,9 +1101,12 @@ export const abilities = {
     for (const k of Object.keys(ab.cooldowns)) ab.cooldowns[k] = Math.max(0, ab.cooldowns[k] - dt);
     for (let k = ab.effects.length - 1; k >= 0; k--) if (!ab.effects[k].update(dt)) ab.effects.splice(k, 1);
     updateParticles(dt);
+    if (ab.armed && locked(ab.armed)) abilities.cancel();       // its enabling building was lost while armed
     refreshBar();
   },
 };
+// An ability that needs a building (the strategic strike needs the Uplink Tower) is locked until one stands.
+const locked = (key) => !!ABILITIES[key].requires && !hasBuilding(ABILITIES[key].requires);
 
 // Prompt that rides just above the cursor while an ability with a `hint` is armed.
 const mouse = { x: innerWidth / 2, y: innerHeight / 2 };
@@ -1130,13 +1135,14 @@ function buildBar() {
 const barCache = {};
 function refreshBar() {
   for (const [key, b] of Object.entries(ab.buttons)) {
-    const cd = ab.cooldowns[key], def = ABILITIES[key];
-    const sig = `${ab.armed === key}|${Math.ceil(cd)}`;
+    const cd = ab.cooldowns[key], def = ABILITIES[key], lock = locked(key);
+    const sig = `${ab.armed === key}|${Math.ceil(cd)}|${lock}`;
     if (barCache[key] === sig) continue;
     barCache[key] = sig;
     b.classList.toggle('active', ab.armed === key);
     b.classList.toggle('cooling', cd > 0);
+    b.classList.toggle('locked', lock);
     b.querySelector('.cd').style.height = `${(cd / def.cooldown) * 100}%`;
-    b.querySelector('.cdtext').textContent = cd > 0 ? Math.ceil(cd) : '';
+    b.querySelector('.cdtext').textContent = lock ? 'LOCKED' : cd > 0 ? Math.ceil(cd) : '';
   }
 }

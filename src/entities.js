@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { makeHelipad } from './heli.js';
 import { makeAirshipPad } from './airship.js';
 import { bevelBox, softBox, worn } from './surface.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BUILDINGS } from './config.js';
 
 // Yellow / black chevron tape for pit edges and hatch surrounds.
@@ -742,6 +743,203 @@ function researchLab(g) {
   g.userData.dome = dome;
 }
 
+// ---------------------------------------------------------------- Strategic Uplink Tower
+M.dish = worn(new THREE.MeshStandardMaterial({ color: 0xe4e8ec, roughness: 0.4, metalness: 0.2, side: THREE.DoubleSide }), { grime: 0.18, chips: 0.25 });
+M.aviation = new THREE.MeshStandardMaterial({ color: 0xff3020, emissive: 0xff2010, emissiveIntensity: 0.3, roughness: 0.4 });   // blinks (uplink tick)
+
+// A thin open cylinder from a to b (lattice members, guy wires, cable runs); merged by the caller.
+const _sm = new THREE.Matrix4(), _sq = new THREE.Quaternion(), _sd = new THREE.Vector3(), _sc = new THREE.Vector3(), _one = new THREE.Vector3(1, 1, 1), _sy = new THREE.Vector3(0, 1, 0);
+function strut(a, b, r, segs = 5) {
+  _sd.subVectors(b, a);
+  const geo = new THREE.CylinderGeometry(r, r, _sd.length(), segs, 1, true);
+  geo.applyMatrix4(_sm.compose(_sc.addVectors(a, b).multiplyScalar(0.5), _sq.setFromUnitVectors(_sy, _sd.normalize()), _one));
+  return geo;
+}
+function boxAt(w, h, d, x, y, z, ry = 0) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  if (ry) geo.rotateY(ry);
+  return geo.translate(x, y, z);
+}
+
+// Parabolic dish with its opening along +Y: bowl, rim, back mount, and a feed horn held at the focus on three struts.
+function dish(R) {
+  const g = new THREE.Group(), f = R * 0.62, pts = [];
+  for (let k = 0; k <= 8; k++) { const r = R * k / 8; pts.push(new THREE.Vector2(r, (r * r) / (4 * f))); }
+  g.add(mesh(new THREE.LatheGeometry(pts, 20), M.dish));
+  const lip = R * R / (4 * f);
+  g.add(mesh(new THREE.TorusGeometry(R, R * 0.035, 5, 24), M.trim, 0, lip, 0).rotateX(Math.PI / 2));
+  g.add(mesh(new THREE.CylinderGeometry(R * 0.22, R * 0.3, R * 0.25, 10), M.gunmetal, 0, -R * 0.1, 0));
+  const feed = [];
+  for (let k = 0; k < 3; k++) {
+    const a = k / 3 * Math.PI * 2;
+    feed.push(strut(new THREE.Vector3(Math.cos(a) * R * 0.92, lip, Math.sin(a) * R * 0.92), new THREE.Vector3(0, f * 0.95, 0), R * 0.018, 4));
+  }
+  g.add(mesh(mergeGeometries(feed), M.dark));
+  g.add(mesh(new THREE.CylinderGeometry(R * 0.07, R * 0.1, R * 0.22, 8), M.dark, 0, f, 0));
+  return g;
+}
+// Point a +Y-opening part at a direction given as azimuth (around Y, 0 = +Z) and elevation above the horizon.
+function aim(o, az, el) { o.rotation.set(0, az, 0, 'YXZ'); o.rotation.x = Math.PI / 2 - el; return o; }
+
+// Strategic Uplink Tower (2x2, support): an armoured equipment hall with a tall red-and-white banded lattice mast set
+// off-centre on its roof, bristling with dishes, microwave drums, cellular panels and whips, with walkway platforms,
+// guy wires and blinking aviation lights. The big uplink dish on the roof slowly slews while it holds its link.
+function uplinkTower(g) {
+  g.add(mesh(bevelBox(3.8, 0.2, 3.8), M.dark, 0, 0.1, 0));
+  g.add(mesh(bevelBox(2.9, 1.25, 2.9, 0.08), M.white, 0, 0.83, 0));
+  g.add(mesh(bevelBox(3.0, 0.1, 3.0), M.trim, 0, 1.5, 0));
+  for (let k = 0; k < 4; k++) {                                                                        // hall faces
+    const face = new THREE.Group();
+    face.rotation.y = k * Math.PI / 2;
+    face.add(mesh(bevelBox(2.92, 0.12, 0.03), M.hazard, 0, 0.3, 1.455));
+    face.add(mesh(bevelBox(2.92, 0.05, 0.03), M.cyan, 0, 1.3, 1.455));
+    if (k === 0) {
+      face.add(mesh(bevelBox(0.8, 0.95, 0.06), M.gunmetal, 0.55, 0.7, 1.46));                          // blast door
+      face.add(mesh(bevelBox(0.9, 0.06, 0.07), M.amber, 0.55, 1.2, 1.46));
+      face.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), M.lens, 0.55, 1.1, 1.5));
+      for (let q = 0; q < 5; q++) face.add(mesh(bevelBox(0.08, 0.08, 0.03), q % 2 ? M.cyan : M.window, -0.9 + q * 0.16, 0.95, 1.47));   // status lamps
+    } else if (k === 1) {
+      for (const x of [-0.7, 0, 0.7]) face.add(mesh(bevelBox(0.5, 0.16, 0.03), M.window, x, 0.95, 1.46));
+    } else {
+      for (let q = 0; q < 5; q++) face.add(mesh(bevelBox(0.9, 0.05, 0.06), M.black, k === 2 ? -0.6 : 0.6, 0.6 + q * 0.11, 1.46));   // louvres
+      face.add(mesh(bevelBox(0.4, 0.5, 0.18), M.trim, k === 2 ? 0.7 : -0.7, 0.55, 1.52));                                          // conduit box
+    }
+    g.add(face);
+  }
+
+  // mast: square lattice tapering from 1.24 to 0.44 wide over nine banded panels, legs + girts + X bracing
+  const MX = -0.45, MZ = -0.45, Y0 = 1.55, YT = 13.25, N = 9;
+  const hw = (y) => 0.62 + (0.22 - 0.62) * (y - Y0) / (YT - Y0);
+  const corner = (y, cx, cz) => new THREE.Vector3(MX + cx * hw(y), y, MZ + cz * hw(y));
+  const C = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+  const red = [], white = [];
+  for (let p = 0; p < N; p++) {
+    const ya = Y0 + (YT - Y0) * p / N, yb = Y0 + (YT - Y0) * (p + 1) / N, out = p % 2 ? white : red;
+    for (let k = 0; k < 4; k++) {
+      const [ax, az] = C[k], [bx, bz] = C[(k + 1) % 4];
+      out.push(strut(corner(ya, ax, az), corner(yb, ax, az), 0.045));                                  // leg
+      out.push(strut(corner(yb, ax, az), corner(yb, bx, bz), 0.028));                                  // girt
+      out.push(strut(corner(ya, ax, az), corner(yb, bx, bz), 0.02), strut(corner(ya, bx, bz), corner(yb, ax, az), 0.02));   // X brace
+    }
+  }
+  g.add(mesh(mergeGeometries(red), M.red), mesh(mergeGeometries(white), M.white));
+  g.add(mesh(strut(new THREE.Vector3(MX - 0.1, Y0, MZ - hw(Y0) - 0.03), new THREE.Vector3(MX - 0.1, YT, MZ - hw(YT) - 0.03), 0.045, 6), M.cable));   // feeder cable run
+
+  // top mast: banded pole, strobe, lightning rod and a fan of whips
+  g.add(mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.0, 8), M.red, MX, YT + 0.5, MZ));
+  g.add(mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.8, 8), M.white, MX, YT + 1.4, MZ));
+  g.add(mesh(new THREE.CylinderGeometry(0.012, 0.02, 0.7, 5), M.dark, MX, YT + 2.15, MZ));
+  const lights = [mesh(new THREE.SphereGeometry(0.09, 10, 8), M.aviation, MX, YT + 1.85, MZ)];
+  const whips = [];
+  for (let k = 0; k < 4; k++) {
+    const a = k * Math.PI / 2 + Math.PI / 4, base = corner(YT, C[k][0], C[k][1]);
+    whips.push(strut(base, new THREE.Vector3(base.x + Math.cos(a) * 0.22, YT + 1.5, base.z + Math.sin(a) * 0.22), 0.012, 4));
+  }
+  g.add(mesh(mergeGeometries(whips), M.dark));
+
+  // walkway platforms with safety rails, a pair of aviation lights on each
+  for (const y of [Y0 + (YT - Y0) * 3 / 9, Y0 + (YT - Y0) * 6 / 9, Y0 + (YT - Y0) * 8.5 / 9]) {
+    const h = hw(y) + 0.32, rails = [];
+    g.add(mesh(bevelBox(h * 2, 0.06, h * 2), M.gunmetal, MX, y, MZ));
+    for (const [sx, sz] of C) rails.push(boxAt(0.035, 0.4, 0.035, MX + sx * h, y + 0.2, MZ + sz * h));
+    for (const yy of [0.2, 0.38]) for (let k = 0; k < 4; k++) {
+      const [sx, sz] = C[k], horiz = k % 2 === 0;
+      rails.push(boxAt(horiz ? h * 2 : 0.025, 0.025, horiz ? 0.025 : h * 2, MX + (horiz ? 0 : sx * h), y + yy, MZ + (horiz ? sz * h : 0)));
+    }
+    g.add(mesh(mergeGeometries(rails), M.amber));
+    for (const [sx, sz] of [[1, 1], [-1, -1]]) lights.push(mesh(new THREE.SphereGeometry(0.06, 8, 6), M.aviation, MX + sx * h, y + 0.45, MZ + sz * h));
+  }
+  g.add(...lights);
+
+  // mast dishes: two mid-size on the first platform, three small ones higher up, all angled up at the sky
+  const P1 = Y0 + (YT - Y0) * 3 / 9, P2 = Y0 + (YT - Y0) * 6 / 9;
+  for (const [az, R, y, el] of [[Math.PI / 2, 0.42, P1 + 0.55, 0.55], [0, 0.42, P1 + 0.55, 0.7], [Math.PI * 0.25, 0.3, P2 + 0.45, 0.8], [Math.PI * 1.25, 0.3, P2 + 0.45, 0.6], [Math.PI * 0.75, 0.28, P2 - 0.9, 0.35]]) {
+    const r = hw(y) + R * 0.75, d = aim(dish(R), az, el);
+    d.position.set(MX + Math.sin(az) * r, y, MZ + Math.cos(az) * r);
+    g.add(d);
+    g.add(mesh(strut(new THREE.Vector3(MX + Math.sin(az) * hw(y), y, MZ + Math.cos(az) * hw(y)), d.position, 0.03, 5), M.gunmetal));
+  }
+  for (const [az, R, y, el] of [[Math.PI * 1.75, 0.26, 7.3, 0.5], [Math.PI * 0.5, 0.24, 11.0, 0.75], [Math.PI * 1.1, 0.22, 11.3, 0.9]]) {
+    const r = hw(y) + R * 0.75, d = aim(dish(R), az, el);
+    d.position.set(MX + Math.sin(az) * r, y, MZ + Math.cos(az) * r);
+    g.add(d);
+  }
+  // microwave link drums (radomes) on the legs, pointing out horizontally
+  for (const [az, y] of [[Math.PI * 1.5, 3.4], [Math.PI, 4.2], [Math.PI * 1.5, 7.5], [Math.PI * 0.5, 8.3], [Math.PI, 10.4], [Math.PI * 1.25, 6.6], [Math.PI * 0.25, 4.9], [Math.PI * 1.5, 10.9]]) {
+    const r = hw(y) + 0.2, drum = new THREE.Group();
+    drum.position.set(MX + Math.sin(az) * r, y, MZ + Math.cos(az) * r);
+    drum.rotation.y = az;
+    drum.add(mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.2, 16), M.gunmetal, 0, 0, 0).rotateX(Math.PI / 2));
+    drum.add(mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.02, 16), M.dish, 0, 0, 0.11).rotateX(Math.PI / 2));
+    g.add(drum);
+  }
+  // cellular panel sectors under the top platform
+  const P3 = Y0 + (YT - Y0) * 8.5 / 9, panels = [], pipes = [];
+  for (let k = 0; k < 3; k++) for (const off of [-0.18, 0.18]) {
+    const a = k * Math.PI * 2 / 3 + 0.3, r = hw(P3) + 0.42, px = MX + Math.sin(a) * r + Math.cos(a) * off, pz = MZ + Math.cos(a) * r - Math.sin(a) * off;
+    panels.push(boxAt(0.15, 0.8, 0.06, px, P3 - 0.55, pz, a));
+    pipes.push(strut(new THREE.Vector3(px, P3 - 0.2, pz), new THREE.Vector3(MX + Math.sin(a) * hw(P3 - 0.2), P3 - 0.2, MZ + Math.cos(a) * hw(P3 - 0.2)), 0.02, 4));
+  }
+  for (let k = 0; k < 3; k++) {                                                                          // a second, lower sector ring
+    const a = k * Math.PI * 2 / 3 + 1.3, r = hw(P2) + 0.38, px = MX + Math.sin(a) * r, pz = MZ + Math.cos(a) * r;
+    panels.push(boxAt(0.14, 0.62, 0.05, px, P2 - 0.5, pz, a));
+    pipes.push(strut(new THREE.Vector3(px, P2 - 0.3, pz), new THREE.Vector3(MX + Math.sin(a) * hw(P2 - 0.3), P2 - 0.3, MZ + Math.cos(a) * hw(P2 - 0.3)), 0.02, 4));
+  }
+  g.add(mesh(mergeGeometries(panels), M.white), mesh(mergeGeometries(pipes), M.gunmetal));
+  // whips standing off the top platform's corners, and crossed dipoles on the second platform's rails
+  const rods = [];
+  for (const [sx, sz] of C) {
+    const h3 = hw(P3) + 0.32, b3 = new THREE.Vector3(MX + sx * h3, P3 + 0.38, MZ + sz * h3);
+    rods.push(strut(b3, new THREE.Vector3(b3.x + sx * 0.08, P3 + 1.75, b3.z + sz * 0.08), 0.014, 4));
+    const h2 = hw(P2) + 0.32, x2 = MX + sx * h2, z2 = MZ + sz * h2;
+    rods.push(strut(new THREE.Vector3(x2, P2 + 0.38, z2), new THREE.Vector3(x2, P2 + 1.1, z2), 0.016, 4));
+    rods.push(strut(new THREE.Vector3(x2 - 0.22, P2 + 0.95, z2), new THREE.Vector3(x2 + 0.22, P2 + 0.95, z2), 0.012, 4));
+    rods.push(strut(new THREE.Vector3(x2, P2 + 0.85, z2 - 0.22), new THREE.Vector3(x2, P2 + 0.85, z2 + 0.22), 0.012, 4));
+  }
+  g.add(mesh(mergeGeometries(rods), M.dark));
+  // yagi on a boom off the second platform
+  const yagi = new THREE.Group();
+  yagi.position.set(MX + hw(P2 + 0.2) + 0.05, P2 + 0.2, MZ);
+  yagi.rotation.y = Math.PI / 2;
+  yagi.add(mesh(bevelBox(0.03, 0.03, 1.1), M.dark, 0, 0, 0.55));
+  for (let q = 0; q < 6; q++) yagi.add(mesh(bevelBox(0.5 - q * 0.05, 0.02, 0.02), M.trim, 0, 0, 0.12 + q * 0.18));
+  g.add(yagi);
+
+  // guy wires from the plinth corners to the second platform
+  const guys = [];
+  for (const [sx, sz] of C) {
+    const a = new THREE.Vector3(sx * 1.78, 0.22, sz * 1.78);
+    guys.push(strut(a, corner(P2, sx, sz), 0.012, 4));
+    g.add(mesh(bevelBox(0.18, 0.1, 0.18), M.gunmetal, a.x, 0.24, a.z));
+  }
+  g.add(mesh(mergeGeometries(guys), M.cable));
+
+  // roof: the main uplink dish on an az-el pedestal, an HVAC unit and a small secondary dish
+  const ped = new THREE.Group();
+  ped.position.set(0.85, 1.55, 0.85);
+  g.add(ped);
+  ped.add(mesh(new THREE.CylinderGeometry(0.2, 0.28, 0.5, 12), M.trim, 0, 0.25, 0));
+  const slew = new THREE.Group();
+  slew.position.y = 0.5;
+  ped.add(slew);
+  slew.add(mesh(bevelBox(0.36, 0.22, 0.3), M.gunmetal, 0, 0.1, 0));
+  const big = aim(dish(0.66), 0, 0.62);
+  big.position.set(0, 0.42, 0.12);
+  slew.add(big);
+  g.add(mesh(bevelBox(0.7, 0.32, 0.5), M.trim, 0.9, 1.71, -0.95));
+  g.add(mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 14), M.black, 0.9, 1.88, -0.95));
+  const small = aim(dish(0.28), -Math.PI * 0.35, 0.9);
+  small.position.set(-1.05, 1.95, 0.9);
+  g.add(small);
+  g.add(mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 6), M.dark, -1.05, 1.75, 0.9));
+
+  const slew0 = Math.PI * 0.25;
+  g.userData.tick = (dt, t) => {
+    slew.rotation.y = slew0 + 0.55 * Math.sin(t * 0.13) + 0.2 * Math.sin(t * 0.31);                  // holding the link as the bird crosses the sky
+    M.aviation.emissiveIntensity = (t % 1.6) < 0.22 ? 6 : 0.3;                                         // shared: every tower blinks in step
+  };
+}
+
 const ROUND_FOOTING = { hmg: [0.86, 8], turret: [1.16, 8], dual: [1.16, 8], flame: [1.11, 8], laser: [1.1, 24], mortar: [1.86, 20] };   // [radius, sides]
 
 export function makeBuildingMesh(type) {
@@ -829,6 +1027,7 @@ export function makeBuildingMesh(type) {
     }
     case 'refinery': refinery(g); break;
     case 'lab': researchLab(g); break;
+    case 'uplink': uplinkTower(g); break;
     case 'core': commandTower(g); break;
   }
   // Foundation sunk into the ground under everything but walls and the (air-dropped) Core, so a building on a slope
