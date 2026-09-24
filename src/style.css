@@ -337,6 +337,7 @@ body.intro #debug { display: none; }
   color: transparent; background: linear-gradient(180deg, #fff1d0, var(--accent) 55%, #b9791c); -webkit-background-clip: text; background-clip: text;
   filter: drop-shadow(0 0 26px rgba(242, 177, 68, .45)) drop-shadow(0 4px 0 rgba(0, 0, 0, .7));
 }
+#deploy #version { position: absolute; left: 14px; bottom: 11px; font-size: 10px; font-weight: 600; letter-spacing: .12em; color: var(--muted); opacity: .7; text-shadow: 0 1px 2px #000; }
 #deploy i { display: block; width: min(440px, 50vw); height: 1px; margin: 4px 0 8px; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
 /* map choice: two panels side by side; hovering (or keyboard focus) unfolds a card with a shot of that map */
 #deploy .maps { display: flex; align-items: flex-start; justify-content: center; gap: 18px; margin-top: 4px; pointer-events: auto; }

@@ -1,7 +1,7 @@
 import { state, canPlace, placeStructure, spawnEnemy } from './game.js';
 import { abilities } from './abilities.js';
 import { canyonDist, canyonCenter } from './terrain.js';
-import { DEPLOY_KEY, RECORD } from './config.js';
+import { DEPLOY_KEY, RECORD, VERSION } from './config.js';
 
 // Title-screen attract mode: a fortified canyon under a never-ending swarm, with strafing runs and artillery called
 // in alternately. It runs the real simulation (silently) behind a dimmed overlay. The two map buttons on the title
@@ -43,6 +43,7 @@ export function startDemo({ camera, controls }) {
   // The title starts hidden in the HTML (a page loading straight into a map shows plain black), so reveal it here.
   // The game UI waits offscreen behind it: keep that out of the tab order so the map buttons come first.
   document.getElementById('deploy').hidden = false;
+  document.getElementById('version').textContent = `v${VERSION}`;
   for (const el of document.body.children) if (el.id !== 'deploy') el.inert = true;
   const fade = document.getElementById('fade');
   fade.style.transition = 'opacity .45s';

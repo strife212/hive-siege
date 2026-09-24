@@ -226,6 +226,9 @@ export function createTerrain(renderer) {
   const mesh = new THREE.Mesh(geo, createTerrainMaterial(renderer));
   mesh.receiveShadow = true;
   mesh.name = 'terrain';
+  // Drawn after every other solid object (only the sky comes later): its pixels are the most expensive in the scene,
+  // and this way the depth test throws out the ground hidden under buildings and bugs before it is shaded.
+  mesh.renderOrder = 999;
   return mesh;
 }
 
@@ -285,25 +288,40 @@ function createTerrainMaterial(renderer) {
           return acc;
         }
         varying vec3 vSplat; varying vec3 vWorldPos; varying vec3 vWNormal;
-        vec3 sample2(sampler2D t, vec2 a, vec2 b) { return mix(texture2D(t, a).rgb, texture2D(t, b).rgb, 0.5); }`)
+        vec3 sample2(sampler2D t, vec2 a, vec2 b) { return mix(texture2D(t, a).rgb, texture2D(t, b).rgb, 0.5); }
+        // The same, with the mip level taken from gradients worked out before any branch (ga, gb = dFdx, dFdy of a, b),
+        // so a lookup inside a per-pixel branch is as well defined as one outside it.
+        vec3 sample2g(sampler2D t, vec2 a, vec2 b, vec4 ga, vec4 gb) {
+          return mix(textureGrad(t, a, ga.xy, ga.zw).rgb, textureGrad(t, b, gb.xy, gb.zw).rgb, 0.5);
+        }`)
       .replace('#include <map_fragment>', `
         vec2 holeUv = (vWorldPos.xz + uHoleHalf) / (2.0 * uHoleHalf);
         if (holeUv.x > 0.0 && holeUv.x < 1.0 && holeUv.y > 0.0 && holeUv.y < 1.0 && texture2D(tHoles, holeUv).r > 0.5) discard;
         vec2 uvA = vWorldPos.xz * 0.22;
         vec2 uvB = vWorldPos.xz * 0.071 + vec2(0.37, 0.71);
+        vec4 gA = vec4(dFdx(uvA), dFdy(uvA)), gB = vec4(dFdx(uvB), dFdy(uvB));
         vec3 w = vSplat / max(0.001, vSplat.x + vSplat.y + vSplat.z);
-        // rock is triplanar so cliff faces don't smear the top-down projection
+        // A layer whose weight is exactly zero here would only add zero, so its lookups are skipped (most of the ground
+        // has no moss, and half of it no rock). Exactly zero: at silhouettes MSAA can extrapolate a weight slightly
+        // below zero, and that still counts, as it always did.
         vec3 tn = abs(normalize(vWNormal));
-        vec3 tw = pow(tn, vec3(4.0)); tw /= (tw.x + tw.y + tw.z);
-        vec3 rockC = sample2(tRock, uvA, uvB) * tw.y;
-        if (tw.x > 0.02) rockC += sample2(tRock, vWorldPos.zy * 0.22, vWorldPos.zy * 0.071 + 0.37) * tw.x;
-        if (tw.z > 0.02) rockC += sample2(tRock, vWorldPos.xy * 0.22, vWorldPos.xy * 0.071 + 0.71) * tw.z;
-        // canyon: sandstone tint with sedimentary banding up the walls
-        float band = sin(vWorldPos.y * 2.6 + sin(vWorldPos.x * 0.11 + vWorldPos.z * 0.07) * 2.0) * 0.5 + 0.5;
-        band = mix(band, sin(vWorldPos.y * 0.9 + 1.3) * 0.5 + 0.5, 0.45);
-        vec3 strata = mix(vec3(1.18, 0.78, 0.55), vec3(1.5, 1.12, 0.82), band) * (0.8 + 0.2 * (1.0 - tn.y));
-        rockC *= mix(vec3(1.0), strata, uCanyon);
-        vec3 albedo = sample2(tSoil, uvA, uvB) * w.x + rockC * w.y + sample2(tMoss, uvA, uvB) * w.z;
+        vec3 rockC = vec3(0.0);
+        if (w.y != 0.0) {
+          // rock is triplanar so cliff faces don't smear the top-down projection
+          vec3 tw = pow(tn, vec3(4.0)); tw /= (tw.x + tw.y + tw.z);
+          rockC = sample2g(tRock, uvA, uvB, gA, gB) * tw.y;
+          if (tw.x > 0.02) rockC += sample2(tRock, vWorldPos.zy * 0.22, vWorldPos.zy * 0.071 + 0.37) * tw.x;
+          if (tw.z > 0.02) rockC += sample2(tRock, vWorldPos.xy * 0.22, vWorldPos.xy * 0.071 + 0.71) * tw.z;
+          // canyon: sandstone tint with sedimentary banding up the walls
+          float band = sin(vWorldPos.y * 2.6 + sin(vWorldPos.x * 0.11 + vWorldPos.z * 0.07) * 2.0) * 0.5 + 0.5;
+          band = mix(band, sin(vWorldPos.y * 0.9 + 1.3) * 0.5 + 0.5, 0.45);
+          vec3 strata = mix(vec3(1.18, 0.78, 0.55), vec3(1.5, 1.12, 0.82), band) * (0.8 + 0.2 * (1.0 - tn.y));
+          rockC *= mix(vec3(1.0), strata, uCanyon);
+        }
+        vec3 albedo = vec3(0.0);
+        if (w.x != 0.0) albedo += sample2g(tSoil, uvA, uvB, gA, gB) * w.x;
+        albedo += rockC * w.y;
+        if (w.z != 0.0) albedo += sample2g(tMoss, uvA, uvB, gA, gB) * w.z;
         float bd = max(abs(vWorldPos.x), abs(vWorldPos.z));
         albedo *= mix(1.0, 0.86, smoothstep(uBound, uBound + 6.0, bd));
         albedo *= mix(1.0, 0.6, smoothstep(uFlat, uFlat + 12.0, bd));
@@ -318,7 +336,11 @@ function createTerrainMaterial(renderer) {
         }
         diffuseColor.rgb *= albedo;`)
       .replace('#include <normal_fragment_maps>', `
-        vec3 mapN = (sample2(tSoilN, uvA, uvB) * w.x + sample2(tRockN, uvA, uvB) * w.y + sample2(tMossN, uvA, uvB) * w.z) * 2.0 - 1.0;
+        vec3 mapN = vec3(0.0);                                            // absent layers skipped, as for the albedo
+        if (w.x != 0.0) mapN += sample2g(tSoilN, uvA, uvB, gA, gB) * w.x;
+        if (w.y != 0.0) mapN += sample2g(tRockN, uvA, uvB, gA, gB) * w.y;
+        if (w.z != 0.0) mapN += sample2g(tMossN, uvA, uvB, gA, gB) * w.z;
+        mapN = mapN * 2.0 - 1.0;
         vec3 Nw = normalize(vWNormal);
         vec3 Bw = normalize(cross(vec3(1.0, 0.0, 0.0), Nw));
         vec3 Tw = normalize(cross(Nw, Bw));

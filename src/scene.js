@@ -28,8 +28,12 @@ const SHADOW_REACH = 1.15;                    // shadows reach this many view di
 }
 
 export function createScene(container) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
   const lowfx = new URLSearchParams(location.search).has('lowfx');
+  // high-performance: on laptops with integrated and discrete graphics, ask for the discrete GPU.
+  // With the post chain (below) the scene is drawn into its own 4x MSAA target and the canvas only ever receives one
+  // full-screen quad, so a multisampled canvas and a canvas depth buffer would cost bandwidth and do nothing. ?lowfx
+  // draws the scene straight to the canvas and keeps both.
+  const renderer = new THREE.WebGLRenderer({ antialias: lowfx, depth: lowfx, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, lowfx ? 2 : 1.5));   // the HDR + MSAA chain is heavy at 2x on big screens
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;

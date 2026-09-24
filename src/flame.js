@@ -1,18 +1,10 @@
 import * as THREE from 'three';
+import { uploadUsed as upload } from './instancing.js';
 
 // Procedural fire renderer. Every flame is one instance of a camera-facing quad; the fragment shader shapes it
 // with scrolling fbm noise, erodes it as it ages and ramps the colour from white-hot through orange and red
 // into sooty smoke. Premultiplied blending lets the hot core add light while the smoke tail occludes.
 const CAP = 2400;
-
-// Upload only the first n instances: the buffers are sized for the worst case, and sending all of them every frame
-// moved megabytes over the bus however few were in use. Nothing past n is drawn, so it can stay stale.
-function upload(attr, n) {
-  attr.clearUpdateRanges();
-  if (n <= 0) return;
-  attr.addUpdateRange(0, n * attr.itemSize);
-  attr.needsUpdate = true;
-}
 const uTime = { value: 0 };
 let mesh = null, iPos = null, iData = null;
 const px = new Float32Array(CAP), py = new Float32Array(CAP), pz = new Float32Array(CAP);

@@ -109,6 +109,12 @@ anything between them and your Core.
   Every placed wall is drawn by six instanced meshes (`src/walls.js`). Instance buffers upload only the part in use,
   explosions and ordnance share their geometry, and the sky is drawn after the opaque scene so it only shades the
   pixels that still show sky. A 79-structure base went from about 4,000 draw calls a frame to under 1,000.
+  Building HP bars (`src/hpbars.js`, a sprite-equivalent shader), spent casings and gibs are instanced too (shared
+  helpers in `src/instancing.js`). The WebGL context asks for the high-performance GPU (dual-GPU laptops) and, with
+  the post chain on, has no MSAA or depth buffer of its own: the scene is drawn into the composer's 4x MSAA target and
+  the canvas only receives the final full-screen pass. The terrain skips the texture lookups of any splat layer whose
+  weight is exactly zero at that pixel, and it is drawn after every other solid object so the depth test throws out
+  the ground hidden under buildings and bugs before it is shaded (its pixels are the most expensive in the scene).
 - **Enemies**: procedural insectoids built from a small rig: segmented abdomen with glossy chitin plates,
   six two-segment legs (hip / femur / knee), mandibles, antennae, glow spots or spikes. Skitterers (fast,
   weak, purple with bioluminescent spots) and Brutes (from wave 3: armoured, horned, bone spikes). From wave 3

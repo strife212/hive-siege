@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeBuildingMesh } from './entities.js';
+import { uploadUsed, instancePool } from './instancing.js';
 
 // Placed walls are drawn with instancing: one InstancedMesh per part of the wall model (the post's parts, and one
 // arm's parts), holding an instance per wall (per shown arm for the arm parts). However many walls there are, they
@@ -14,12 +15,9 @@ const walls = new Set();
 const _m = new THREE.Matrix4(), _box = new THREE.Box3();
 
 function instanced(scene, src, cap) {
-  const im = new THREE.InstancedMesh(src.geometry, src.material, cap);
-  im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  const im = instancePool(src.geometry, src.material, cap);
   im.castShadow = src.castShadow;
   im.receiveShadow = src.receiveShadow;
-  im.frustumCulled = false;                          // the instances move; the whole set is a handful of draws anyway
-  im.count = 0;
   scene.add(im);
   return { im, local: src.matrix.clone() };          // the part's placement in its group (the wall, or an arm)
 }
@@ -40,13 +38,7 @@ function sync() {
     }
   }
   for (const [list, n] of [[posts, np], [arms, na]]) {
-    for (const { im } of list) {
-      im.count = n;
-      if (!n) continue;
-      im.instanceMatrix.clearUpdateRanges();
-      im.instanceMatrix.addUpdateRange(0, n * 16);
-      im.instanceMatrix.needsUpdate = true;
-    }
+    for (const { im } of list) { im.count = n; uploadUsed(im.instanceMatrix, n); }
   }
 }
 

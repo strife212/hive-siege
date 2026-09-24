@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { MAPS, BOSS_EVERY, BUILDINGS, ENEMIES, SPECIALS, ANTS, RESEARCH, START_CREDITS, CELLS, MAX_SLOPE, SPAWN_RADIUS, CELL, HALF, FLAT, MAP } from './config.js';
 import { heightAt, cellToWorld, worldToCell, cellKey, inBounds, cellSlope, nestPosition, confine, walkInPoint, approachDir, isScenery } from './terrain.js';
 import {
-  makeBuildingMesh, makeHpBar, setHpBar, setWallLinks,
-  makeProjectile, makeBeam, makeTracer, makeGib, makeSpawnMarker, makeCasing, makeMortarShell, makeMissile,
+  makeBuildingMesh, setWallLinks,
+  makeProjectile, makeBeam, makeTracer, makeGibs, makeSpawnMarker, makeCasings, makeMortarShell, makeMissile,
 } from './entities.js';
 import { explode, railBeam } from './effects.js';
 import { spawnSplatter, updateDecals } from './decals.js';
@@ -21,6 +21,8 @@ import { puff } from './particles.js';
 import { acid } from './acid.js';
 import { flashes } from './flashes.js';
 import { wallBatch } from './walls.js';
+import { hpBars, makeHpBar, setHpBar } from './hpbars.js';
+import { uploadUsed } from './instancing.js';
 
 export const state = {
   scene: null,
@@ -77,6 +79,9 @@ export function init(scene) {
   acid.init(scene);
   flame.init(scene);
   wallBatch.init(scene);
+  hpBars.init(scene);
+  casingMesh = makeCasings(MAX_CASINGS);
+  scene.add(casingMesh);
   const core = {
     id: nextId++, type: 'core', name: 'Core', hp: 1000, maxHp: 1000,
     x: 0, z: 0, y: heightAt(0, 0), cells: [], cooldown: 0,
@@ -406,16 +411,17 @@ function adaptHive() {
   log(`The hive adapts: new bugs are now ${Math.round((state.hiveBuff - 1) * 100)}% tougher and faster.`, true);
 }
 
+// Gibs: flung bits of debris, soil and ichor. Plain records; each kind is drawn by one instanced mesh (updateEffects).
 const MAX_GIBS = 400;
+const gibPools = {};
+const gibPool = (kind) => gibPools[kind] ??= (() => { const im = makeGibs(kind, MAX_GIBS); state.scene.add(im); return im; })();
 export function burst(x, y, z, kind, n, spread = 8) {
   if (state.gibs.length >= MAX_GIBS) return;
   n = Math.min(n, MAX_GIBS - state.gibs.length);
+  const pool = gibPool(kind);
   for (let k = 0; k < n; k++) {
-    const m = makeGib(kind);
-    m.position.set(x, y, z);
-    state.scene.add(m);
     state.gibs.push({
-      mesh: m, life: 0.6 + Math.random() * 0.4,
+      pool, x, y, z, life: 0.6 + Math.random() * 0.4,
       vx: (Math.random() - 0.5) * spread, vy: 2 + Math.random() * 5, vz: (Math.random() - 0.5) * spread,
     });
   }
@@ -983,39 +989,48 @@ function updateRecoil(s, dt) {
 }
 
 // Spent casing flung out of the side port: tumbles, bounces once, rests, vanishes after 3 s.
+// Spent casings: plain records (position, rotation, scale), all drawn by one instanced mesh.
+const MAX_CASINGS = 1500;
+let casingMesh = null;
+const _im = new THREE.Matrix4(), _ie = new THREE.Euler(), _iq = new THREE.Quaternion(), _ip = new THREE.Vector3(), _is = new THREE.Vector3();
 function ejectCasing(s, gp) {
+  if (state.casings.length >= MAX_CASINGS) return;
   const ud = s.mesh.userData;
-  const m = makeCasing();
-  gp.port.getWorldPosition(m.position);
+  gp.port.getWorldPosition(_a);
   ud.head.getWorldQuaternion(_q);
   _c.set(gp.side, 0, 0).applyQuaternion(_q);                 // out of that gun's side port
   _b.set(0, 0, 1).applyQuaternion(_q);                       // forward
-  m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-  state.scene.add(m);
   state.casings.push({
-    mesh: m, t: 0, landed: false, bounced: false,
+    x: _a.x, y: _a.y, z: _a.z, rx: Math.random() * 3, ry: Math.random() * 3, rz: Math.random() * 3, sc: 1,
+    t: 0, landed: false, bounced: false,
     vx: _c.x * (2 + Math.random() * 1.5) - _b.x * 0.6, vy: 2.5 + Math.random() * 1.5, vz: _c.z * (2 + Math.random() * 1.5) - _b.z * 0.6,
     ax: (Math.random() - 0.5) * 20, ay: (Math.random() - 0.5) * 20,
   });
 }
 
 function updateCasings(dt) {
+  let n = 0;
   for (let k = state.casings.length - 1; k >= 0; k--) {
     const c = state.casings[k];
     c.t += dt;
-    if (c.t >= 3) { state.scene.remove(c.mesh); state.casings.splice(k, 1); continue; }
-    if (c.landed) { if (c.t > 2.7) c.mesh.scale.setScalar(Math.max(0.001, (3 - c.t) / 0.3)); continue; }
-    const m = c.mesh;
-    c.vy -= 20 * dt;
-    m.position.x += c.vx * dt; m.position.y += c.vy * dt; m.position.z += c.vz * dt;
-    m.rotation.x += c.ax * dt; m.rotation.y += c.ay * dt;
-    const ground = heightAt(m.position.x, m.position.z) + 0.04;
-    if (m.position.y <= ground) {
-      m.position.y = ground;
-      if (c.vy < -1.5 && !c.bounced) { c.bounced = true; c.vy = -c.vy * 0.35; c.vx *= 0.5; c.vz *= 0.5; }
-      else { c.landed = true; m.rotation.set(0, Math.random() * Math.PI * 2, Math.PI / 2); }
+    if (c.t >= 3) { state.casings.splice(k, 1); continue; }
+    if (c.landed) { if (c.t > 2.7) c.sc = Math.max(0.001, (3 - c.t) / 0.3); }
+    else {
+      c.vy -= 20 * dt;
+      c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
+      c.rx += c.ax * dt; c.ry += c.ay * dt;
+      const ground = heightAt(c.x, c.z) + 0.04;
+      if (c.y <= ground) {
+        c.y = ground;
+        if (c.vy < -1.5 && !c.bounced) { c.bounced = true; c.vy = -c.vy * 0.35; c.vx *= 0.5; c.vz *= 0.5; }
+        else { c.landed = true; c.rx = 0; c.ry = Math.random() * Math.PI * 2; c.rz = Math.PI / 2; }
+      }
     }
+    _iq.setFromEuler(_ie.set(c.rx, c.ry, c.rz));
+    casingMesh.setMatrixAt(n++, _im.compose(_ip.set(c.x, c.y, c.z), _iq, _is.setScalar(c.sc)));
   }
+  casingMesh.count = n;
+  uploadUsed(casingMesh.instanceMatrix, n);
 }
 
 // ---------------------------------------------------------------- enemy AI
@@ -1163,15 +1178,18 @@ function updateEffects(dt) {
     if (b.life <= 0) { state.scene.remove(b.mesh); state.beams.splice(k, 1); continue; }
     b.mesh.scale.x = b.mesh.scale.z = b.life / (b.max || 0.12);
   }
+  for (const im of Object.values(gibPools)) im.count = 0;
   for (let k = state.gibs.length - 1; k >= 0; k--) {
     const g = state.gibs[k];
     g.life -= dt;
-    if (g.life <= 0) { state.scene.remove(g.mesh); state.gibs.splice(k, 1); continue; }
+    if (g.life <= 0) { state.gibs.splice(k, 1); continue; }
     g.vy -= 22 * dt;
-    g.mesh.position.x += g.vx * dt;
-    g.mesh.position.y += g.vy * dt;
-    g.mesh.position.z += g.vz * dt;
+    g.x += g.vx * dt;
+    g.y += g.vy * dt;
+    g.z += g.vz * dt;
+    g.pool.setMatrixAt(g.pool.count++, _im.makeTranslation(g.x, g.y, g.z));
   }
+  for (const im of Object.values(gibPools)) uploadUsed(im.instanceMatrix, im.count);
 }
 
 // ---------------------------------------------------------------- main tick

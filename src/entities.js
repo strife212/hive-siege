@@ -5,6 +5,7 @@ import { bevelBox, softBox, worn } from './surface.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BUILDINGS } from './config.js';
 import { bakeStatic } from './bake.js';
+import { instancePool } from './instancing.js';
 
 // Yellow / black chevron tape for pit edges and hatch surrounds.
 function hazardTexture() {
@@ -1188,29 +1189,6 @@ export function makeBugMesh(def) {
   return g;
 }
 
-// Billboard HP bars: two sprites at the same position. The fill keeps its left edge on the background's left
-// edge by shifting its centre anchor (evaluated in screen space), so it stays aligned at any camera angle.
-const barBg = new THREE.SpriteMaterial({ color: 0x05070a, opacity: 0.8, depthTest: false, depthWrite: false, transparent: true });
-const barFg = new THREE.SpriteMaterial({ color: 0x6fe08a, depthTest: false, depthWrite: false, transparent: true });
-export function makeHpBar(width = 1.2) {
-  const g = new THREE.Group();
-  const bg = new THREE.Sprite(barBg);
-  bg.scale.set(width + 0.06, 0.15, 1);
-  const fg = new THREE.Sprite(barFg);
-  fg.scale.set(width, 0.09, 1);
-  bg.renderOrder = 20;
-  fg.renderOrder = 21;
-  g.add(bg, fg);
-  g.userData = { fg, width };
-  return g;
-}
-export function setHpBar(bar, ratio) {
-  const r = Math.min(1, Math.max(0.001, ratio));
-  const { fg, width } = bar.userData;
-  fg.scale.x = width * r;
-  fg.center.x = 0.5 / r;                    // left edge stays at -width/2 on screen
-}
-
 const shellGeo = new THREE.SphereGeometry(0.16, 6, 5);
 export const makeProjectile = () => new THREE.Mesh(shellGeo, M.shell);
 
@@ -1274,10 +1252,10 @@ export function makeMissile() {
 }
 
 const casingGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.16, 6);
-export const makeCasing = () => new THREE.Mesh(casingGeo, M.brass);
+export const makeCasings = (cap) => instancePool(casingGeo, M.brass, cap);           // every spent casing, one draw
 
 const gibGeo = new THREE.SphereGeometry(0.13, 6, 5);
-export const makeGib = (kind) => new THREE.Mesh(gibGeo, M[kind] || M.ichor);
+export const makeGibs = (kind, cap) => instancePool(gibGeo, M[kind] || M.ichor, cap);   // one draw per kind
 
 const markerGeo = new THREE.RingGeometry(1.6, 2.2, 24);
 export function makeSpawnMarker() {
