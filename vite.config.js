@@ -21,4 +21,5 @@ const saveRecordings = {
 };
 
 // Relative base: the build runs from any subpath (GitHub Pages serves it at imperialspaceforce.com/hive-siege/).
-export default defineConfig({ base: './', plugins: [saveRecordings] });
+// host: true listens on every interface, so other machines on the LAN can open the dev / preview server by IP.
+export default defineConfig({ base: './', plugins: [saveRecordings], server: { host: true }, preview: { host: true } });

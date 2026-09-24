@@ -47,7 +47,7 @@ export function startDemo({ camera, controls }) {
   for (const el of document.body.children) if (el.id !== 'deploy') el.inert = true;
   const fade = document.getElementById('fade');
   fade.style.transition = 'opacity .45s';
-  fade.style.opacity = '0.4';
+  fade.style.opacity = '0.3';
 
   // the Core stands landed and unwrapped
   const ud = state.core.mesh.userData;
