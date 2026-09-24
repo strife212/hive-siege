@@ -26,7 +26,7 @@ import { weather } from './weather.js';
 import { flashes } from './flashes.js';
 import { perf } from './perf.js';
 
-const { renderer, scene, camera, controls, updateCamera, render: drawFrame } = createScene(document.getElementById('app'));
+const { renderer, scene, camera, controls, updateCamera, render: drawFrame, quality } = createScene(document.getElementById('app'));
 const render = () => { perf.renderStart(); drawFrame(); perf.renderEnd(); };     // timed for the perf overlay
 const terrain = createTerrain(renderer);
 scene.add(terrain);
@@ -39,7 +39,11 @@ input = createInput({ renderer, camera, scene, terrain, ui });
 initParticles(scene);
 initEffects(scene);
 flashes.init(scene, camera);
-perf.init(renderer, () => `${state.enemies.length} bugs · ${particleCount()} particles`);
+perf.init(renderer, () => `${state.enemies.length} bugs · ${particleCount()} particles · ${quality.short()}`);
+quality.onChange = (level, desc) => {
+  console.info(`[quality] level ${level}: ${desc}`);
+  if (!state.demo) log(`Graphics adjusted to keep the frame rate up (${desc}).`);
+};
 abilities.init({ scene, ui, camera, controls });
 troopers.init(scene);
 try { sessionStorage.removeItem(DEPLOY_KEY); } catch { /* fine */ }      // a manual refresh shows the title screen again
@@ -102,6 +106,7 @@ if (RECORD) import('./record.js').then((m) => m.record({ seconds: RECORD, tick, 
 function frame() {
   if (RECORD) return;                                     // record.js drives the ticks
   perf.frameStart();
+  quality.sample(performance.now());
   timer.update();
   tick(Math.min(timer.getDelta(), 0.05));
   perf.frameEnd();
@@ -115,6 +120,7 @@ window.__game = state;
 window.__cam = camera;
 window.__controls = controls;
 window.__abilities = abilities;
+window.__quality = quality;                            // adaptive render quality: .level, .describe(), .sample(now)
 window.__audio = audio;
 window.__swarm = swarm;
 window.__spawnMany = spawnMany;

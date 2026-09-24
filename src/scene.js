@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { FLAT, MAP, MAPS, RECORD } from './config.js';
 import { createSky, HORIZON } from './sky.js';
+import { createQuality } from './quality.js';
 
 const SUN_DIR = new THREE.Vector3(45, 38, 18).normalize();
 const SHADOW_RES = 3072;
@@ -34,7 +35,8 @@ export function createScene(container) {
   // full-screen quad, so a multisampled canvas and a canvas depth buffer would cost bandwidth and do nothing. ?lowfx
   // draws the scene straight to the canvas and keeps both.
   const renderer = new THREE.WebGLRenderer({ antialias: lowfx, depth: lowfx, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, lowfx ? 2 : 1.5));   // the HDR + MSAA chain is heavy at 2x on big screens
+  const maxRatio = lowfx ? 2 : 1.5;                     // the HDR + MSAA chain is heavy at 2x on big screens
+  renderer.setPixelRatio(Math.min(devicePixelRatio, maxRatio));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -94,7 +96,7 @@ export function createScene(container) {
       x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
     }
     const half = THREE.MathUtils.clamp(Math.ceil((Math.max(x1 - x0, y1 - y0) / 2 + 4) / 3) * 3, 15, 96);
-    const texel = (2 * half) / SHADOW_RES;
+    const texel = (2 * half) / sun.shadow.mapSize.x;       // the size can drop at runtime (quality.js)
     const cx = Math.round((x0 + x1) / 2 / texel) * texel, cy = Math.round((y0 + y1) / 2 / texel) * texel;
     const cz = Math.round(_focus.dot(SUN_DIR) / 0.5) * 0.5;
     sun.target.position.copy(lx).multiplyScalar(cx).addScaledVector(ly, cy).addScaledVector(SUN_DIR, cz);
@@ -167,14 +169,15 @@ export function createScene(container) {
   // Post chain: HDR scene (4x MSAA) -> bloom on anything brighter than white (emissives, flashes, beams, hot speculars)
   // -> tone map + sRGB with a light vignette and a 1-bit dither that stops the dark sky gradients banding.
   // ?lowfx skips the chain and draws straight to the canvas.
-  let composer = null;
+  let composer = null, bloom = null;
   if (!lowfx) {
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
     composer = new EffectComposer(renderer, target);
     composer.setPixelRatio(1);                            // sized in drawing-buffer pixels below
     composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new UnrealBloomPass(size.clone(), 0.34, 0.62, 1.0));
+    bloom = new UnrealBloomPass(size.clone(), 0.34, 0.62, 1.0);
+    composer.addPass(bloom);
     const out = new OutputPass();
     const fs = out.material.fragmentShader;
     out.material.fragmentShader = fs.slice(0, fs.lastIndexOf('}')) + `
@@ -193,7 +196,10 @@ export function createScene(container) {
     composer.render();
   }
 
-  return { renderer, scene, camera, controls, updateCamera, render };
+  // Adaptive quality: steps the resolution and effects down if the frame rate stays low (quality.js).
+  const quality = createQuality({ renderer, composer, bloom, sun, maxRatio });
+
+  return { renderer, scene, camera, controls, updateCamera, render, quality };
 }
 
 // Tiny stand-in world rendered once into the reflection probe.
