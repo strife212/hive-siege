@@ -61,12 +61,12 @@ export const BUILDINGS = {
     desc: 'Hitscan beam. Instant hits, no travel time. Requires a Research Lab.',
   },
   mortar: {
-    name: 'Mortar Pit', cost: 260, hp: 320, cat: 'DEFENSE', size: [2, 2],
+    name: 'Mortar Pit', cost: 300, hp: 320, cat: 'DEFENSE', size: [2, 2],
     kind: 'mortar', range: 26, minRange: 8, damage: 55, splash: 3, rate: 0.4, turn: 1.6,
     desc: 'Indirect fire over walls. Long range, big splash, but cannot hit anything closer than 8.',
   },
   missile: {
-    name: 'Missile Silo', cost: 310, hp: 350, cat: 'DEFENSE', size: [2, 2],
+    name: 'Missile Silo', cost: 400, hp: 350, cat: 'DEFENSE', size: [2, 2],
     kind: 'missile', range: 25, damage: 30, splash: 2.2, salvo: 6, interval: 6,
     desc: 'Every 6 s the hatches open and six homing rockets corkscrew into the densest cluster of bugs.',
   },
@@ -95,8 +95,8 @@ export const BUILDINGS = {
     desc: 'Extracts credits from the crust: +3 credits / second.',
   },
   lab: {
-    name: 'Research Lab', cost: 200, hp: 220, cat: 'ECONOMY',
-    desc: 'Unlocks the Laser Tower and the TECH tab upgrades.',
+    name: 'Research Lab', cost: 500, hp: 220, cat: 'ECONOMY',
+    desc: 'Unlocks the Laser Tower and the TECH tab research. Each tower\'s research is listed once one has been built.',
   },
   uplink: {
     name: 'Strategic Uplink Tower', cost: 2000, hp: 700, cat: 'SUPPORT', size: [2, 2],
@@ -104,16 +104,41 @@ export const BUILDINGS = {
   },
 };
 
+// TECH tab. `group` is the building whose section a research sits in: the section appears once one of those has been
+// built (a list puts it in several sections). 'global' research is always listed. Effects live in game.js (stat
+// changes in buildDefs, behaviour where the weapon fires) and abilities.js (cooldowns).
 export const RESEARCH = {
-  plating: { name: 'Reinforced Plating', cost: 150, desc: 'Walls get +100% HP. Applies to existing walls too.' },
-  optics:  { name: 'Overcharged Optics', cost: 200, desc: 'Laser Towers deal +50% damage.' },
-  he:      { name: 'HE Rounds',          cost: 200, desc: 'Autocannon shells explode, damaging nearby bugs.' },
+  composite:   { group: 'global', name: 'Composite Armour', cost: 1800, desc: 'Every structure, the Core included, gets +25% max HP. Applies to existing buildings too.' },
+  fireControl: { group: 'global', name: 'Integrated Fire Control', cost: 2100, desc: 'Every tower gets +10% range, the Gunship and Titan patrol areas included.' },
+  orbital:     { group: 'global', name: 'Orbital Command Priority', cost: 3000, desc: 'Support ability cooldowns are 25% shorter. The Strategic Nuclear Strike is not affected.' },
+  plating:     { group: 'wall', name: 'Reinforced Plating', cost: 450, desc: 'Walls get +100% HP. Applies to existing walls too.' },
+  hmgFeed:     { group: 'hmg', name: 'High-Cyclic Feed', cost: 450, desc: 'HMG Turrets fire 30% faster.' },
+  overpen:     { group: 'hmg', name: 'Overpenetration', cost: 525, desc: 'An HMG round that kills its bug carries the leftover damage on into the nearest bug within 2 m.' },
+  he:          { group: ['turret', 'dual'], name: 'HE Rounds', cost: 600, desc: 'Autocannon and Dual Autocannon shells explode, damaging nearby bugs.' },
+  autoloader:  { group: 'turret', name: 'Autoloader', cost: 525, desc: 'Autocannons fire 30% faster.' },
+  sabot:       { group: 'turret', name: 'Sabot Shells', cost: 600, desc: 'Autocannon shells deal +50% damage to brutes, spitters and the Colossus.' },
+  du:          { group: 'dual', name: 'Depleted-Uranium Shells', cost: 825, desc: 'Dual Autocannons deal +25% damage and reach further (range 13 → 15).' },
+  tanks:       { group: 'flame', name: 'Pressurised Tanks', cost: 525, desc: 'Flamethrower range 7.5 → 10 and a wider cone (24° → 32°).' },
+  napalm:      { group: 'flame', name: 'Clinging Napalm', cost: 600, desc: 'A bug that dies burning from a Flamethrower sets every bug within 2 m alight, so the fire chains through dense packs.' },
+  optics:      { group: 'laser', name: 'Overcharged Optics', cost: 600, desc: 'Laser Towers deal +50% damage.' },
+  focus:       { group: 'laser', name: 'Focusing Array', cost: 675, desc: 'Laser damage ramps up the longer it holds one target: +20% per second, up to +100%. Resets when it switches target.' },
+  prism:       { group: 'laser', name: 'Prism Splitter', cost: 750, desc: 'Every laser pulse also arcs to one more bug within 3 m for half damage.' },
+  crew:        { group: 'mortar', name: 'Double Crew', cost: 750, desc: 'Mortar Pits fire 50% faster (a shell every 1.7 s instead of 2.5 s).' },
+  phosphorus:  { group: 'mortar', name: 'White Phosphorus', cost: 900, desc: 'Every bug caught in a mortar blast burns for 4 s at 12 damage per second.' },
+  reload:      { group: 'missile', name: 'Hot Reload', cost: 900, desc: 'Missile Silos fire a salvo every 4 s instead of 6 s.' },
+  distrib:     { group: 'missile', name: 'Distributed Targeting', cost: 1050, desc: 'Each missile in a salvo picks its own cluster of bugs instead of all six piling onto the same one.' },
+  heliMags:    { group: 'heli', name: 'Extended Magazines', cost: 1200, desc: 'Gunships carry 160 gatling rounds and 16 rockets per sortie (+60%).' },
+  hunter:      { group: 'heli', name: 'Hunter-Killer Avionics', cost: 1050, desc: 'Gunship rockets are saved for brutes, spitters and the Colossus; small bugs only get the gatling.' },
+  deepMags:    { group: 'airship', name: 'Deep Magazines', cost: 4500, desc: 'The Titan carries 50% more of everything: 750 gatling and 375 HMG rounds per gun, 38 shells and 45 bombs.' },
+  relay:       { group: 'airship', name: 'Fire Control Relay', cost: 6000, desc: 'While the Titan is in the air, every tower within 15 m of the ground beneath it fires 20% faster.' },
+  supercap:    { group: 'rail', name: 'Supercapacitors', cost: 1800, desc: 'Railgun charge time 3 s → 2 s.' },
+  penetrator:  { group: 'rail', name: 'Tungsten Penetrator', cost: 2250, desc: 'Railgun bolts deal triple damage to the Colossus.' },
 };
 
 export const BOSS_EVERY = 10;                 // a Colossus joins every tenth wave
 export const ENEMIES = {
   colossus: {
-    name: 'Colossus', boss: true, hp: 5200, speed: 1.75, damage: 90, attackRate: 0.55, reward: 600, scale: 3,
+    name: 'Colossus', boss: true, hp: 5000, speed: 1.75, damage: 90, attackRate: 0.55, reward: 500, scale: 3,
   },
   skitter: {
     name: 'Skitterer', hpCapWave: 5, hp: 45, speed: 4.8, damage: 6, attackRate: 1.3, reward: 10, scale: 0.7,
@@ -125,14 +150,20 @@ export const ENEMIES = {
   },
   // Specials (see SPECIALS): a skitterer-sized sprinter, and a brute-sized bug with an acid cannon on its back.
   darter: {
-    name: 'Darter', hpCapWave: 5, hp: 32, speed: 9.6, damage: 5, attackRate: 1.6, reward: 14, scale: 0.7,
+    name: 'Darter', hpCapWave: 5, hp: 32, speed: 9.6, damage: 5, attackRate: 1.6, reward: 10, scale: 0.7,
     color: 0x2a93ad, plate: 0x0f4556, legColor: 0x0d2c38, accent: 0x55f0ff, eye: 0xffd23a, spikes: false, legR: 0.85, fins: true,
   },
   spitter: {
-    name: 'Acid Spitter', hpCapWave: 10, hp: 240, speed: 2.5, damage: 16, attackRate: 0.8, reward: 55, scale: 1.5,
+    name: 'Acid Spitter', hpCapWave: 10, hp: 240, speed: 2.5, damage: 16, attackRate: 0.8, reward: 45, scale: 1.5,
     color: 0x86821a, plate: 0x34360a, legColor: 0x262809, accent: 0xa6ff2e, eye: 0xff4a1a, spikes: false, legR: 1.6, cannon: true,
     // Lobs a glob at the nearest building within range (walls excepted: it arcs straight over them) while it walks.
     acid: { range: 8, damage: 14, rate: 0.45, turn: 4.5 },
   },
+  // Fodder: half a skitterer, one hit kills it at any wave, and it is worth nothing. It soaks up fire and chews walls.
+  ant: {
+    name: 'Ant', hpCapWave: 1, hp: 1, speed: 5.4, damage: 2, attackRate: 1.5, reward: 0, scale: 0.35,
+    color: 0x1d1d22, plate: 0x0b0b0e, legColor: 0x121216, accent: 0xff9a2e, eye: 0xffc440, spikes: false, legR: 1.2,
+  },
 };
 export const SPECIALS = { from: 3, share: 0.1 };   // from wave 3, about one bug in ten is a Darter or an Acid Spitter
+export const ANTS = { share: 0.5 };                // on top of every wave: half as many again, in ants

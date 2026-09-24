@@ -16,12 +16,14 @@ import { worn } from './surface.js';
 //   countdown  10 s, beeping, "STRATEGIC LAUNCH DETECTED / IMPACT IN n" on screen; an ICBM the size of a tower block
 //              is already on its way down, and with 7 s to go the camera leaves the player and rides alongside it
 //   impact     ground zero is the centre of the map: a fireball, a shock front that crosses the whole map killing
-//              everything it passes (bosses included), fires and burn scars everywhere
+//              every bug it passes (a Colossus takes BOSS_HIT instead, once), fires and burn scars everywhere
 //   aftermath  the camera pulls back to the mushroom cloud, the cloud thins, the view returns to where the player
 //              left it and the base comes back up out of the ground
 const SHELTER_MIN = 3, SHELTER_MAX = 9, COUNT = 10, PAN_AT = 7, SPEED = 40, FRONT = 62;   // FRONT: shock front speed, units/s
 const CLOUD = { R: 38, top: 62, hold: 8.5, gone: 14.5, smooth: true, stemK: 1.9, dense: 1.7 };
 const T_RETURN = 11.5, T_DEPLOY = 13.5, T_HANDBACK = 14.2, T_END = 21;                     // seconds after impact
+const BREATHER = 5;
+const BOSS_HIT = 30000;                        // a Colossus is not simply erased: it takes this much, once, and may live                           // seconds between the base being back up and the attack resuming
 
 const UP = new THREE.Vector3(0, 1, 0), _gz = new THREE.Vector3();
 const rnd = (a = 0, b = 1) => a + Math.random() * (b - a);
@@ -90,6 +92,17 @@ export function strategicStrike({ scene, camera, controls, setCinematic }) {
   // everything still standing goes to shelter; buildings the player had already retracted stay the player's business
   const mine = [];
   for (const s of state.structures) if (!s.selling && !s.pending && !(s.silo && s.silo.target > 0)) { retract.retract(s); mine.push(s); }
+  // Hold the attack until the base is back: no more spawns, and a wave cleared by the blast does not start the next one
+  // while everything is still underground (game.js updateWave). Lifted once the view is handed back and every sheltered
+  // structure is up again, plus a breather.
+  state.waveHold = true;
+  let holding = true;
+  const release = () => {
+    holding = false;
+    state.waveHold = false;
+    state.waveResumeAt = state.time + BREATHER;
+    log(`Base operational. The swarm regroups: attack resumes in ${BREATHER} s.`, true);
+  };
   log('STRATEGIC LAUNCH DETECTED. All structures to shelter.', true);
   audio.play('air_raid', { vol: 0.8 });
   line1.textContent = 'STRATEGIC LAUNCH DETECTED';
@@ -194,11 +207,19 @@ export function strategicStrike({ scene, camera, controls, setCinematic }) {
     }
   }
 
+  const struck = new Set();                                  // bosses the shock front has already hit
   function aftermath(a, dt) {
     // The shock front crosses the whole map; whatever it reaches is gone. It lingers a moment for late arrivals.
     if (a < 4.5) {
       const r2 = (FRONT * a + 6) ** 2;
-      for (const e of state.enemies) if (!e.dead && (e.x - gx) ** 2 + (e.z - gz) ** 2 < r2) damageEnemy(e, 1e9);
+      for (const e of state.enemies) {
+        if (e.dead || (e.x - gx) ** 2 + (e.z - gz) ** 2 >= r2) continue;
+        if (!e.boss) { damageEnemy(e, 1e9); continue; }
+        if (struck.has(e)) continue;                             // the front washes over it once
+        struck.add(e);
+        damageEnemy(e, BOSS_HIT);
+        if (!e.dead) log('The Colossus survived the strike!', true);
+      }
       for (const tr of state.troopers) if (tr.hp > 0 && (tr.x - gx) ** 2 + (tr.z - gz) ** 2 < r2) tr.hp = 0;
     }
     state.shake = Math.max(state.shake, 1.3 * (1 - a / 5.5));
@@ -291,7 +312,9 @@ export function strategicStrike({ scene, camera, controls, setCinematic }) {
       } else {
         const a = t - hitT;
         aftermath(a, dt);
+        if (holding && handedBack && mine.every((s) => s.hp <= 0 || (!s.silo && !s.buried))) release();
         if (a >= T_END) {
+          if (holding) release();                               // never leave the attack held
           if (cloud) cloud.dispose();
           if (sun) sun.intensity = sunBase;
           flashEl.style.opacity = '0';

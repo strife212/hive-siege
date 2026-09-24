@@ -142,6 +142,116 @@ const DRAW = {
     p.disc(7.5, 7.5, 5, 'a').disc(7.5, 7.5, 3.2, 'y').disc(7.5, 7.5, 1.2, 'w');
     for (const [x, y] of [[7, 0], [8, 1], [14, 7], [15, 8], [7, 15], [8, 14], [0, 7], [1, 8], [2, 2], [13, 2], [2, 13], [13, 13], [3, 3], [12, 12], [12, 3], [3, 12]]) p.px(x, y, 'r');
   },
+  composite(p) {                                                                                  // laminated shield
+    p.rows(2, [[2, 12], [2, 12], [2, 12], [2, 12], [2, 12], [2, 12], [3, 10], [3, 10], [4, 8], [5, 6], [6, 4], [7, 2]], 'B');
+    p.rows(3, [[3, 10], [3, 10], [3, 10], [3, 10], [3, 10], [4, 8], [4, 8], [5, 6], [6, 4], [7, 2]], 'g');
+    p.rect(3, 5, 10, 1, 'd').rect(3, 8, 10, 1, 'd').rect(6, 11, 4, 1, 'd').rect(4, 3, 4, 1, 'w').rect(4, 6, 3, 1, 'w');
+  },
+  fireControl(p) {                                                                                // reticle
+    p.disc(7.5, 7.5, 6.2, 'G').disc(7.5, 7.5, 4.9, null);
+    p.rect(7, 0, 2, 5, 'G').rect(7, 11, 2, 5, 'G').rect(0, 7, 5, 2, 'G').rect(11, 7, 5, 2, 'G');
+    p.rect(7, 7, 2, 2, 'r');
+  },
+  orbital(p) {                                                                                    // satellite, fast chevrons
+    p.rect(0, 3, 5, 3, 'B').rect(11, 3, 5, 3, 'B').px(1, 4, 'b').px(3, 4, 'b').px(12, 4, 'b').px(14, 4, 'b');
+    p.rect(5, 4, 6, 1, 's').rect(6, 1, 4, 6, 'g').rect(6, 1, 4, 1, 'w').px(7, 3, 'b').px(8, 3, 'b');
+    p.line(4, 9, 7, 11, 'y').line(11, 9, 8, 11, 'y').line(4, 12, 7, 14, 'a').line(11, 12, 8, 14, 'a');
+  },
+  hmgFeed(p) {                                                                                    // linked cartridges
+    p.line(4, 0, 6, 1, 'w').line(6, 1, 4, 2, 'w').line(9, 0, 11, 1, 'w').line(11, 1, 9, 2, 'w');
+    for (const x of [1, 5, 9, 13]) p.px(x, 4, 'n').rect(x, 5, 2, 2, 'n').rect(x, 7, 2, 6, 'y').rect(x + 1, 7, 1, 6, 'a');
+    p.rect(0, 10, 16, 1, 's');
+  },
+  overpen(p) {                                                                                    // one round, two bugs
+    p.disc(5.5, 8.5, 2.6, 'p').disc(11.5, 8.5, 2.6, 'p').px(4, 7, 'G').px(10, 7, 'G');
+    p.rect(0, 8, 14, 1, 'y').rect(0, 9, 3, 1, 'a').rect(13, 7, 3, 3, 'n').px(15, 8, 'y');
+    p.px(8, 5, 'G').px(8, 12, 'G').px(14, 12, 'G');
+  },
+  autoloader(p) {                                                                                 // shell in a reload loop
+    p.rect(7, 1, 2, 2, 'd').rect(6, 3, 4, 3, 'd').rect(6, 6, 4, 8, 'y').rect(9, 6, 1, 8, 'a').rect(6, 13, 4, 1, 'a');
+    p.line(3, 3, 2, 5, 'G').rect(2, 5, 1, 6, 'G').line(2, 11, 3, 13, 'G').px(4, 2, 'G').px(3, 1, 'G').px(4, 4, 'G');
+    p.line(12, 3, 13, 5, 'G').rect(13, 5, 1, 6, 'G').line(13, 11, 12, 13, 'G').px(11, 14, 'G').px(12, 15, 'G').px(11, 12, 'G');
+  },
+  sabot(p) {                                                                                      // dart shedding its petals
+    p.px(7, 0, 'g').px(8, 0, 'g').rect(7, 1, 2, 11, 'g').rect(7, 1, 1, 11, 'w');
+    p.rect(5, 12, 6, 1, 'd').rect(6, 13, 4, 2, 'd');
+    p.line(4, 4, 3, 9, 'o').line(5, 5, 4, 10, 'O').line(11, 4, 12, 9, 'o').line(10, 5, 11, 10, 'O');
+  },
+  du(p) {                                                                                         // two heavy shells
+    for (const x of [2, 10]) p.px(x + 1, 1, 'G').rect(x, 2, 3, 4, 's').rect(x, 6, 3, 8, 'y').rect(x + 2, 6, 1, 8, 'a').rect(x, 13, 3, 1, 'a');
+    p.px(7, 4, 'G').px(8, 7, 'G').px(7, 10, 'G');
+  },
+  tanks(p) {                                                                                      // twin pressure tanks, gauge
+    for (const x of [1, 10]) p.rows(4, [[x + 1, 3], [x, 5]], 'r').rect(x, 6, 5, 9, 'r').rect(x + 3, 6, 2, 9, 'R').rect(x, 9, 5, 1, 'y');
+    p.rect(3, 2, 10, 1, 'd').rect(3, 3, 1, 1, 'd').rect(12, 3, 1, 1, 'd');
+    p.disc(7.5, 3.5, 2.2, 'w').line(7, 4, 9, 2, 'r');
+  },
+  napalm(p) {                                                                                     // clinging fire, spatter
+    p.rows(2, [[7, 1], [7, 2], [6, 3], [6, 4], [5, 5], [4, 7], [4, 8], [3, 9], [3, 10], [3, 10], [4, 8], [5, 6]], 'a');
+    p.rows(7, [[7, 2], [6, 3], [6, 4], [5, 5], [6, 4], [7, 2]], 'y');
+    p.rect(3, 14, 10, 1, 'R').px(1, 6, 'a').px(14, 8, 'a').px(12, 4, 'a').px(1, 12, 'r').px(14, 13, 'r');
+  },
+  focus(p) {                                                                                      // lens pulling beams to a point
+    p.rect(0, 4, 4, 1, 'b').rect(0, 7, 4, 2, 'b').rect(0, 11, 4, 1, 'b');
+    p.rect(5, 2, 2, 12, 'B').rect(4, 4, 1, 8, 'B').rect(7, 4, 1, 8, 'B').rect(5, 3, 1, 3, 'b');
+    p.line(8, 4, 11, 7, 'b').line(8, 11, 11, 8, 'b').rect(8, 7, 3, 2, 'b');
+    p.disc(12.5, 7.5, 1.6, 'w').rect(13, 7, 3, 2, 'w');
+  },
+  prism(p) {                                                                                      // beam split by a prism
+    p.rows(2, [[7, 2], [7, 2], [6, 4], [6, 4], [5, 6], [5, 6], [4, 8], [4, 8], [3, 10], [3, 10]], 'B');
+    p.rows(4, [[7, 1], [7, 1], [6, 2], [6, 2], [5, 3], [5, 3]], 'b');
+    p.line(0, 10, 4, 8, 'w').line(11, 7, 15, 4, 'b').line(12, 9, 15, 13, 'r');
+  },
+  crew(p) {                                                                                       // two helmeted gunners
+    p.rows(1, [[10, 4], [9, 6], [9, 6]], 'O').rect(8, 4, 8, 1, 's').rect(10, 5, 4, 3, 'n').px(11, 6, 'k').px(13, 6, 'k').rect(9, 8, 6, 7, 'O');
+    p.rows(4, [[2, 4], [1, 6], [1, 6]], 'o').rect(0, 7, 8, 1, 'O').rect(2, 8, 4, 3, 'c').px(3, 9, 'k').px(5, 9, 'k').rect(1, 11, 6, 5, 'o');
+  },
+  phosphorus(p) {                                                                                 // white-phosphorus burst
+    p.disc(7.5, 5.5, 4, 'w').rect(4, 7, 8, 2, 'g').px(6, 3, 'g').px(10, 4, 'g');
+    p.line(4, 9, 1, 13, 'g').line(11, 9, 14, 13, 'g').line(6, 10, 5, 14, 'g').line(9, 10, 10, 14, 'g');
+    p.px(1, 14, 'a').px(14, 14, 'a').px(5, 15, 'y').px(10, 15, 'y').px(0, 13, 'y').px(15, 13, 'y');
+  },
+  reload(p) {                                                                                     // hot missile
+    p.px(7, 0, 'r').px(8, 0, 'r').rect(6, 1, 4, 2, 'r').rect(6, 3, 4, 9, 'w').rect(9, 3, 1, 9, 'g');
+    p.rect(4, 10, 2, 3, 'd').rect(10, 10, 2, 3, 'd').rect(7, 12, 2, 2, 'a').px(7, 14, 'y').px(8, 14, 'y');
+    for (const x of [1, 13]) p.px(x + 1, 3, 'a').px(x, 4, 'a').px(x, 5, 'a').px(x + 1, 6, 'a').px(x + 1, 7, 'a').px(x, 8, 'a');
+  },
+  distrib(p) {                                                                                    // one launch, three targets
+    for (const [x, y] of [[0, 1], [6, 0], [12, 1]]) p.rect(x, y, 4, 4, 'r').rect(x + 1, y + 1, 2, 2, null);
+    p.line(7, 14, 3, 6, 'w').line(8, 14, 8, 5, 'w').line(8, 14, 12, 6, 'w').rect(6, 13, 4, 3, 'd');
+  },
+  heliMags(p) {                                                                                   // ammo can, belt on top
+    for (const x of [3, 5, 7, 9, 11]) p.px(x, 1, 'n').rect(x, 2, 1, 3, 'y');
+    p.rect(1, 5, 14, 2, 'o').rect(2, 7, 12, 8, 'O').rect(3, 10, 10, 1, 'y').rect(2, 7, 12, 1, 's');
+  },
+  hunter(p) {                                                                                     // a lock on the big bug
+    p.rect(0, 0, 4, 1, 'y').rect(0, 0, 1, 4, 'y').rect(12, 0, 4, 1, 'y').rect(15, 0, 1, 4, 'y');
+    p.rect(0, 15, 4, 1, 'y').rect(0, 12, 1, 4, 'y').rect(12, 15, 4, 1, 'y').rect(15, 12, 1, 4, 'y');
+    p.line(3, 5, 5, 7, 's').line(12, 5, 10, 7, 's').line(3, 12, 5, 10, 's').line(12, 12, 10, 10, 's');
+    p.disc(7.5, 8.5, 3.6, 'R').rect(6, 5, 4, 2, 'r').px(6, 6, 'y').px(9, 6, 'y');
+  },
+  deepMags(p) {                                                                                   // a full bomb rack
+    for (const x of [1, 6, 11]) {
+      p.rect(x, 2, 4, 1, 'd').rect(x + 1, 3, 2, 1, 'd').rect(x + 1, 4, 2, 1, 'o').rect(x, 5, 4, 7, 'o').rect(x + 1, 12, 2, 1, 'o');
+      p.rect(x, 9, 4, 1, 'y').rect(x + 3, 5, 1, 7, 'O');
+    }
+    p.rect(0, 0, 16, 1, 's');
+  },
+  relay(p) {                                                                                      // the Titan, signalling down
+    p.rows(1, [[4, 8], [2, 12], [1, 14], [2, 12], [4, 8]], 'g').rect(4, 1, 8, 1, 'w').rect(3, 5, 10, 1, 'd');
+    p.px(0, 2, 'r').px(0, 3, 'r').rect(6, 6, 4, 1, 's');
+    p.line(5, 9, 7, 10, 'b').line(8, 10, 10, 9, 'b').line(3, 11, 7, 13, 'b').line(8, 13, 12, 11, 'b');
+    p.rect(7, 15, 2, 1, 'b');
+  },
+  supercap(p) {                                                                                   // charged capacitor
+    p.rect(5, 1, 2, 2, 'd').rect(9, 1, 2, 2, 'd').rect(4, 3, 8, 1, 'g').rect(4, 4, 8, 11, 'B').rect(5, 4, 1, 11, 'b');
+    p.line(10, 5, 7, 9, 'y').rect(7, 9, 3, 1, 'y').line(9, 10, 7, 13, 'y');
+  },
+  penetrator(p) {                                                                                 // slug through armour
+    p.rect(7, 2, 3, 12, 'd').rect(7, 2, 1, 12, 'g');
+    p.line(0, 14, 13, 1, 'b').line(1, 14, 14, 1, 'w').line(1, 15, 14, 2, 'g').px(15, 0, 'w');
+    p.px(5, 6, 'y').px(11, 5, 'y').px(11, 10, 'y').px(4, 11, 'a').px(12, 8, 'a');
+  },
   // ---------------------------------------------------------------- abilities
   ab_lance(p) {
     p.line(2, 0, 7, 11, 'B').line(13, 0, 8, 11, 'B').line(3, 0, 7, 10, 'b').line(12, 0, 8, 10, 'b');

@@ -167,7 +167,7 @@ export const boss = {
     let speed = 0;
     if (e.held) { height += e.held.lift; e.walk += dt * 6; }  // hauled across the ground by a black hole (blackhole.js moves it)
     else if (e.emerge >= 1 && !attacking) {
-      speed = e.def.speed;
+      speed = e.speed;                                      // its own speed: carries the hive's adaptation (game.js)
       e.x += dx / dist * speed * dt; e.z += dz / dist * speed * dt;
       confine(e);
       e.walk += speed * dt;

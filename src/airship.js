@@ -215,17 +215,20 @@ function drawAmmo(ud, a, def) {
   };
   bar(9, (a.gat[0] + a.gat[1]) / (def.gatRounds * 2), '#ffd541', (x, y) => { c.fillStyle = '#d9a633'; c.fillRect(x, y + 1, 14, 8); c.fillStyle = '#e8e2d0'; c.beginPath(); c.moveTo(x + 14, y + 1); c.lineTo(x + 24, y + 5); c.lineTo(x + 14, y + 9); c.fill(); });
   bar(25, (a.hmg[0] + a.hmg[1]) / (def.hmgRounds * 2), '#ffb04a', (x, y) => { c.fillStyle = '#c08a2a'; c.fillRect(x + 4, y + 2, 10, 6); c.fillStyle = '#e8e2d0'; c.beginPath(); c.moveTo(x + 14, y + 2); c.lineTo(x + 21, y + 5); c.lineTo(x + 14, y + 8); c.fill(); });
+  // the rows fit the canvas however many rounds there are (Deep Magazines): pitch and width shrink together
+  const sp = Math.min(7.9, (W - 26) / def.shells), sw = Math.min(5, sp - 1.2);
   for (let k = 0; k < def.shells; k++) {                          // artillery shells: slim upright rounds
-    const x = 12 + k * 7.9, live = k < a.shells;
-    c.fillStyle = live ? '#d8c08a' : 'rgba(255,255,255,0.13)'; c.fillRect(x, 47, 5, 13);
-    c.beginPath(); c.moveTo(x, 47); c.lineTo(x + 2.5, 41); c.lineTo(x + 5, 47); c.closePath(); c.fillStyle = live ? '#e5493b' : 'rgba(255,255,255,0.13)'; c.fill();
+    const x = 12 + k * sp, live = k < a.shells;
+    c.fillStyle = live ? '#d8c08a' : 'rgba(255,255,255,0.13)'; c.fillRect(x, 47, sw, 13);
+    c.beginPath(); c.moveTo(x, 47); c.lineTo(x + sw / 2, 41); c.lineTo(x + sw, 47); c.closePath(); c.fillStyle = live ? '#e5493b' : 'rgba(255,255,255,0.13)'; c.fill();
   }
+  const bp = Math.min(6.6, (W - 26) / def.bombs), br = Math.min(2.6, (bp - 1) / 2);
   for (let k = 0; k < def.bombs; k++) {                           // bombs: fat drops with a fin
-    const x = 12 + k * 6.6 + 2.5, live = k < a.bombs;
+    const x = 12 + k * bp + br, live = k < a.bombs;
     c.fillStyle = live ? '#7f9144' : 'rgba(255,255,255,0.13)';
-    c.beginPath(); c.ellipse(x, 78, 2.6, 6.5, 0, 0, Math.PI * 2); c.fill();
-    c.fillRect(x - 2.8, 68, 5.6, 2.5);
-    if (live) { c.fillStyle = '#ffd541'; c.fillRect(x - 2.4, 79, 4.8, 1.8); }
+    c.beginPath(); c.ellipse(x, 78, br, 6.5, 0, 0, Math.PI * 2); c.fill();
+    c.fillRect(x - br - 0.2, 68, br * 2 + 0.4, 2.5);
+    if (live) { c.fillStyle = '#ffd541'; c.fillRect(x - br + 0.2, 79, br * 2 - 0.4, 1.8); }
   }
   ud.hudTex.needsUpdate = true;
 }

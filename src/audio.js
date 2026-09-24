@@ -280,10 +280,11 @@ const SYNTH = {
     noise(c, o, t, { dur: 0.8, type: 'bandpass', f0: 700, q: 2, gain: 0.08, a: 0.1 });
     osc(c, o, t + 0.8, { type: 'square', f0: 180, dur: 0.05, gain: 0.1, lp: 800 });
   } },
-  railgun_charge: { fn: (c, o, t) => {
-    osc(c, o, t, { type: 'sawtooth', f0: 70, f1: 950, dur: 2.9, gain: 0.22, a: 0.3, lp: 1800 });
-    osc(c, o, t, { type: 'sine', f0: 140, f1: 1900, dur: 2.9, gain: 0.12, a: 0.5 });
-    noise(c, o, t + 1.2, { dur: 1.7, type: 'bandpass', f0: 1200, f1: 5000, q: 3, gain: 0.12, a: 0.8 });
+  railgun_charge: { fn: (c, o, t, p) => {                  // p.charge: seconds to full (Supercapacitors shorten it)
+    const k = (p.charge ?? 3) / 3;
+    osc(c, o, t, { type: 'sawtooth', f0: 70, f1: 950, dur: 2.9 * k, gain: 0.22, a: 0.3 * k, lp: 1800 });
+    osc(c, o, t, { type: 'sine', f0: 140, f1: 1900, dur: 2.9 * k, gain: 0.12, a: 0.5 * k });
+    noise(c, o, t + 1.2 * k, { dur: 1.7 * k, type: 'bandpass', f0: 1200, f1: 5000, q: 3, gain: 0.12, a: 0.8 * k });
   } },
   railgun_fire: { fn: (c, o, t) => {
     noise(c, o, t, { dur: 0.05, type: 'highpass', f0: 2500, gain: 0.9, a: 0.001 });

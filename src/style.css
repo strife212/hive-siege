@@ -124,6 +124,8 @@ button.big:disabled {
 }
 .cat::before { content: ""; width: 3px; height: 9px; background: var(--accent); }
 .cat::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--line2), transparent); }
+.cards > [hidden] { display: none; }
+.cards .hint { grid-column: 1 / -1; padding: 8px 6px 4px; font-size: 10px; line-height: 1.4; letter-spacing: .04em; color: var(--muted); text-align: center; }
 
 .card {
   position: relative; padding: 7px 4px 6px; text-align: center; cursor: pointer;

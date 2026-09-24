@@ -63,7 +63,7 @@ anything between them and your Core.
 - **Buildings**: Wall, HMG Turret (10 rounds/s instant tracers, low damage, short range), Autocannon (guided projectile), Dual Autocannon (two barrels, two shells per salvo,
   casings from both sides), Flamethrower (short-range gravity-arced fire stream; every bug in its 24° cone is
   set burning for 3 s at 14 damage/s, refreshed while it stays in the stream, with flames on the bug), Laser Tower (hitscan beam, needs a Research Lab),
-  Refinery (+3 credits/s), Research Lab (unlocks laser + tech).
+  Refinery (+3 credits/s), Research Lab (unlocks laser + research).
 - **Strategic Uplink Tower** (SUPPORT, 2x2, 2000 credits): a very tall comms tower. An armoured equipment hall carries a
   red-and-white banded lattice mast about 15 units high, bristling with hardware:
   - parabolic dishes, microwave drums, two rings of cellular panels, a yagi, crossed dipoles and whips
@@ -72,7 +72,29 @@ anything between them and your Core.
 
   The Strategic Nuclear Strike stays locked until one stands, and locks again if it is lost. It sinks whole into a
   deep silo like everything else.
-- **Research**: Reinforced Plating (walls x2 HP), Overcharged Optics (laser +50%), HE Rounds (turret splash).
+- **Research** (TECH tab, needs a Research Lab): GLOBAL is always listed; every building's own section appears the
+  first time one is built and stays. Stat research rebuilds the live per-type stats that every structure points at
+  (`s.def`), so towers, aircraft and the info panel update the moment it completes.
+  - GLOBAL: Composite Armour ($1,800, every structure and the Core +25% HP), Integrated Fire Control ($2,100, all tower
+    ranges +10%), Orbital Command Priority ($3,000, ability cooldowns -25%, the Strategic Strike excepted).
+  - Wall: Reinforced Plating ($450, x2 HP).
+  - HMG: High-Cyclic Feed ($450, +30% fire rate), Overpenetration ($525, a killing round carries its leftover damage
+    into the nearest bug within 2 m).
+  - Autocannon: HE Rounds ($600, splash; also listed under and applies to the Dual Autocannon), Autoloader ($525, +30%
+    fire rate), Sabot Shells ($600, +50% damage to brutes, spitters and the Colossus).
+  - Dual Autocannon: HE Rounds, Depleted-Uranium Shells ($825, +25% damage, range 13 -> 15).
+  - Flamethrower: Pressurised Tanks ($525, range 7.5 -> 10, cone 24 -> 32 degrees), Clinging Napalm ($600, a bug that
+    dies in Flamethrower fire sets everything within 2 m alight).
+  - Laser: Overcharged Optics ($600, +50% damage), Focusing Array ($675, +20% per second on one target up to +100%,
+    the beam thickens), Prism Splitter ($750, each pulse forks to one more bug within 3 m for half damage).
+  - Mortar: Double Crew ($750, +50% fire rate), White Phosphorus ($900, the blast sets bugs burning, 12/s for 4 s).
+  - Missile Silo: Hot Reload ($900, salvo every 4 s), Distributed Targeting ($1,050, each missile claims its own
+    cluster; with fewer clusters than missiles they are shared out in turn).
+  - Gunship: Extended Magazines ($1,200, 160 rounds and 16 rockets), Hunter-Killer Avionics ($1,050, rockets only for
+    brutes, spitters and the Colossus; with the gun dry it hunts only those, or heads home).
+  - Titan: Deep Magazines ($4,500, +50% of every ammo type), Fire Control Relay ($6,000, towers within 15 m of the
+    ground under the airborne Titan fire 20% faster; the circle is traced on the terrain).
+  - Railgun: Supercapacitors ($1,800, charge 3 -> 2 s), Tungsten Penetrator ($2,250, x3 damage to the Colossus).
 - **Scale**: bugs are rendered as one instanced draw per species (`src/swarm.js`): the rig is baked into a single
   low-poly geometry with per-vertex pivot/axis/phase attributes and the gait, chomp, bob, burn glow and death curl
   run in the vertex shader, so the CPU writes one matrix and four floats per bug. HP bars are one instanced mesh.
@@ -91,6 +113,9 @@ anything between them and your Core.
     (it ignores walls and lobs straight over them). The sac swells and brightens as a shot charges and squeezes
     when it fires. The glob (`src/acid.js`) arcs in trailing fumes, splashes on the face of the building for 14
     damage and leaves it sizzling. The sac bursts when the spitter dies.
+  - **Ant**: half a skitterer, glossy black with amber glow spots. It has 1 HP at every wave and is worth no credits.
+    Every wave, and the canyon walkers, carries half as many again in ants (`ANTS` in `src/config.js`). They are
+    fodder that soaks up fire and chews at walls.
   They burrow out of the ground at their nest, walk with a tripod gait (legs sweep at the hip and lift at
   the knee in the swing phase, body bobs), snap their mandibles when attacking, and burst into chunks when
   killed: instanced head, abdomen and leg pieces (`src/gore.js`) fly out, tumble, bounce and skid on the terrain,
@@ -101,9 +126,12 @@ anything between them and your Core.
   legs, kicks up dust on touchdown and plants its pylons; the camera then flies to the gameplay view and
   the sidebar slides in. Any key or click skips it; append `?nointro` to the URL to jump straight to the fly-in.
 - **Colossus** (boss, every 10th wave, `src/boss.js`): a giant bug on eight long spindly legs (procedural stepping + two-bone IK) that walks
-  straight over walls and towers and stabs the Core with its front legs. 5200 HP (scaled by wave), boss bar at the top. Turrets, the railgun
+  straight over walls and towers and stabs the Core with its front legs. 5000 HP (scaled by wave), boss bar at the top. Turrets, the railgun
   and the flamethrower elevate to hit its hull. Death: convulsions and ruptures, legs buckle, it crashes down, the abdomen swells and bursts
   (damaging nearby bugs), and the husk sinks away. Debug menu (Z) has a *Spawn boss* button.
+  Every Colossus killed, by any means, makes the hive adapt. Bugs that spawn from then on get +10% HP and +10% speed,
+  compounding: x1.1, then x1.21, and so on. The next Colossus is included. Bugs already on the field keep their stats
+  (`HIVE_BUFF` / `state.hiveBuff` in `src/game.js`).
 - **Titan Airship Pad** (2x3, 5000 credits, limit 1, `src/airship.js`): a big rigid airship (ring-framed cigar hull, cruciform tail, long lit
   gondola, four ducted fans, solar spine) that parks over the thickest knot of bugs. Twin gatlings (500 rds each), twin HMGs (250 each), a
   belly howitzer (25 shells, big splash) and a bomb bay that drops 30 bombs straight down. Returns when empty or idle, rearms moored for 8 s.
@@ -169,11 +197,19 @@ anything between them and your Core.
   Every structure and the Core retract into their silos; then a 10 s beeping countdown ("STRATEGIC LAUNCH DETECTED /
   IMPACT IN n") while a giant ICBM comes down on the centre of the map. With 7 s to go the camera leaves the player,
   rides alongside the missile, then races ahead to watch it land. The shock front crosses the whole map killing every
-  bug it reaches (bosses and any troopers left outside included), with fires and burn scars across the basin; the
+  bug it reaches (and any troopers left outside), with fires and burn scars across the basin. A Colossus is the exception:
+  the front hits it once for 30,000 damage (`BOSS_HIT`), so a late-game one can survive, and the log says so. The
   camera pulls back to the mushroom cloud, the cloud thins, the view returns to where the player left it and everything
   the strike sent below redeploys. Aircraft do not shelter: every gunship in the air and the Titan (cast off first if it
   was moored) scatter to the map edge on separate headings at emergency power, loiter there, and return to work on the
-  all clear, landing once their pads are back up; a gunship sitting on its pad rides down with it. A strike that wants the camera
+  all clear, landing once their pads are back up; a gunship sitting on its pad rides down with it.
+  The strike also holds the attack (`state.waveHold`), so the base is never caught underground:
+  - From launch, nothing more spawns.
+  - A wave the blast clears does not start the next one.
+  - The hold lifts only once the camera is handed back and every sheltered structure is fully redeployed. The attack
+    then resumes 5 s later (`BREATHER` in `src/strategic.js`). START WAVE still works if the player wants to go early.
+
+  A strike that wants the camera
   registers a driver through `abilities.cinematic`, which main.js runs in place of the player's controls (`body.cine`
   slides the HUD away and brings in letterbox bars).
 - **Sound** (`src/audio.js`): every turret and ability has a procedurally synthesised Web Audio effect

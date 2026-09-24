@@ -268,10 +268,20 @@ function nearestBug(x, z, r) {
   eachEnemy(x, z, r, (e, d2) => { if (d2 < bd) { bd = d2; best = e; } });
   return best;
 }
-// The bug with the most company within 3.5 units, among those the pods can reach.
-function rocketTarget(x, z, r) {
+// The bug with the most company within 3.5 units, among those the pods can reach. heavy: only brutes, spitters and the
+// Colossus are worth a rocket (Hunter-Killer Avionics).
+const isHeavy = (e) => e.def.scale >= 1;
+function rocketTarget(x, z, r, heavy = false) {
   let best = null, score = -1;
-  eachEnemy(x, z, r, (e) => { let n = 0; eachEnemy(e.x, e.z, 3.5, () => { n++; }); if (n > score) { score = n; best = e; } });
+  eachEnemy(x, z, r, (e) => {
+    if (heavy && !isHeavy(e)) return;
+    let n = 0; eachEnemy(e.x, e.z, 3.5, () => { n++; }); if (n > score) { score = n; best = e; }
+  });
+  return best;
+}
+function nearestHeavy(x, z, r) {
+  let best = null, bd = r * r;
+  eachEnemy(x, z, r, (e, d2) => { if (d2 < bd && isHeavy(e)) { bd = d2; best = e; } });
   return best;
 }
 
@@ -361,9 +371,12 @@ export function updateHeli(s, dt) {
   h.scan -= dt;
   if (h.mode === 'attack') {
     if (h.target && (h.target.dead || Math.hypot(h.target.x - s.x, h.target.z - s.z) > def.range + 6)) h.target = null;
+    const dry = state.research.hunter && h.rounds <= 0;          // gun empty, rockets held for heavies: hunt only those
+    if (dry && h.target && !isHeavy(h.target)) h.target = null;
     if (h.scan <= 0 || !h.target) {
       h.scan = 0.4;
-      h.target = nearestBug(pos.x, pos.z, 30) || nearestBug(s.x, s.z, def.range);
+      h.target = dry ? nearestHeavy(pos.x, pos.z, 30) || nearestHeavy(s.x, s.z, def.range)
+        : nearestBug(pos.x, pos.z, 30) || nearestBug(s.x, s.z, def.range);
     }
     if ((h.rounds <= 0 && h.rocketsLeft <= 0) || s.recall) { h.mode = 'return'; h.target = null; }   // recall: the pad wants to retract
     else if (!h.target) { h.idle += dt; if (h.idle > 2.5) h.mode = 'return'; }
@@ -466,9 +479,13 @@ export function updateHeli(s, dt) {
     audio.play('hmg_fire', { x: pos.x, z: pos.z, vol: 0.4 });
   }
   if (h.rocketsLeft > 0 && h.rocketCd <= 0 && dist < GUN_RANGE + 4 && Math.abs(aimYaw) < 0.5) {
-    h.rocketCd = 0.55;
-    launchRocket(h, heli, rocketTarget(pos.x, pos.z, GUN_RANGE + 3) || e, def);
-    h.rocketsLeft--;
+    const hk = !!state.research.hunter;
+    const rt = rocketTarget(pos.x, pos.z, GUN_RANGE + 3, hk) || (hk ? null : e);
+    if (rt) {
+      h.rocketCd = 0.55;
+      launchRocket(h, heli, rt, def);
+      h.rocketsLeft--;
+    }
   }
 }
 

@@ -40,14 +40,35 @@ export function createUI({ onSelectBuild }) {
     }
   }
 
-  const techCards = {};
-  for (const [key, r] of Object.entries(RESEARCH)) {
-    const el = card(key, r.name, r.cost);
-    el.addEventListener('click', () => doResearch(key));
-    el.addEventListener('mouseenter', () => { desc.textContent = r.desc; });
-    techList.appendChild(el);
-    techCards[key] = el;
+  // TECH tab: GLOBAL on top, then a section per building in build-list order. A building's section is revealed the
+  // first time one is built and stays listed after that. Research filed under two buildings gets a card in each.
+  const techCards = [];                                      // [key, el]
+  const techGroups = [];                                     // { type, els, shown }
+  for (const type of ['global', ...Object.keys(BUILDINGS)]) {
+    const keys = Object.keys(RESEARCH).filter((k) => [].concat(RESEARCH[k].group).includes(type));
+    if (!keys.length) continue;
+    const h = document.createElement('div');
+    h.className = 'cat';
+    h.textContent = type === 'global' ? 'GLOBAL' : BUILDINGS[type].name.toUpperCase();
+    techList.appendChild(h);
+    const els = [h];
+    for (const key of keys) {
+      const r = RESEARCH[key], el = card(key, r.name, r.cost);
+      el.addEventListener('click', () => doResearch(key));
+      el.addEventListener('mouseenter', () => { desc.textContent = r.desc; });
+      techList.appendChild(el);
+      techCards.push([key, el]);
+      els.push(el);
+    }
+    const shown = type === 'global';
+    for (const el of els) el.hidden = !shown;
+    techGroups.push({ type, els, shown });
   }
+  const techHint = document.createElement('div');
+  techHint.className = 'hint';
+  techHint.textContent = 'Each tower’s research is listed here once you have built one.';
+  techList.appendChild(techHint);
+  on('research', () => { if (selected) showSelected(selected); });     // upgraded stats in the info panel
 
   function setActive(key) {
     activeBuild = key;
@@ -157,7 +178,13 @@ export function createUI({ onSelectBuild }) {
       el.classList.toggle('maxed', !!def.limit && countBuildings(key) >= def.limit);
       el.classList.toggle('poor', state.credits < def.cost);
     }
-    for (const [key, el] of Object.entries(techCards)) {
+    for (const g of techGroups) {
+      if (g.shown || !hasBuilding(g.type)) continue;
+      g.shown = true;
+      for (const el of g.els) el.hidden = false;
+    }
+    techHint.hidden = techGroups.every((g) => g.shown);
+    for (const [key, el] of techCards) {
       const done = !!state.research[key];
       el.classList.toggle('done', done);
       el.classList.toggle('locked', !done && !labBuilt);

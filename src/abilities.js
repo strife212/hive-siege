@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { heightAt } from './terrain.js';
 import { iconImg } from './icons.js';
-import { state, damageEnemy, eachEnemy, burst, log, hasBuilding } from './game.js';
+import { state, damageEnemy, eachEnemy, burst, log, hasBuilding, on } from './game.js';
 import { BUILDINGS } from './config.js';
 import { flame } from './flame.js';
 import { spawnScorch, spawnScar } from './decals.js';
@@ -27,7 +27,7 @@ export const ABILITIES = {
   // global: nothing to aim (ground zero is the centre of the map). It arms like the rest and any click on the map
   // launches it; `hint` is the prompt that rides above the cursor while it is armed.
   blackhole: { name: 'Micro-Singularity Gravity Bomb', key: '9', cooldown: 45, radius: 9, desc: 'A bomb opens a singularity that drags every bug in the area in, crushing the small ones and holding the rest in orbit, then collapses and spits the survivors back out.' },
-  strategic: { name: 'Strategic Nuclear Strike', key: '0', cooldown: 300, global: true, requires: 'uplink', hint: 'INITIATE STRATEGIC LAUNCH', desc: 'Requires a Strategic Uplink Tower. Last resort. Click anywhere on the map to launch. Every structure retracts into its silo, then a 10 s countdown and a giant ICBM hits the centre of the map: everything on the surface dies. The base redeploys once the cloud clears.' },
+  strategic: { name: 'Strategic Nuclear Strike', key: '0', cooldown: 300, global: true, requires: 'uplink', hint: 'INITIATE STRATEGIC LAUNCH', desc: 'Requires a Strategic Uplink Tower. Last resort. Click anywhere on the map to launch. Every structure retracts into its silo, then a 10 s countdown and a giant ICBM hits the centre of the map: every bug on the surface dies, and a Colossus takes 30,000 damage. The base redeploys once the cloud clears.' },
 };
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -218,7 +218,7 @@ function orbitalLaser(x, z) {
     if (scorchT > 0.2) { scorchT = 0; spawnScorch(ab.scene, P.x, P.z, 1.3); }
     sndT += dt;
     if (snd && sndT > 0.25) { sndT = 0; snd.setPos(P.x, P.z); }
-    damageCircle(P.x, P.z, 1.76, 82.5 * dt * w, 0.6);
+    damageCircle(P.x, P.z, 1.76, 91 * dt * w, 0.6);
     if (t >= DUR) { disposeGroup(beam); killPuff(glow); if (snd) snd.stop(); ab.laser = null; return false; }
     return true;
   }, guide(p) { T.set(p.x, 0, p.z); } };
@@ -430,8 +430,8 @@ function strafingRun(cx, cz, dx, dz, len, wid) {
             puff(tx, to.y + 0.2, tz, { color: 0xc9a070, size: 0.9, grow: 2.2, life: 0.5, opacity: 0.6, vy: 1.5 });
             puff(tx, to.y + 0.3, tz, { color: 0xffd090, size: 0.7, life: 0.12, opacity: 0.9, additive: true });
             burst(tx, to.y + 0.2, tz, 'soil', 2, 5);
-            impactRing(tx, to.y, tz, 1.98);
-            damageCircle(tx, tz, 1.98, 9.9, 0.6);
+            impactRing(tx, to.y, tz, 2.178);
+            damageCircle(tx, tz, 2.178, 10.89, 0.6);
             audio.play('autocannon_fire', { x: jetPos.x, z: jetPos.z, vol: 0.32, delay: Math.random() * 0.03, force: true });
           }
         }
@@ -447,7 +447,7 @@ function strafingRun(cx, cz, dx, dz, len, wid) {
           puff(r.m.position.x, r.m.position.y, r.m.position.z, { color: 0xffa040, size: 0.35, life: 0.15, opacity: 0.8, additive: true });
         }
         if (r.m.position.y <= r.target.y + 0.3 || r.m.position.distanceTo(r.target) < 0.6) {
-          explode(r.target.x, r.target.z, 1.4, 53, 2.64, { shake: 0.12, smoke: 5 });
+          explode(r.target.x, r.target.z, 1.4, 58.3, 2.904, { shake: 0.12, smoke: 5 });
           ab.scene.remove(r.m); rockets.splice(k, 1);
         }
       }
@@ -1029,6 +1029,7 @@ export const abilities = {
     ab.ui = ui;
     ab.camera = camera; ab.controls = controls;
     for (const k of Object.keys(ABILITIES)) ab.cooldowns[k] = 0;
+    on('research', (r) => { if (r === 'orbital') for (const k of Object.keys(ab.cooldowns)) ab.cooldowns[k] *= cooldownOf(k) / ABILITIES[k].cooldown; });
     buildBar();
     addEventListener('pointermove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; if (ab.armed) showHint(); });
     addEventListener('keydown', (e) => {
@@ -1093,7 +1094,7 @@ export const abilities = {
     else if (key === 'strategic') fx = strategicStrike({ scene: ab.scene, camera: ab.camera, controls: ab.controls, setCinematic: (fn) => { ab.cine = fn; } });
     else if (key === 'bomber') { const d = lineDir(ab.anchor, p); fx = bombingRun(ab.scene, ab.anchor.x, ab.anchor.z, d.x, d.z, def.width); }
     ab.effects.push(fx);
-    ab.cooldowns[key] = def.cooldown;
+    ab.cooldowns[key] = cooldownOf(key);
     abilities.cancel();
     return true;
   },
@@ -1132,17 +1133,20 @@ function buildBar() {
     ab.buttons[key] = b;
   }
 }
+// Orbital Command Priority (research): every support ability but the Strategic Strike recharges 25% faster.
+const cooldownOf = (key) => ABILITIES[key].cooldown * (state.research.orbital && key !== 'strategic' ? 0.75 : 1);
+
 const barCache = {};
 function refreshBar() {
   for (const [key, b] of Object.entries(ab.buttons)) {
-    const cd = ab.cooldowns[key], def = ABILITIES[key], lock = locked(key);
+    const cd = ab.cooldowns[key], lock = locked(key);
     const sig = `${ab.armed === key}|${Math.ceil(cd)}|${lock}`;
     if (barCache[key] === sig) continue;
     barCache[key] = sig;
     b.classList.toggle('active', ab.armed === key);
     b.classList.toggle('cooling', cd > 0);
     b.classList.toggle('locked', lock);
-    b.querySelector('.cd').style.height = `${(cd / def.cooldown) * 100}%`;
+    b.querySelector('.cd').style.height = `${Math.min(1, cd / cooldownOf(key)) * 100}%`;
     b.querySelector('.cdtext').textContent = lock ? 'LOCKED' : cd > 0 ? Math.ceil(cd) : '';
   }
 }
