@@ -792,7 +792,7 @@ function updateSilo(s, dt) {
       state.scene.add(m);
       const tgt = state.research.distrib ? salvoTarget(s) : s.target && !s.target.dead ? s.target : clusterTarget(s.x, s.z, def.range);
       state.missiles.push({ mesh: m, pos: _a.clone(), vel: new THREE.Vector3((Math.random() - 0.5) * 3, 12, (Math.random() - 0.5) * 3), target: tgt, last: new THREE.Vector3(s.x, s.y, s.z + 5), t: 0, spin: Math.random() * 6.28, dmg: def.damage, splash: def.splash, trail: 0 });
-      audio.play('missile_launch', { x: s.x, z: s.z, vol: 0.8 });
+      audio.play('missile_launch', { x: s.x, z: s.z, vol: 0.4 });           // one at a time (voices in audio.js)
       puff(_a.x, _a.y, _a.z, { color: 0xffd090, size: 1.2, life: 0.15, opacity: 0.9, additive: true });
       puff(_a.x, _a.y - 0.3, _a.z, { color: 0xd8d0c8, size: 1.0, grow: 2.5, life: 1.2, opacity: 0.5, vy: 1.5 });
     }

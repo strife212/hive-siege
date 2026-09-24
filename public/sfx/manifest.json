@@ -3,5 +3,6 @@
   "hmg_fire": "hmg_fire.mp3",
   "autocannon_fire": "autocannon_fire.mp3",
   "nuke_beep": "nuke_beep.mp3",
-  "air_raid": "air_raid.mp3"
+  "air_raid": "air_raid.mp3",
+  "missile_launch": "missiletrail.mp3"
 }

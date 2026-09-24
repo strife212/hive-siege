@@ -16,7 +16,7 @@ function initialMute() {
 
 const state = {
   ctx: null, master: null, muted: initialMute(), volume: 0.8, muteListeners: [],
-  assets: {}, last: {}, listener: { x: 0, z: 0 },
+  assets: {}, last: {}, playing: {}, listener: { x: 0, z: 0 },
   pending: [],
 };
 
@@ -241,7 +241,7 @@ const SYNTH = {
     noise(c, o, t, { dur: 0.3, type: 'lowpass', f0: 900, f1: 200, gain: 0.6, a: 0.003 });
     osc(c, o, t, { type: 'triangle', f0: 400, f1: 120, dur: 0.08, gain: 0.25 });
   } },
-  missile_launch: { min: 0.05, fn: (c, o, t) => {
+  missile_launch: { min: 0.05, voices: 1, len: 0.9, fn: (c, o, t) => {      // a salvo overlaps six: only one at once
     noise(c, o, t, { dur: 0.9, type: 'bandpass', f0: 1400, f1: 240, q: 0.8, gain: 0.45, a: 0.02 });
     osc(c, o, t, { type: 'sawtooth', f0: 260, f1: 70, dur: 0.5, gain: 0.12, lp: 900 });
   } },
@@ -539,7 +539,8 @@ export const audio = {
     if (state.master && !state.muted) state.master.gain.setTargetAtTime(state.volume, state.ctx.currentTime, 0.02);
   },
   // One-shot. p: { x, z, vol, delay, size, hi, force, rate, dur } (force skips the per-sound
-  // rate limit; rate and dur only apply when an asset file replaces the synth)
+  // rate limit; rate and dur only apply when an asset file replaces the synth). A sound with `voices` never has more
+  // than that many copies playing: further calls are dropped until one ends (`len` is the synth's length).
   // Video capture (record.js): all sound goes into an OfflineAudioContext that is stepped in lockstep with the sim.
   async beginOffline(seconds, { skip = [], listener } = {}) {
     state.offline = seconds;
@@ -560,12 +561,18 @@ export const audio = {
     if (!def) return;
     const now = ctx.currentTime;
     if (!p.force && def.min && state.last[name] && now - state.last[name] < def.min) return;
-    state.last[name] = now;
+    const asset = state.assets[name];
     const t0 = now + (p.delay ?? 0);
+    if (def.voices) {
+      const ends = (state.playing[name] ??= []).filter((t) => t > now);
+      if (ends.length >= def.voices) return;
+      ends.push(t0 + (asset ? p.dur ?? asset.duration / (p.rate ?? 1) : def.len ?? 1));
+      state.playing[name] = ends;
+    }
+    state.last[name] = now;
     const g = ctx.createGain();
     g.gain.value = (p.vol ?? 1) * spatial(p);
     g.connect(state.master);
-    const asset = state.assets[name];
     if (asset) {
       const src = ctx.createBufferSource();
       src.buffer = asset;
