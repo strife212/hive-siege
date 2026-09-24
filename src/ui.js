@@ -152,7 +152,8 @@ export function createUI({ onSelectBuild }) {
   });
 
   const els = { credits: $('credits'), wave: $('wave'), kills: $('kills'), corehp: $('corehp'), corepct: $('corepct'), start: $('startWave') };
-  const coreStat = $('coreStat');
+  const coreStat = $('coreStat'), waveBtn = $('waveBtn');
+  const NUDGE_AFTER = 10;                                    // s of play before an unstarted wave 1 starts to glow
   const cache = {};
   const setText = (key, v) => { if (cache[key] !== v) { cache[key] = v; els[key].textContent = v; } };
 
@@ -167,6 +168,7 @@ export function createUI({ onSelectBuild }) {
     coreStat.classList.toggle('warn', core <= 0.6 && core > 0.3);
     coreStat.classList.toggle('crit', core <= 0.3);
     els.start.disabled = state.waveActive || state.gameOver;
+    waveBtn.classList.toggle('nudge', state.wave === 0 && !state.waveActive && !state.gameOver && !state.demo && state.time > NUDGE_AFTER);
     setText('start', state.waveActive
       ? `WAVE ${state.wave}  •  ${state.enemies.length + state.spawnQueue.length + state.walkQueue.length} HOSTILES`
       : `START WAVE ${state.wave + 1}`);

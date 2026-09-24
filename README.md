@@ -42,7 +42,8 @@ anything between them and your Core.
   window band, walkway and railing, and a sensor deck with a rotating radar, radome, dish and beaconed antennas.
 - **Build animation**: new structures start buried and rise out of the ground over 0.75 s with a soil spray;
   towers only start firing once fully risen.
-- **Sidebar**: Red Alert style card list grouped by category, TECH tab for research, selected-structure
+- **Sidebar**: Red Alert style card list grouped by category, TECH tab for research, a START WAVE 1 button that
+  starts pulsing with a bright glow if it has not been pressed 10 s into the game, selected-structure
   panel with sell (50% refund).
 - **Autocannon effects**: the gun assembly recoils 0.3 units on each shot (50 ms kick, 200 ms return) with an
   additive muzzle-flash sprite; a brass casing ejects from the side port, tumbles, bounces, rests on the
