@@ -7,6 +7,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { FLAT, MAP, MAPS, RECORD } from './config.js';
 import { createSky, HORIZON } from './sky.js';
 import { createQuality } from './quality.js';
+import { MOBILE } from './mobile.js';
 
 const SUN_DIR = new THREE.Vector3(45, 38, 18).normalize();
 const SHADOW_RES = 3072;
@@ -197,7 +198,7 @@ export function createScene(container) {
   }
 
   // Adaptive quality: steps the resolution and effects down if the frame rate stays low (quality.js).
-  const quality = createQuality({ renderer, composer, bloom, sun, maxRatio });
+  const quality = createQuality({ renderer, composer, bloom, sun, maxRatio, start: MOBILE ? 1 : 0 });
 
   return { renderer, scene, camera, controls, updateCamera, render, quality };
 }

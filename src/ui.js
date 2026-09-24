@@ -3,6 +3,7 @@ import { state, on, startWave, doResearch, sellStructure, hasBuilding, countBuil
 import { abilities } from './abilities.js';
 import { iconImg } from './icons.js';
 import { retract } from './retract.js';
+import { MOBILE } from './mobile.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -33,8 +34,9 @@ export function createUI({ onSelectBuild }) {
         if (el.classList.contains('maxed')) return log(`Only ${def.limit} ${def.name} allowed`, true);
         if (el.classList.contains('locked')) return log(`${def.name} requires a ${BUILDINGS[def.requires].name}`, true);
         setActive(activeBuild === key ? null : key);
+        if (MOBILE && activeBuild) desc.textContent = def.desc;
       });
-      el.addEventListener('mouseenter', () => { desc.textContent = def.desc; });
+      if (!MOBILE) el.addEventListener('mouseenter', () => { desc.textContent = def.desc; });
       buildList.appendChild(el);
       cards[key] = el;
     }
@@ -54,8 +56,12 @@ export function createUI({ onSelectBuild }) {
     const els = [h];
     for (const key of keys) {
       const r = RESEARCH[key], el = card(key, r.name, r.cost);
-      el.addEventListener('click', () => doResearch(key));
-      el.addEventListener('mouseenter', () => { desc.textContent = r.desc; });
+      el.addEventListener('click', () => {
+        if (MOBILE && techPick !== el) return pickTech(el, `${r.desc}${el.matches('.done, .locked') ? '' : ' Tap again to research.'}`);
+        pickTech(null);
+        doResearch(key);
+      });
+      if (!MOBILE) el.addEventListener('mouseenter', () => { desc.textContent = r.desc; });
       techList.appendChild(el);
       techCards.push([key, el]);
       els.push(el);
@@ -63,6 +69,14 @@ export function createUI({ onSelectBuild }) {
     const shown = type === 'global';
     for (const el of els) el.hidden = !shown;
     techGroups.push({ type, els, shown });
+  }
+  // Phone mode: the tech card tapped once (highlighted, its description showing); a second tap researches it.
+  let techPick = null;
+  function pickTech(el, text = '') {
+    techPick?.classList.remove('active');
+    techPick = el;
+    el?.classList.add('active');
+    desc.textContent = text;
   }
   const techHint = document.createElement('div');
   techHint.className = 'hint';
@@ -74,6 +88,7 @@ export function createUI({ onSelectBuild }) {
     activeBuild = key;
     for (const [k, el] of Object.entries(cards)) el.classList.toggle('active', k === key);
     if (key) { showSelected(null); abilities.cancel(); }
+    else if (MOBILE) desc.textContent = '';                  // phones show the description only while it is in use
     onSelectBuild(key);
   }
 
@@ -82,6 +97,7 @@ export function createUI({ onSelectBuild }) {
       document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('active', x === b));
       buildList.hidden = b.dataset.tab !== 'build';
       techList.hidden = b.dataset.tab !== 'tech';
+      if (MOBILE) { pickTech(null); if (b.dataset.tab === 'tech') setActive(null); }
     });
   }
 
@@ -197,7 +213,7 @@ export function createUI({ onSelectBuild }) {
       else {
         const hp = `${Math.ceil(selected.hp)} / ${selected.maxHp}`;
         if (infoHp.textContent !== hp) { infoHp.textContent = hp; infoBar.style.width = `${(selected.hp / selected.maxHp) * 100}%`; }
-        const label = selected.selling ? 'CLEARING SITE…' : `${retract.label(selected)}  [R]`;
+        const label = selected.selling ? 'CLEARING SITE…' : MOBILE ? retract.label(selected) : `${retract.label(selected)}  [R]`;
         if (siloBtn.textContent !== label) { siloBtn.textContent = label; siloBtn.disabled = !!selected.selling; }
       }
     }

@@ -506,6 +506,16 @@ export const troopers = {
     best.selected = true;
     return true;
   },
+  // Touch (no drag-select): a tap on a trooper adds the whole squad around it to the selection. Returns how many
+  // troopers that tap took (0: no trooper there).
+  selectSquad(p, radius = 5) {
+    let best = null, bd = 1.3 * 1.3;
+    for (const t of state.troopers) { const d = (t.x - p.x) ** 2 + (t.z - p.z) ** 2; if (d < bd) { bd = d; best = t; } }
+    if (!best) return 0;
+    let n = 0;
+    for (const t of state.troopers) if ((t.x - best.x) ** 2 + (t.z - best.z) ** 2 < radius * radius) { t.selected = true; n++; }
+    return n;
+  },
   // Move order: the selection fans out into rings around the clicked point so nobody fights over one spot.
   order(p) {
     const sel = state.troopers.filter((t) => t.selected);

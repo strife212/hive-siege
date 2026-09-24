@@ -456,3 +456,136 @@ body.cine #abilities, body.cine #dock, body.cine #mute, body.cine #bossbar, body
   background: linear-gradient(180deg, rgba(40, 8, 6, .88), rgba(14, 4, 4, .88)); border: 1px solid rgba(255, 90, 69, .7); clip-path: var(--notch-sm);
   text-shadow: 0 0 12px rgba(255, 60, 40, .7);
 }
+
+/* ------------------------------------------------------------------ phone mode (mobile.js adds body.mobile)
+   A landscape phone gets the same UI scaled down: a narrower sidebar with a compact HUD and three cards a row, an
+   icon-only call-in bar, the log in the top left, and a touch bar (touch aiming: what a tap does, confirm, cancel) in
+   place of the cursor hint, right-click and Esc. The key hints go. Nothing here applies outside phone mode. */
+#rotate { display: none; }
+body.mobile {
+  --side: clamp(178px, 25vw, 214px);
+  --ab: clamp(38px, calc((100vw - var(--side)) / 10 - 12px), 50px);     /* call-in button size: all ten fit in a row */
+  touch-action: pan-x pan-y;                                              /* no page pinch / double-tap zoom */
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+body.mobile #sidebar { gap: 5px; padding: 6px 6px 6px; }
+/* HUD in one row: credits, wave, and the Core's integrity as a number over a thin bar (the kill count goes) */
+body.mobile .hud { grid-template-columns: 1.3fr .8fr 1fr; gap: 3px; }
+body.mobile .stat { padding: 3px 5px 2px; }
+body.mobile .stat span { font-size: 8px; letter-spacing: .12em; }
+body.mobile .stat b { font-size: 16px; }
+body.mobile .stat.credits b::before { font-size: 11px; }
+body.mobile .stat:has(#kills) { display: none; }
+body.mobile .stat.wide { grid-column: auto; padding-bottom: 4px; }
+body.mobile .stat.wide span { display: block; font-size: 0; }
+body.mobile .stat.wide span::after { content: "CORE"; font-size: 8px; }
+body.mobile .stat.wide em { float: none; display: block; font-size: 12px; line-height: 1.1; }
+body.mobile .bar { height: 6px; margin-top: 3px; }
+body.mobile .stat.wide .bar { height: 4px; margin-top: 2px; }
+body.mobile .stat.wide .bar::after { background: repeating-linear-gradient(90deg, transparent 0 5px, rgba(4, 6, 10, .85) 5px 6px); }
+body.mobile button.big { padding: 7px 6px 6px; font-size: 13px; letter-spacing: .1em; }
+body.mobile button.big:disabled { font-size: 10.5px; letter-spacing: .05em; }
+body.mobile .tabs button { padding: 4px 0 3px; font-size: 12px; }
+body.mobile .cards { grid-template-columns: repeat(3, 1fr); gap: 4px; margin-right: -4px; padding-right: 2px; }
+body.mobile .cat { gap: 6px; margin-top: 2px; font-size: 8px; letter-spacing: .18em; }
+body.mobile .cat::before { height: 7px; }
+body.mobile .cards .hint { padding: 6px 4px 2px; font-size: 9.5px; }
+body.mobile .card { padding: 4px 2px 3px; }
+body.mobile .card .icon { height: 28px; margin: 0 2px 3px; }
+body.mobile .card .pxicon { width: 24px; height: 24px; }
+body.mobile .card .name { font-size: 9.5px; line-height: 1.1; min-height: 2.2em; }
+body.mobile .card .cost { font-size: 11px; }
+body.mobile .card::after { top: 1px; right: 6px; font-size: 7px; letter-spacing: .06em; }
+body.mobile .card:active { transform: none; }
+body.mobile #desc { min-height: 0; padding: 4px 6px; font-size: 10px; line-height: 1.3; }
+body.mobile #desc:empty { display: none; }
+/* selected structure: the stats run on as one paragraph, the two buttons side by side */
+body.mobile #infoPanel { display: grid; grid-template-columns: 1fr 1fr; column-gap: 4px; padding: 5px 6px 6px; }
+body.mobile #infoPanel > :not(button) { grid-column: 1 / -1; }
+body.mobile #infoPanel h3 { margin-bottom: 3px; font-size: 12.5px; }
+body.mobile #infoPanel .hp { font-size: 8px; }
+body.mobile #infoPanel .hp b { font-size: 11px; }
+body.mobile #infoPanel .bar { height: 5px; margin: 2px 0 4px; }
+body.mobile #infoPanel .stats { display: block; font-size: 10px; line-height: 1.3; }
+body.mobile #infoPanel .stats div { display: inline; padding-left: 0; }
+body.mobile #infoPanel .stats div::before { display: none; }
+body.mobile #infoPanel .stats div + div::before { content: " \00b7 "; display: inline; position: static; width: auto; height: auto; background: none; color: var(--accent2); opacity: 1; }
+body.mobile #infoPanel button, body.mobile #infoPanel button.sell { margin-top: 5px; padding: 6px 2px; font-size: 10.5px; letter-spacing: .06em; }
+
+body.mobile #dock { top: 46px; bottom: auto; left: 8px; width: auto; gap: 6px; }   /* below where the boss bar sits */
+body.mobile #log div { max-width: calc(100vw - var(--side) - 70px); padding: 3px 9px 3px 7px; font-size: 11px; }
+body.mobile #log div:nth-last-child(n+4) { display: none; }                         /* the latest three */
+body.mobile #help, body.mobile #cursorhint { display: none !important; }
+
+body.mobile #abilities { bottom: 5px; gap: 3px; padding: 4px; }
+body.mobile .ability { width: var(--ab); height: var(--ab); padding: 0; justify-content: center; }
+body.mobile .ability .key, body.mobile .ability .name { display: none; }
+body.mobile .ability .icon { height: auto; }
+body.mobile .ability .pxicon { width: calc(var(--ab) - 18px); height: calc(var(--ab) - 18px); }
+body.mobile .ability .cdtext { inset: 0; font-size: 17px; }
+body.mobile .ability.locked .cdtext { display: none; }                              /* the greyed icon says it */
+body.mobile .ability:hover { transform: none; }
+
+/* touch bar: above the call-in bar while something is being aimed or troopers are selected (input.js) */
+body.mobile #touchbar {
+  position: fixed; z-index: 7; left: calc((100% - var(--side)) / 2); bottom: calc(var(--ab) + 20px); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 5px; max-width: calc(100% - var(--side) - 16px); padding: 4px 4px 4px 11px;
+  background: linear-gradient(180deg, rgba(18, 24, 33, .9), rgba(7, 9, 13, .92)); border: 1px solid var(--line2);
+  clip-path: var(--notch-sm); box-shadow: 0 8px 24px rgba(0, 0, 0, .5); backdrop-filter: blur(3px);
+}
+body.mobile #touchbar span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; font-weight: 600; letter-spacing: .03em; }
+body.mobile #touchbar button {
+  flex: none; height: 32px; padding: 0 11px; cursor: pointer; border: 0; clip-path: var(--notch-sm);
+  font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: .12em;
+}
+body.mobile #touchbar .go { color: #1a1205; background: linear-gradient(180deg, var(--accent-hi), var(--accent) 48%, #d48f22); }
+body.mobile #touchbar .go:disabled { color: var(--dim); background: rgba(255, 255, 255, .06); }
+body.mobile #touchbar .x { color: #ffd9d2; background: linear-gradient(180deg, rgba(255, 90, 69, .34), rgba(255, 90, 69, .14)); box-shadow: inset 0 0 0 1px rgba(255, 90, 69, .6); }
+body.intro #touchbar, body.cine #touchbar, body.demo #touchbar { display: none; }
+
+#fullscreen {
+  position: fixed; top: 6px; right: calc(var(--side) + 41px); z-index: 25; width: 30px; height: 30px; padding: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; color: var(--text);
+  background: rgba(12, 16, 22, .82); border: 1px solid var(--line2); clip-path: var(--notch-sm); backdrop-filter: blur(3px);
+}
+body.intro #fullscreen, body.demo #fullscreen { display: none; }
+body.cine #fullscreen { opacity: 0; pointer-events: none; }
+body.mobile #mute { top: 6px; right: calc(var(--side) + 6px); }
+body.mobile.intro #mute { right: 8px; }
+
+body.mobile #bossbar { top: 8px; width: min(360px, 40vw); }
+body.mobile #bossbar span { gap: 8px; margin-bottom: 3px; font-size: 12px; letter-spacing: .34em; }
+body.mobile #bossbar .track { height: 8px; }
+body.mobile #wavebanner { top: 20%; }
+body.mobile #wavebanner b { font-size: clamp(36px, 7vw, 64px); }
+body.mobile #wavebanner span { gap: 10px; margin-top: 6px; font-size: clamp(13px, 2.2vw, 20px); }
+body.mobile #overlay small { font-size: 9px; }
+body.mobile #overlay p { margin-bottom: 8px; padding: 4px 14px; font-size: 11px; }
+body.mobile #overlay button { width: 180px; }
+body.mobile #skip { right: 12px; bottom: 10px; font-size: 10px; }
+
+/* title screen: a smaller title, and the two maps side by side with their pictures but without the blurb */
+body.mobile.demo #deploy { gap: 6px; padding-top: 4vh; }
+body.mobile #deploy small { font-size: 10px; }
+body.mobile #deploy b { font-size: clamp(36px, 7vw, 64px); }
+body.mobile #deploy i { margin: 1px 0 3px; }
+body.mobile #deploy .maps { flex-direction: row; align-items: flex-start; gap: 12px; }
+body.mobile #deploy .map { width: min(250px, 36vw); }
+body.mobile #deploy .map .label { gap: 8px; padding: 9px 10px 8px; font-size: 14px; }
+body.mobile #deploy .map .reveal { grid-template-rows: 1fr; }
+body.mobile #deploy .map .inner { padding-bottom: 8px; }
+body.mobile #deploy .map .foot { display: none; }
+body.mobile #homescreen {
+  margin: 4px 0 0; padding: 4px 12px; font-size: 11px; letter-spacing: .04em; color: var(--text);
+  background: rgba(7, 9, 13, .78); border: 1px solid var(--line); clip-path: var(--notch-sm);
+}
+
+/* a phone held upright: ask for landscape */
+@media (orientation: portrait) {
+  body.mobile #rotate {
+    position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    padding: 24px; text-align: center; background: var(--bg0);
+  }
+  body.mobile #rotate b { font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: .24em; margin-right: -.24em; color: var(--accent); }
+  body.mobile #rotate span { font-size: 14px; color: var(--muted); }
+}

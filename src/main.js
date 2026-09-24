@@ -25,6 +25,7 @@ import { retract } from './retract.js';
 import { weather } from './weather.js';
 import { flashes } from './flashes.js';
 import { perf } from './perf.js';
+import { MOBILE } from './mobile.js';
 
 const { renderer, scene, camera, controls, updateCamera, render: drawFrame, quality } = createScene(document.getElementById('app'));
 const render = () => { perf.renderStart(); drawFrame(); perf.renderEnd(); };     // timed for the perf overlay
@@ -35,7 +36,7 @@ init(scene);
 
 let input;
 const ui = createUI({ onSelectBuild: (type) => input.setBuild(type) });
-input = createInput({ renderer, camera, scene, terrain, ui });
+input = createInput({ renderer, camera, scene, terrain, ui, controls });
 initParticles(scene);
 initEffects(scene);
 flashes.init(scene, camera);
@@ -54,6 +55,44 @@ const muteBtn = document.getElementById('mute');
 audio.onMute((m) => { muteBtn.innerHTML = iconImg(m ? 'sound_off' : 'sound_on', 16); muteBtn.classList.toggle('off', m); });
 muteBtn.addEventListener('pointerdown', (e) => e.stopPropagation());      // not a skip-intro / place-building click
 muteBtn.addEventListener('click', () => { audio.toggleMute(); muteBtn.blur(); });
+if (MOBILE) {
+  document.getElementById('skip').textContent = 'TAP TO SKIP';
+  // Full screen gives a phone back the height its browser bars take. A page can only ask for it from a tap, and it
+  // ends when the page reloads (picking a map on the title screen is a reload), so the game asks on its first tap
+  // (usually the one that skips the landing) and the button toggles it after that. Leaving full screen is respected:
+  // it is only asked for once per load.
+  const fsBtn = document.getElementById('fullscreen'), root = document.documentElement;
+  if (document.fullscreenEnabled && root.requestFullscreen) {
+    const enter = () => root.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
+    if (!DEMO) {
+      addEventListener('pointerup', function first(e) {
+        removeEventListener('pointerup', first, true);
+        if (!document.fullscreenElement && !e.target.closest?.('#fullscreen')) enter();   // the button does it itself
+      }, true);
+    }
+    const fsIcon = () => {
+      const on = !!document.fullscreenElement;       // corner brackets pointing out (enter) or in (leave)
+      fsBtn.innerHTML = `<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8">${on
+        ? '<path d="M6 1v5H1M10 1v5h5M6 15v-5H1M10 15v-5h5"/>'
+        : '<path d="M1 6V1h5M15 6V1h-5M1 10v5h5M15 10v5h-5"/>'}</svg>`;
+    };
+    fsIcon();
+    fsBtn.hidden = false;
+    document.addEventListener('fullscreenchange', fsIcon);
+    fsBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    fsBtn.addEventListener('click', () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else enter();
+    });
+  } else if (DEMO && navigator.standalone === false) {
+    // iPhone Safari has no full-screen API for pages. A game added to the home screen opens without the browser bars
+    // though (the apple-mobile-web-app-capable tag in index.html), so the title screen says how.
+    const tip = document.createElement('p');
+    tip.id = 'homescreen';
+    tip.textContent = 'For full screen: tap Share, then Add to Home Screen.';
+    document.getElementById('deploy').appendChild(tip);
+  }
+}
 
 const demo = DEMO ? startDemo({ camera, controls }) : null;
 const intro = DEMO ? null : playIntro({
@@ -88,6 +127,7 @@ function tick(dt) {
   if (!state.gameOver) { update(dt); troopers.update(dt); }
   if (MAPS[MAP].population && state.enemies.length < MAPS[MAP].population) spawnMany(Math.min(25, MAPS[MAP].population - state.enemies.length));   // test range refills from the rim
   abilities.update(dt);
+  input.update();
   updateEffects(dt);
   flashes.update(dt);
   audio.update();

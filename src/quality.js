@@ -8,7 +8,8 @@
 // frame rate on battery): those two steps are handed back and the level is left alone from then on.
 //
 // The level is kept for the browser tab (sessionStorage), so the title screen's finding carries into the game.
-// ?quality=0..4 forces a level and turns the automatic part off (for testing).
+// A fresh tab starts at `start` (phones start at level 1: mobile.js). ?quality=0..4 forces a level and turns the
+// automatic part off (for testing).
 const TARGET_FPS = 45;
 const WINDOW = 2000, WARMUP = 3000, SETTLE = 1500, HITCH = 150;
 const MIN_GAIN = 1.05;                          // a step has to buy at least 5% more frames to count as helping
@@ -24,9 +25,9 @@ const LEVELS = [
   { pr: 0.7, msaa: 0, shadow: 1024, bloom: false },
 ];
 
-export function createQuality({ renderer, composer, bloom, sun, maxRatio }) {
+export function createQuality({ renderer, composer, bloom, sun, maxRatio, start = 0 }) {
   const forced = new URLSearchParams(location.search).get('quality');
-  let level = 0, locked = false;
+  let level = start, locked = false;
   try { const s = JSON.parse(sessionStorage.getItem(KEY)); if (s) ({ level, locked } = s); } catch { /* fresh start */ }
   if (forced !== null) { level = Math.max(0, Math.min(LEVELS.length - 1, Number(forced) || 0)); locked = true; }
 

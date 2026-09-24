@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- iPhone: opened from the home screen, the game runs without the browser bars (Safari has no full-screen API) -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Hive Siege" />
   <title>Hive Siege — Alien Base Defense</title>
   <link rel="stylesheet" href="/src/style.css" />
 </head>
@@ -58,6 +62,8 @@
   </div>
 
   <button id="mute" title="Mute / unmute (M)"></button>
+  <button id="fullscreen" type="button" aria-label="Full screen" hidden></button>
+  <div id="touchbar" hidden></div>
   <div id="bossbar" hidden><span id="bossname">COLOSSUS</span><div class="track"><div id="bossfill"></div></div></div>
   <div id="wavebanner"><b></b><span></span></div>
   <div id="strategic"><b></b><span></span></div>
@@ -86,6 +92,7 @@
     </div>
   </div>
   <div id="skip">PRESS ANY KEY TO SKIP</div>
+  <div id="rotate"><b>ROTATE YOUR DEVICE</b><span>Hive Siege is played in landscape.</span></div>
 
   <script type="module" src="/src/main.js"></script>
 </body>

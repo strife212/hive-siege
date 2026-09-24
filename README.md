@@ -21,6 +21,28 @@ anything between them and your Core.
 | Esc / RMB click | Cancel placement, deselect |
 | Shift+click | Keep placing the same building (walls always do) |
 
+### Phones (landscape)
+
+A touch screen the size of a phone (`src/mobile.js`: coarse pointer, shorter side <= 540 px) gets phone mode: the
+same UI scaled down (narrower sidebar, one-row HUD without the kill count, three cards a row, icon-only call-in bar,
+log top left, no key hints, a title screen without the map blurbs), a rotate prompt when held upright, and render
+quality starting at level 1. Where the browser has the Fullscreen API (Android) the game goes full screen on its first
+tap (not on the title screen: picking a map reloads the page, which ends it) and a button toggles it after that.
+iPhone Safari has none, so its title screen suggests Add to Home Screen, which opens the game without browser bars
+(`apple-mobile-web-app-capable`). `?mobile` forces it, `?mobile=0` turns
+it off. Desktop is untouched: every rule is under `body.mobile`.
+
+| Touch | Action |
+| --- | --- |
+| Tap | Aim: put down the building's ghost, or the call-in's target ring. Tap it again (or the bar's BUILD / FIRE) to commit |
+| Tap a structure / trooper | Select it (a trooper brings its whole squad); tap the ground to move troopers |
+| One-finger drag | Pan (while the Orbital Laser burns: steer it) |
+| Pinch / two-finger drag | Zoom / rotate and tilt |
+| Bar's CANCEL / RELEASE | Cancel placement or a call-in, release troopers |
+| Tech card | First tap shows what it does, a second tap researches it |
+
+Aiming then committing is on for any touch screen (tablets too); the touch bar is phone mode only.
+
 ## What is in the prototype
 
 - **Terrain**: analytic domain-warped simplex heightmap (`src/terrain.js`) with a flatter plateau around
@@ -121,7 +143,7 @@ anything between them and your Core.
   recompiles. Frames over 150 ms (compiles, GC, tab switches) are ignored unless ten come in a row, nothing is judged
   for 3 s after loading or 1.5 s after a change, and if two steps in a row buy under 5% more frames (CPU-bound, or the
   browser capping the frame rate on battery) they are handed back and the level is frozen. The level lasts for the tab
-  (sessionStorage), so the title screen's verdict carries into the game. `?quality=0..4` forces a level; the perf
+  (sessionStorage), so the title screen's verdict carries into the game; phones start a fresh tab at level 1. `?quality=0..4` forces a level; the perf
   overlay shows it (`Q2 · 85%`); `window.__quality` in the console.
 - **Enemies**: procedural insectoids built from a small rig: segmented abdomen with glossy chitin plates,
   six two-segment legs (hip / femur / knee), mandibles, antennae, glow spots or spikes. Skitterers (fast,
@@ -301,5 +323,6 @@ anything between them and your Core.
     src/scene.js     renderer, lights, reflection probe, post chain (bloom/tone map), RTS camera controls
     src/game.js      game state, placement, towers, enemy AI, waves
     src/ui.js        sidebar DOM
-    src/input.js     raycast picking, ghost preview, click handling
+    src/input.js     raycast picking, ghost preview, click handling, touch aiming and the phone touch bar
+    src/mobile.js    phone-mode detection (body.mobile)
     src/main.js      bootstrap + loop

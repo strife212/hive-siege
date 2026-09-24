@@ -36,7 +36,7 @@ const rnd = (a = 0, b = 1) => a + Math.random() * (b - a);
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const easeOut = (p) => 1 - Math.pow(1 - clamp01(p), 3);
 
-const ab = { scene: null, ui: null, camera: null, controls: null, cine: null, armed: null, anchor: null, cooldowns: {}, effects: [], reticle: null, hover: null, laser: null, buttons: {} };
+const ab = { scene: null, ui: null, camera: null, controls: null, cine: null, armed: null, anchor: null, seq: 0, cooldowns: {}, effects: [], reticle: null, hover: null, laser: null, buttons: {} };
 
 // ---------------------------------------------------------------- terrain-draped shapes
 function gridGeo(nu, nv, fn, lift = 0.12) {
@@ -1041,6 +1041,8 @@ export const abilities = {
   get armed() { return ab.armed; },
   get cinematic() { return ab.cine; },                          // camera driver while a cinematic strike owns the view (main.js)
   get laserActive() { return !!ab.laser; },
+  get anchored() { return !!ab.anchor; },                        // the bomber's run is pinned, its heading is next
+  get seq() { return ab.seq; },                                  // changes on every arm / cancel (input.js: touch aiming)
   arm(key) {
     if (locked(key)) return log(`${ABILITIES[key].name} requires a ${BUILDINGS[ABILITIES[key].requires].name}`, true);
     if (ab.cooldowns[key] > 0) return log(`${ABILITIES[key].name} recharging (${Math.ceil(ab.cooldowns[key])} s)`, true);
@@ -1049,16 +1051,19 @@ export const abilities = {
     ab.ui.cancel();
     ab.ui.showSelected(null);
     ab.armed = key;
+    ab.seq++;
     showHint();
     refreshBar();
   },
   cancel() {
     ab.armed = null;
+    ab.seq++;
     ab.anchor = null;
     showHint();
     if (ab.reticle) { disposeGroup(ab.reticle); ab.reticle = null; }
     refreshBar();
   },
+  steer(p) { if (p && ab.laser) ab.laser.guide(p); },          // the Orbital Laser's beam, if one is burning
   hover(p) {
     if (p && ab.laser) ab.laser.guide(p);
     if (!ab.armed) return;
