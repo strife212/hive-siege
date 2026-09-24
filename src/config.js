@@ -1,4 +1,4 @@
-export const VERSION = '1.6';                 // shown on the main menu; goes up by 0.1 with every commit
+export const VERSION = '1.7';                 // shown on the main menu; goes up by 0.1 with every commit
 export const MAP_SIZE = 80;
 export const HALF = MAP_SIZE / 2;
 export const CELL = 2;
@@ -38,8 +38,10 @@ export const BUILDINGS = {
   },
   // Walkable: bugs path straight over it and never attack it (game.js). One mine goes off per bug that steps on the
   // tile, then the field re-arms for `rearm` s; once all `mines` are spent a new set takes `reload` s.
+  // silo: false: no silo. The mines are fired down from orbit (mines.js), never retract, and stay out through the
+  // strategic strike.
   mine: {
-    name: 'Minefield', cost: 100, hp: 120, cat: 'STRUCTURES', walkable: true,
+    name: 'Minefield', cost: 100, hp: 120, cat: 'STRUCTURES', walkable: true, silo: false,
     mines: 5, damage: 80, rearm: 1, reload: 30,
     desc: 'Five pressure mines on one tile. Bugs walk straight over it: each one that steps on it sets a mine off (80 damage, enough for a skitterer). Re-arms 1 s after each blast; once all five are spent a new set takes 30 s.',
   },

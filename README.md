@@ -86,7 +86,9 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
 - **Buildings**: Wall, Minefield ($100: five pressure mines on one tile that bugs walk straight over and never attack;
   each bug that steps on it sets the nearest mine off for 80 damage, enough for a skitterer at any wave before the hive
   adapts; the field re-arms 1 s after a blast, and once all five are spent a new set takes 30 s, with a see-through
-  countdown clock over the tile and the spent mines shown as ghosts), HMG Turret (10 rounds/s instant tracers, low damage, short range), Autocannon (guided projectile), Dual Autocannon (two barrels, two shells per salvo,
+  countdown clock over the tile and the spent mines shown as ghosts; it has no silo: its mines are fired down from
+  orbit one after another as glowing streaks that slam into the dirt, it cannot be retracted, it stays out through
+  the strategic strike, and selling digs it up on the spot), HMG Turret (10 rounds/s instant tracers, low damage, short range), Autocannon (guided projectile), Dual Autocannon (two barrels, two shells per salvo,
   casings from both sides), Flamethrower (short-range gravity-arced fire stream; every bug in its 24° cone is
   set burning for 3 s at 14 damage/s, refreshed while it stays in the stream, with flames on the bug), Laser Tower (hitscan beam, needs a Research Lab),
   Refinery (+3 credits/s), Research Lab (unlocks laser + research).
@@ -241,7 +243,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   AI and the separation pass, lifted and tumbled by the swarm renderer) and `e.stun`.
 - **Strategic Nuclear Strike** (key 0, `src/strategic.js`, needs a Strategic Uplink Tower): a last resort played as a cinematic. It arms like the other
   call-ins, with INITIATE STRATEGIC LAUNCH riding above the cursor (no ground marker); any click on the map launches it.
-  Every structure and the Core retract into their silos; then a 10 s beeping countdown ("STRATEGIC LAUNCH DETECTED /
+  Every structure (minefields excepted: they stay out) and the Core retract into their silos; then a 10 s beeping countdown ("STRATEGIC LAUNCH DETECTED /
   IMPACT IN n") while a giant ICBM comes down on the centre of the map. With 7 s to go the camera leaves the player,
   rides alongside the missile, then races ahead to watch it land. The shock front crosses the whole map killing every
   bug it reaches (and any troopers left outside), with fires and burn scars across the basin. A Colossus is the exception:
@@ -280,7 +282,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
     shadows as well as casting them.
   - **Sky rim on bugs**: a cool rim along the top of each bug's silhouette (`swarm.rim`), so dark shells stand out
     from the dark ground at strategy-camera distance.
-- **Retractable buildings** (`src/retract.js`): every structure (and the Core) stands on an elevator in its own silo.
+- **Retractable buildings** (`src/retract.js`): every structure but the minefield (and the Core) stands on an elevator in its own silo.
   One reversible timeline drives the whole cycle: collar lock bolts spin free, weapons stow pointing straight up (rail
   sled stands on end, mortar tube goes vertical, silo hatches shut, wall link arms pull in, Core pylons draw up), the
   platform sinks down a lit shaft on spinning drive screws, two blast doors swing up and slam, and a hub lock and the

@@ -21,7 +21,7 @@ import { puff } from './particles.js';
 import { acid } from './acid.js';
 import { flashes } from './flashes.js';
 import { wallBatch } from './walls.js';
-import { mineBatch } from './mines.js';
+import { mineBatch, dropField, updateDrop, clearDrop } from './mines.js';
 import { hpBars, makeHpBar, setHpBar } from './hpbars.js';
 import { uploadUsed } from './instancing.js';
 
@@ -181,7 +181,9 @@ export function placeStructure(type, i, j, opts = {}) {
   s.bar.position.set(x, y + new THREE.Box3().setFromObject(s.mesh).max.y - s.baseY + 0.5, z);
   s.bar.visible = false;
   state.scene.add(s.bar);
-  if (!opts.instant) {
+  if (opts.instant) { /* simply there */ }
+  else if (def.silo === false) dropField(s);                     // minefields are fired down from orbit (mines.js)
+  else {
     if (def.kind === 'airship') airshipArrive(s);                // the pad comes up empty; its ship flies in
     retract.install(s);                                          // arrives locked down in its silo and deploys (retract.js)
     burst(x, y + 0.2, z, 'soil', 8 * s.cells.length, 3 + s.cells.length);
@@ -201,6 +203,12 @@ export function sellStructure(s) {
   state.credits += refund;
   log(`Sold ${s.name} for ${refund} credits`);
   s.selling = true;
+  if (s.def.silo === false) {                                    // no silo to sink into: dug up on the spot
+    burst(s.x, s.y + 0.2, s.z, 'soil', 8, 3);
+    puff(s.x, s.y + 0.3, s.z, { color: 0x9a7a55, size: 1.6, grow: 1.5, life: 0.9, opacity: 0.45 });
+    removeStructure(s);
+    return;
+  }
   retract.sell(s, () => removeStructure(s));                     // it retracts into its silo, then the site is cleared
 }
 
@@ -209,6 +217,7 @@ function removeStructure(s) {
   if (s.def?.kind === 'heli') removeHeli(s);
   if (s.def?.kind === 'airship') removeAirship(s);
   if (s.snd) { s.snd.stop(); s.snd = null; }
+  clearDrop(s);
   retract.drop(s);
   state.scene.remove(s.mesh, s.bar);
   if (s.cells) for (const [i, j] of s.cells) state.occ.delete(cellKey(i, j));
@@ -1173,6 +1182,7 @@ function updateEnemies(dt) {
 // then needs def.rearm s before the next mine can go off, and once all are spent def.reload s to lay a new set (the
 // clock over the tile: mines.js). Nothing attacks a field (see blocker); in its silo it is idle and safe.
 function updateMines(s, dt) {
+  if (s.landing && updateDrop(s, dt)) return;              // still coming down from orbit
   const d = s.def, ud = s.mesh.userData;
   if (s.reload > 0) {
     s.reload -= dt;

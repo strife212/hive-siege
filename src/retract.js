@@ -335,6 +335,10 @@ function finishDeploy(s) {
 // Closed hatches left behind by sold buildings: they sink out of sight, then the ground closes over them.
 const orphans = [];
 
+// Minefields have no silo (def.silo === false): they are fired down from orbit instead (mines.js) and stay out, so
+// every command below leaves them alone.
+const fixed = (s) => s.def?.silo === false;
+
 export const retract = {
   // A freshly placed building starts locked down and deploys straight away.
   install(s) {
@@ -346,10 +350,10 @@ export const retract = {
     openHole(s, true);
     pose(s);
   },
-  retract(s) { if (!s.selling && !(s.silo && s.silo.target > 0) && !s.pending) { s.pending = true; if (s.def?.kind === 'heli' && !s.evac) s.recall = true; if (s.def?.kind === 'airship') s.castOff = true; } },
-  deploy(s) { if (s.selling) return; s.pending = false; if (s.silo) begin(s, 0, DROP_RATE); else s.recall = s.castOff = false; },
-  toggle(s) { if (s.pending || (s.silo && s.silo.target > 0)) this.deploy(s); else this.retract(s); },
-  sell(s, done) { s.onDown = done; s.pending = true; if (s.def?.kind === 'heli') s.recall = true; if (s.def?.kind === 'airship') s.castOff = true; },
+  retract(s) { if (fixed(s)) return; if (!s.selling && !(s.silo && s.silo.target > 0) && !s.pending) { s.pending = true; if (s.def?.kind === 'heli' && !s.evac) s.recall = true; if (s.def?.kind === 'airship') s.castOff = true; } },
+  deploy(s) { if (s.selling || fixed(s)) return; s.pending = false; if (s.silo) begin(s, 0, DROP_RATE); else s.recall = s.castOff = false; },
+  toggle(s) { if (fixed(s)) return; if (s.pending || (s.silo && s.silo.target > 0)) this.deploy(s); else this.retract(s); },
+  sell(s, done) { if (fixed(s)) { done(); return; } s.onDown = done; s.pending = true; if (s.def?.kind === 'heli') s.recall = true; if (s.def?.kind === 'airship') s.castOff = true; },
   isDown: (s) => !!s.silo && s.silo.t >= s.silo.T,
   // Cinematics: put a building straight into either end state with no animation (then retract() / deploy() from there).
   snap(s, down) {

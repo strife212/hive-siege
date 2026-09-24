@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeBuildingMesh } from './entities.js';
 import { uploadUsed, instancePool } from './instancing.js';
+import { puff } from './particles.js';
+import { audio } from './audio.js';
+import { state, burst } from './game.js';
 
 // Minefields, drawn like walls (walls.js): every field keeps its group (s.mesh) and its five mine frames for position,
 // the silo and visibility, and the mines themselves are instances: one InstancedMesh per part of the mine model for the
@@ -101,6 +104,7 @@ function sync() {
     if (!shown(g)) continue;                               // locked down in its silo
     const { mines, spent, reload } = g.userData;
     for (let k = 0; k < mines.length; k++) {
+      if (!mines[k].visible) continue;                     // not fired yet (orbital drop)
       const f = mines[k].matrixWorld;
       if (spent[k]) { if (ng < CAP) ghost.setMatrixAt(ng++, f); continue; }
       if (np >= CAP) continue;
@@ -120,6 +124,98 @@ function sync() {
   clock.mesh.geometry.instanceCount = nc;
   uploadUsed(clock.iPos, nc);
   uploadUsed(clock.iLeft, nc);
+}
+
+// ---------------------------------------------------------------- orbital drop
+// A field is not built: its mines are fired down from orbit one after another, each a glowing streak trailing smoke
+// along the line it comes in on, and slam into the ground in a spray of dirt. The field arms once the last is down.
+const DROP_H = 55, FALL = 0.5, GAP = 0.13, STREAK = 7, FADE = 0.3;
+const DROP_DIR = new THREE.Vector3(0.3, 1, -0.2).normalize();     // where they come in from
+const streakGeo = new THREE.CylinderGeometry(0.02, 0.13, 1, 8, 1, true).translate(0, 0.5, 0);   // widest at the mine
+const headGeo = new THREE.SphereGeometry(0.34, 12, 8);                                               // re-entry glow round the mine
+const glowMat = new THREE.MeshBasicMaterial({ color: 0xffc27a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+const _up = new THREE.Vector3(0, 1, 0);
+
+export function dropField(s) {
+  const mines = s.mesh.userData.mines;
+  s.landing = {
+    t: 0,
+    rest: mines.map((m) => m.position.clone()),           // where each one comes to rest (on the ground under it)
+    streaks: mines.map(() => null), smoke: mines.map(() => 0), down: mines.map(() => false), fade: mines.map(() => 0),
+  };
+  for (const m of mines) m.visible = false;
+  audio.play('artillery_whistle', { x: s.x, z: s.z, vol: 0.3 });
+}
+
+// Per frame while a field is landing. Returns true until every mine is down and its streak has faded.
+export function updateDrop(s, dt) {
+  const L = s.landing, mines = s.mesh.userData.mines;
+  L.t += dt;
+  let busy = false;
+  mines.forEach((m, k) => {
+    const u = (L.t - k * GAP) / FALL;
+    if (u < 0) { busy = true; return; }
+    const rest = L.rest[k], wx = s.x + rest.x, wz = s.z + rest.z;
+    if (!L.down[k]) {
+      m.visible = true;
+      m.position.copy(rest).addScaledVector(DROP_DIR, DROP_H * Math.max(0, 1 - u));
+      if (!L.streaks[k]) {
+        const st = new THREE.Group(), mat = glowMat.clone();
+        const tail = new THREE.Mesh(streakGeo, mat);
+        tail.quaternion.setFromUnitVectors(_up, DROP_DIR);
+        tail.scale.set(1, STREAK, 1);
+        st.add(tail, new THREE.Mesh(headGeo, mat));
+        st.renderOrder = 5;
+        st.userData.mat = mat;
+        state.scene.add(st);
+        L.streaks[k] = st;
+      }
+      const y = s.baseY + m.position.y;
+      L.streaks[k].position.set(s.x + m.position.x, y + 0.08, s.z + m.position.z);
+      if ((L.smoke[k] -= dt) <= 0) {                        // a smoke trail hanging along its path
+        L.smoke[k] = 0.06;
+        puff(s.x + m.position.x, y + 0.3, s.z + m.position.z, { color: 0x6a625a, size: 0.5, grow: 1.2, life: 0.9, opacity: 0.35 });
+      }
+      if (u >= 1) {                                         // impact
+        L.down[k] = true;
+        m.position.copy(rest);
+        const gy = s.baseY + rest.y;
+        burst(wx, gy + 0.2, wz, 'soil', 6, 4);
+        puff(wx, gy + 0.2, wz, { color: 0xfff0c8, size: 1.4, life: 0.12, opacity: 0.9, additive: true });
+        for (let n = 0; n < 3; n++) {
+          const a = Math.random() * 6.283;
+          puff(wx, gy + 0.25, wz, { color: 0x9a7a55, size: 0.7, grow: 1.4, life: 0.8, opacity: 0.45, vx: Math.cos(a) * 1.6, vz: Math.sin(a) * 1.6, vy: 0.6, drag: 2.5 });
+        }
+        audio.play('blast_door', { x: wx, z: wz, vol: 0.2 });
+        state.shake += 0.015;
+      }
+      busy = true;
+      return;
+    }
+    const st = L.streaks[k];                                 // down: its streak fades where it came in
+    if (!st) return;
+    L.fade[k] += dt;
+    st.userData.mat.opacity = 0.9 * Math.max(0, 1 - L.fade[k] / FADE);
+    st.children[1].scale.setScalar(1 + 2 * L.fade[k] / FADE);   // the glow flares out as it dies
+    if (L.fade[k] >= FADE) { endStreak(L, k); return; }
+    busy = true;
+  });
+  if (!busy) s.landing = null;
+  return busy;
+}
+
+function endStreak(L, k) {
+  const st = L.streaks[k];
+  if (!st) return;
+  state.scene.remove(st);
+  st.userData.mat.dispose();
+  L.streaks[k] = null;
+}
+// A field removed mid-drop: take its streaks away with it.
+export function clearDrop(s) {
+  if (!s.landing) return;
+  s.landing.streaks.forEach((_, k) => endStreak(s.landing, k));
+  s.landing = null;
 }
 
 export const mineBatch = {

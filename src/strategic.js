@@ -89,9 +89,10 @@ export function strategicStrike({ scene, camera, controls, setCinematic }) {
   const spin = rnd(0, 6.28);
   fliers.forEach((s, k) => { s.evac = { ang: spin + (k / fliers.length) * Math.PI * 2 + rnd(-0.25, 0.25) }; });
 
-  // everything still standing goes to shelter; buildings the player had already retracted stay the player's business
+  // everything still standing goes to shelter; buildings the player had already retracted stay the player's business,
+  // and minefields (no silo) stay out on the field
   const mine = [];
-  for (const s of state.structures) if (!s.selling && !s.pending && !(s.silo && s.silo.target > 0)) { retract.retract(s); mine.push(s); }
+  for (const s of state.structures) if (s.def?.silo !== false && !s.selling && !s.pending && !(s.silo && s.silo.target > 0)) { retract.retract(s); mine.push(s); }
   // Hold the attack until the base is back: no more spawns, and a wave cleared by the blast does not start the next one
   // while everything is still underground (game.js updateWave). Lifted once the view is handed back and every sheltered
   // structure is up again, plus a breather.

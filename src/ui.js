@@ -117,7 +117,8 @@ export function createUI({ onSelectBuild }) {
     info.hidden = !s;
     if (!s) return;
     infoName.textContent = s.name;
-    sellBtn.hidden = siloBtn.hidden = s.type === 'core';
+    sellBtn.hidden = s.type === 'core';
+    siloBtn.hidden = s.type === 'core' || s.def?.silo === false;   // minefields have no silo
     const d = s.def || {};
     sellBtn.textContent = `SELL  +$${Math.floor((d.cost || 0) * 0.5)}`;
     const stats = d.kind === 'flame'

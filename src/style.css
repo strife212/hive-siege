@@ -511,6 +511,7 @@ body.mobile #infoPanel .stats div { display: inline; padding-left: 0; }
 body.mobile #infoPanel .stats div::before { display: none; }
 body.mobile #infoPanel .stats div + div::before { content: " \00b7 "; display: inline; position: static; width: auto; height: auto; background: none; color: var(--accent2); opacity: 1; }
 body.mobile #infoPanel button, body.mobile #infoPanel button.sell { margin-top: 5px; padding: 6px 2px; font-size: 10.5px; letter-spacing: .06em; }
+body.mobile #infoPanel button.silo[hidden] + button.sell { grid-column: 1 / -1; }                 /* no silo: sell alone */
 
 body.mobile #dock { top: 46px; bottom: auto; left: 8px; width: auto; gap: 6px; }   /* below where the boss bar sits */
 body.mobile #log div { max-width: calc(100vw - var(--side) - 70px); padding: 3px 9px 3px 7px; font-size: 11px; }
