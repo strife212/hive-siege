@@ -83,7 +83,10 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
 - **Fire shader** (`src/flame.js`): flamethrower streams and burning bugs are one instanced quad mesh whose fragment
   shader shapes each flame from scrolling fbm noise, erodes it with age and ramps white-hot to orange, red and sooty
   smoke; premultiplied blending makes the core add light while the smoke occludes.
-- **Buildings**: Wall, HMG Turret (10 rounds/s instant tracers, low damage, short range), Autocannon (guided projectile), Dual Autocannon (two barrels, two shells per salvo,
+- **Buildings**: Wall, Minefield ($100: five pressure mines on one tile that bugs walk straight over and never attack;
+  each bug that steps on it sets the nearest mine off for 80 damage, enough for a skitterer at any wave before the hive
+  adapts; the field re-arms 1 s after a blast, and once all five are spent a new set takes 30 s, with a see-through
+  countdown clock over the tile and the spent mines shown as ghosts), HMG Turret (10 rounds/s instant tracers, low damage, short range), Autocannon (guided projectile), Dual Autocannon (two barrels, two shells per salvo,
   casings from both sides), Flamethrower (short-range gravity-arced fire stream; every bug in its 24° cone is
   set burning for 3 s at 14 damage/s, refreshed while it stays in the stream, with flames on the bug), Laser Tower (hitscan beam, needs a Research Lab),
   Refinery (+3 credits/s), Research Lab (unlocks laser + research).
@@ -128,7 +131,8 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
 - **Draw calls**: a building's fixed parts are merged into one mesh per material when it is built (`src/bake.js`);
   anything the game moves or toggles must be reachable from the building's userData so it stays separate. Merged
   parts carry their own local coordinates for the wear shader (`wearPos` / `wearNrm`), so they look identical.
-  Every placed wall is drawn by six instanced meshes (`src/walls.js`). Instance buffers upload only the part in use,
+  Every placed wall is drawn by six instanced meshes (`src/walls.js`), every mine in every minefield by five more,
+  and all the reload clocks by one (`src/mines.js`). Instance buffers upload only the part in use,
   explosions and ordnance share their geometry, and the sky is drawn after the opaque scene so it only shades the
   pixels that still show sky. A 79-structure base went from about 4,000 draw calls a frame to under 1,000.
   Building HP bars (`src/hpbars.js`, a sprite-equivalent shader), spent casings and gibs are instanced too (shared

@@ -197,7 +197,7 @@ const blocked = (x, z) => {
   if (Math.abs(x) > FLAT - 1 || Math.abs(z) > FLAT - 1 || isScenery(x, z)) return true;
   const c = worldToCell(x, z);
   const st = state.occ.get(cellKey(c.i, c.j));
-  return !!st && !st.buried;                                     // closed blast doors can be walked over
+  return !!st && !st.buried && !st.def?.walkable;                // closed blast doors and minefields can be walked over
 };
 
 function spawnTrooper(x, z, tx, tz) {

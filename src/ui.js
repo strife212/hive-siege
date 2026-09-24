@@ -127,6 +127,7 @@ export function createUI({ onSelectBuild }) {
       : d.kind === 'airship' ? `Patrols ${d.range} · 2x${d.gatRounds} gatling · 2x${d.hmgRounds} HMG · ${d.shells} shells (${d.artDamage}) · ${d.bombs} bombs (${d.bombDamage}) · ${d.rearm} s rearm`
       : d.kind === 'heli' ? `Patrols ${d.range} · ${d.rounds} x ${d.damage} gatling + ${d.rockets} x ${d.rocketDamage} rockets · ${d.rearm} s rearm`
       : d.kind === 'rail' ? `Range ${d.range} · ${d.damage} piercing bolt · ${d.charge} s charge`
+      : d.mines ? `${d.mines} mines · ${d.damage} damage each · Re-arms in ${d.rearm} s · New set ${d.reload} s after the last`
       : d.kind
       ? `Range ${d.range} · Damage ${d.damage} · ${d.rate}/s ${d.kind}`
       : d.income ? `+${d.income} credits / s` : '';

@@ -1,4 +1,4 @@
-export const VERSION = '1.5';                 // shown on the main menu; goes up by 0.1 with every commit
+export const VERSION = '1.6';                 // shown on the main menu; goes up by 0.1 with every commit
 export const MAP_SIZE = 80;
 export const HALF = MAP_SIZE / 2;
 export const CELL = 2;
@@ -35,6 +35,13 @@ export const BUILDINGS = {
   wall: {
     name: 'Wall', cost: 25, hp: 320, cat: 'STRUCTURES',
     desc: 'Cheap barrier. Bugs have to chew through it to reach the Core.',
+  },
+  // Walkable: bugs path straight over it and never attack it (game.js). One mine goes off per bug that steps on the
+  // tile, then the field re-arms for `rearm` s; once all `mines` are spent a new set takes `reload` s.
+  mine: {
+    name: 'Minefield', cost: 100, hp: 120, cat: 'STRUCTURES', walkable: true,
+    mines: 5, damage: 80, rearm: 1, reload: 30,
+    desc: 'Five pressure mines on one tile. Bugs walk straight over it: each one that steps on it sets a mine off (80 damage, enough for a skitterer). Re-arms 1 s after each blast; once all five are spent a new set takes 30 s.',
   },
   hmg: {
     name: 'HMG Turret', cost: 85, hp: 170, cat: 'DEFENSE',

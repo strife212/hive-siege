@@ -747,6 +747,29 @@ function researchLab(g) {
 
 // ---------------------------------------------------------------- Strategic Uplink Tower
 M.dish = worn(new THREE.MeshStandardMaterial({ color: 0xe4e8ec, roughness: 0.4, metalness: 0.2, side: THREE.DoubleSide }), { grime: 0.18, chips: 0.25 });
+// Minefield: five pressure mines laid in a quincunx on one tile. Each mine is its own frame (userData.mines) so it can be
+// shown spent and re-armed on its own; placed fields are drawn instanced (mines.js), and game.js sits every mine on the
+// ground under it.
+M.mineLed = new THREE.MeshStandardMaterial({ color: 0xff3020, emissive: 0xff2010, emissiveIntensity: 0.4, roughness: 0.4 });   // blinks
+function minefield(g) {
+  const mines = [];
+  [[-0.5, -0.5], [0.5, -0.5], [0, 0], [-0.5, 0.5], [0.5, 0.5]].forEach(([x, z], k) => {
+    const m = new THREE.Group();
+    m.position.set(x, 0.15, z);
+    m.rotation.y = k * 1.9;                                                          // each one laid a little differently
+    m.add(mesh(new THREE.CylinderGeometry(0.27, 0.3, 0.1, 18), M.olive, 0, 0.05, 0));            // casing
+    m.add(mesh(new THREE.CylinderGeometry(0.301, 0.301, 0.026, 18, 1, true), M.amber, 0, 0.036, 0));   // hazard band
+    m.add(mesh(new THREE.CylinderGeometry(0.21, 0.26, 0.04, 18), M.olive, 0, 0.12, 0));          // top
+    m.add(mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.05, 14), M.black, 0, 0.155, 0));         // pressure plate
+    m.add(mesh(bevelBox(0.09, 0.05, 0.09), M.dark, 0.3, 0.06, 0));                               // arming plug
+    m.add(mesh(new THREE.SphereGeometry(0.03, 8, 6), M.mineLed, 0.18, 0.145, 0));               // armed light
+    g.add(m);
+    mines.push(m);
+  });
+  g.userData.mines = mines;
+  g.userData.tick = (dt, t) => { M.mineLed.emissiveIntensity = (t % 1.1) < 0.14 ? 5 : 0.4; };  // shared: every field blinks in step
+}
+
 M.aviation = new THREE.MeshStandardMaterial({ color: 0xff3020, emissive: 0xff2010, emissiveIntensity: 0.3, roughness: 0.4 });   // blinks (uplink tick)
 
 // A thin open cylinder from a to b (lattice members, guy wires, cable runs); merged by the caller.
@@ -949,6 +972,7 @@ export function makeBuildingMesh(type) {
   const g = new THREE.Group();
   switch (type) {
     case 'wall': wallSegment(g); break;
+    case 'mine': minefield(g); break;
     case 'heli': makeHelipad(g); break;
     case 'airship': makeAirshipPad(g); break;
     case 'hmg': hmg(g); break;
@@ -1033,9 +1057,9 @@ export function makeBuildingMesh(type) {
     case 'uplink': uplinkTower(g); break;
     case 'core': commandTower(g); break;
   }
-  // Foundation sunk into the ground under everything but walls and the (air-dropped) Core, so a building on a slope
-  // shows a footing on its downhill side instead of daylight under the base plate.
-  if (type !== 'wall' && type !== 'core') {
+  // Foundation sunk into the ground under everything but walls, mines (each sits on the ground itself) and the
+  // (air-dropped) Core, so a building on a slope shows a footing on its downhill side instead of daylight under the base.
+  if (type !== 'wall' && type !== 'core' && type !== 'mine') {
     const round = ROUND_FOOTING[type];
     const [w, d] = BUILDINGS[type].size || [1, 1];
     const geo = round ? new THREE.CylinderGeometry(round[0], round[0] * 1.05, 1.6, round[1]) : bevelBox(w * 2 - 0.2, 1.6, d * 2 - 0.2);

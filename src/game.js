@@ -21,6 +21,7 @@ import { puff } from './particles.js';
 import { acid } from './acid.js';
 import { flashes } from './flashes.js';
 import { wallBatch } from './walls.js';
+import { mineBatch } from './mines.js';
 import { hpBars, makeHpBar, setHpBar } from './hpbars.js';
 import { uploadUsed } from './instancing.js';
 
@@ -79,6 +80,7 @@ export function init(scene) {
   acid.init(scene);
   flame.init(scene);
   wallBatch.init(scene);
+  mineBatch.init(scene);
   hpBars.init(scene);
   casingMesh = makeCasings(MAX_CASINGS);
   scene.add(casingMesh);
@@ -173,6 +175,7 @@ export function placeStructure(type, i, j, opts = {}) {
   s.mesh = makeBuildingMesh(type);
   s.baseY = y - 0.15;
   s.mesh.position.set(x, s.baseY, z);
+  if (def.mines) for (const m of s.mesh.userData.mines) m.position.y = heightAt(x + m.position.x, z + m.position.z) - s.baseY - 0.02;   // each mine on the ground under it
   state.scene.add(s.mesh);
   s.bar = makeHpBar(1.2 + 0.4 * s.cells.length);
   s.bar.position.set(x, y + new THREE.Box3().setFromObject(s.mesh).max.y - s.baseY + 0.5, z);
@@ -187,6 +190,7 @@ export function placeStructure(type, i, j, opts = {}) {
   state.flowDirty = true;
   state.structures.push(s);
   if (type === 'wall') { refreshWalls(i, j); wallBatch.add(s.mesh); }     // walls are drawn instanced (walls.js)
+  if (def.mines) mineBatch.add(s.mesh);                                    // so are mines (mines.js)
   state.credits -= def.cost;
   return s;
 }
@@ -1039,7 +1043,7 @@ function updateCasings(dt) {
 function acidTarget(e, range) {
   let best = null, bd = range;
   for (const s of state.structures) {
-    if (s.type === 'wall' || s.buried || s.hp <= 0) continue;
+    if (s.type === 'wall' || s.def?.walkable || s.buried || s.hp <= 0) continue;
     const d = Math.hypot(s.x - e.x, s.z - e.z) - (s.cells && s.cells.length > 1 ? 1.6 : 0.7);    // to its near side
     if (d < bd) { bd = d; best = s; }
   }
@@ -1071,11 +1075,12 @@ function updateSpitter(e, dt) {
 }
 
 const _dir = { x: 0, z: 0 };
-const blocker = (i, j) => { const st = state.occ.get(cellKey(i, j)); return st && !st.buried ? st : null; };   // retracted buildings are not in the way
+// What stands in a bug's way (and gets chewed): not retracted buildings, and not minefields, which bugs walk over.
+const blocker = (i, j) => { const st = state.occ.get(cellKey(i, j)); return st && !st.buried && !st.def?.walkable ? st : null; };
 const PREY_RANGE = 16;                 // bugs this close to a trooper go for it before anything else
 function updateEnemies(dt) {
   if (state.flowDirty || state.time - state.flowBuilt > 1.5) {
-    flow.build(state.structures.filter((s) => !s.buried || s === state.core), state.core);   // bugs walk straight over closed blast doors
+    flow.build(state.structures.filter((s) => (!s.buried || s === state.core) && !s.def?.walkable), state.core);   // bugs walk straight over closed blast doors and minefields
     state.flowDirty = false;
     state.flowBuilt = state.time;
   }
@@ -1163,6 +1168,40 @@ function updateEnemies(dt) {
   });
 }
 
+// ---------------------------------------------------------------- minefields
+// The first bug on a field's tile sets off the armed mine nearest to it, and that bug alone takes the blast. The field
+// then needs def.rearm s before the next mine can go off, and once all are spent def.reload s to lay a new set (the
+// clock over the tile: mines.js). Nothing attacks a field (see blocker); in its silo it is idle and safe.
+function updateMines(s, dt) {
+  const d = s.def, ud = s.mesh.userData;
+  if (s.reload > 0) {
+    s.reload -= dt;
+    ud.reload = Math.max(0.001, s.reload / d.reload);
+    if (s.reload <= 0) { s.reload = 0; ud.reload = 0; ud.spent.fill(false); s.arm = 0; }
+    return;
+  }
+  if (s.arm > 0) { s.arm -= dt; return; }
+  const h = CELL / 2;
+  let hit = null;
+  eachEnemy(s.x, s.z, CELL * 0.75, (e) => {
+    if (e.dead || e.held || e.emerge < 1 || Math.abs(e.x - s.x) > h || Math.abs(e.z - s.z) > h) return false;
+    hit = e;
+    return true;
+  });
+  if (!hit) return;
+  let k = -1, best = Infinity;
+  ud.mines.forEach((m, n) => {
+    const dd = (s.x + m.position.x - hit.x) ** 2 + (s.z + m.position.z - hit.z) ** 2;
+    if (!ud.spent[n] && dd < best) { best = dd; k = n; }
+  });
+  const m = ud.mines[k];
+  ud.spent[k] = true;
+  damageEnemy(hit, d.damage);
+  explode(s.x + m.position.x, s.z + m.position.z, 0.8, 0, 0.8, { shake: 0.04, smoke: 5 });   // the look only: the damage is the bug's
+  s.arm = d.rearm;
+  if (ud.spent.every(Boolean)) { s.reload = d.reload; ud.reload = 1; }
+}
+
 // ---------------------------------------------------------------- effects
 function updateEffects(dt) {
   let alive = 0;
@@ -1206,6 +1245,7 @@ export function update(dt) {
     }
     s.padDown = false;
     if (s.def?.kind) updateTower(s, dt);
+    if (s.def?.mines) updateMines(s, dt);
     if (s.mesh.userData.guns) updateRecoil(s, dt);
     if (s.mesh.userData.pitch && !s.target) aimPitch(s, null, dt);
     if (s.elev && !s.target) { s.elev *= Math.exp(-3 * dt); const hd = s.mesh.userData.head; if (hd) hd.rotation.x = s.elev; }   // guns settle back level

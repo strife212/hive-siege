@@ -38,6 +38,12 @@ const DRAW = {
     for (const x of [4, 9]) { p.rect(x, 7, 1, 2, 's'); p.rect(x, 13, 1, 1, 's'); }
     p.rect(2, 5, 4, 1, 'd').rect(7, 5, 4, 1, 'd').rect(12, 5, 2, 1, 'd').rect(5, 8, 4, 1, 'd').rect(10, 8, 4, 1, 'd').rect(2, 11, 4, 1, 'd').rect(7, 11, 4, 1, 'd');
   },
+  mine(p) {                                                                                         // pressure mine, armed
+    p.rows(7, [[3, 10], [2, 12], [2, 12], [2, 12], [3, 10]], 'o').rect(2, 10, 12, 1, 'O').rect(3, 11, 10, 1, 'O');   // casing
+    p.rows(5, [[5, 6], [4, 8], [4, 8]], 's').rect(5, 5, 6, 1, 'd').rect(4, 7, 8, 1, 'k');                          // plate
+    p.rect(3, 8, 10, 1, 'O').px(12, 8, 'r').px(12, 7, 'r').px(13, 6, 'c');                                          // seam, light
+    p.px(1, 3, 'a').px(2, 2, 'y').px(14, 2, 'a').px(13, 1, 'y');                                                    // sparks
+  },
   hmg(p) {
     p.line(5, 13, 7, 10, 's').line(10, 13, 8, 10, 's').rect(7, 9, 2, 2, 's');       // tripod
     p.rect(3, 6, 6, 3, 'o').rect(3, 6, 6, 1, 'G').rect(2, 7, 1, 2, 'O');              // receiver + grip
