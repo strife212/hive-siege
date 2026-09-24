@@ -103,6 +103,12 @@ anything between them and your Core.
   HP-scaled cost so bugs route through gaps or chew the cheapest wall); separation, targeting and area damage go
   through a spatial hash (`src/spatial.js`). Particles, gibs and decals are budgeted. Waves grow quadratically and
   spawn in batches; `?stress=2000` drops 2000 bugs at once for testing (`__spawnMany(n)` in the console).
+- **Draw calls**: a building's fixed parts are merged into one mesh per material when it is built (`src/bake.js`);
+  anything the game moves or toggles must be reachable from the building's userData so it stays separate. Merged
+  parts carry their own local coordinates for the wear shader (`wearPos` / `wearNrm`), so they look identical.
+  Every placed wall is drawn by six instanced meshes (`src/walls.js`). Instance buffers upload only the part in use,
+  explosions and ordnance share their geometry, and the sky is drawn after the opaque scene so it only shades the
+  pixels that still show sky. A 79-structure base went from about 4,000 draw calls a frame to under 1,000.
 - **Enemies**: procedural insectoids built from a small rig: segmented abdomen with glossy chitin plates,
   six two-segment legs (hip / femur / knee), mandibles, antennae, glow spots or spikes. Skitterers (fast,
   weak, purple with bioluminescent spots) and Brutes (from wave 3: armoured, horned, bone spikes). From wave 3

@@ -9,6 +9,15 @@ import { ENEMIES } from './config.js';
 // (plus one for shadows) instead of thirty meshes each.
 
 const CAPACITY = 4096;
+
+// Upload only the first n instances: the buffers are sized for the worst case, and sending all of them every frame
+// moved megabytes over the bus however few were in use. Nothing past n is drawn, so it can stay stale.
+function upload(attr, n) {
+  attr.clearUpdateRanges();
+  if (n <= 0) return;
+  attr.addUpdateRange(0, n * attr.itemSize);
+  attr.needsUpdate = true;
+}
 const PART = { BODY: 0, FEMUR: 1, TIBIA: 2, MANDIBLE: 3, ANTENNA: 4, CANNON: 5, SAC: 6 };
 
 // ---------------------------------------------------------------- rig construction (low-poly, then baked)
@@ -432,15 +441,15 @@ export const swarm = {
     const total = enemies.length + corpses.length;
     for (const sp of Object.values(species)) {
       sp.mesh.count = sp.n;
-      sp.mesh.instanceMatrix.needsUpdate = true;
-      sp.iAnim.needsUpdate = true;
-      sp.iBurn.needsUpdate = true;
-      if (sp.armed) sp.iAim.needsUpdate = true;
+      upload(sp.mesh.instanceMatrix, sp.n);
+      upload(sp.iAnim, sp.n);
+      upload(sp.iBurn, sp.n);
+      if (sp.armed) upload(sp.iAim, sp.n);
       sp.mesh.castShadow = total < 900;          // shadows for a horde cost a second full pass
     }
     bars.geometry.instanceCount = nb;
-    iBar.needsUpdate = true;
-    iHp.needsUpdate = true;
+    upload(iBar, nb);
+    upload(iHp, nb);
   },
 
   rim: uRim,

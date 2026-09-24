@@ -258,6 +258,7 @@ function quiet(s) {
 // Height of the building in its stowed pose, measured from its own origin (the docked airship is not part of it).
 const _box = new THREE.Box3(), _b = new THREE.Box3();
 function stowedHeight(s) {
+  if (s.mesh.userData.stowHeight !== undefined) return s.mesh.userData.stowHeight;   // instanced walls have no meshes (walls.js)
   const skip = s.mesh.userData.ship;
   STOW[s.type]?.(s, capture(s, true), 1);
   s.mesh.updateMatrixWorld(true);

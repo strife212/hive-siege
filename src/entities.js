@@ -4,6 +4,7 @@ import { makeAirshipPad } from './airship.js';
 import { bevelBox, softBox, worn } from './surface.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BUILDINGS } from './config.js';
+import { bakeStatic } from './bake.js';
 
 // Yellow / black chevron tape for pit edges and hatch surrounds.
 function hazardTexture() {
@@ -934,6 +935,7 @@ function uplinkTower(g) {
   g.add(mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 6), M.dark, -1.05, 1.75, 0.9));
 
   const slew0 = Math.PI * 0.25;
+  g.userData.slew = slew;                                                                              // it turns: bake.js keeps it apart
   g.userData.tick = (dt, t) => {
     slew.rotation.y = slew0 + 0.55 * Math.sin(t * 0.13) + 0.2 * Math.sin(t * 0.31);                  // holding the link as the bird crosses the sky
     M.aviation.emissiveIntensity = (t % 1.6) < 0.22 ? 6 : 0.3;                                         // shared: every tower blinks in step
@@ -1039,7 +1041,7 @@ export function makeBuildingMesh(type) {
     g.add(mesh(geo, M.footing, 0, -0.79, 0));
   }
   g.traverse((o) => { if (o.isMesh) { o.castShadow = !o.material.transparent; o.receiveShadow = true; } });
-  return g;
+  return bakeStatic(g);                                    // fixed parts merged per material: far fewer draw calls
 }
 
 export function ghostify(group, ok) {

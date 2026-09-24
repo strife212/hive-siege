@@ -46,16 +46,18 @@ export function impactRing(x, y, z, radius) {
   } });
 }
 
-// Generic explosion: flash, fireball, smoke, shockwave, debris, scorch, damage, shake, sound.
+// Generic explosion: flash, fireball, smoke, shockwave, debris, scorch, damage, shake, sound. The fireball and ring
+// shapes are shared (each blast scales its own mesh); only the materials, which fade separately, are per blast.
+const ballGeo = new THREE.SphereGeometry(1, 16, 12), blastRingGeo = new THREE.RingGeometry(0.85, 1, 32);
 export function explode(x, z, size, dmg, radius, o = {}) {
   const y = heightAt(x, z);
   puff(x, y + size * 0.4, z, { color: 0xfff2c0, size: size * 3, life: 0.16, opacity: 1, additive: true });
   flashes.add(x, y + 1 + size * 0.5, z, { color: o.color ?? 0xff9a48, power: 24 * size, range: 7 + 5 * size, life: 0.35 + size * 0.12 });   // lights up its surroundings
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12),
+  const ball = new THREE.Mesh(ballGeo,
     new THREE.MeshBasicMaterial({ color: o.color ?? 0xff8a30, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
   ball.position.set(x, y + size * 0.35, z);
   scene.add(ball);
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 32),
+  const ring = new THREE.Mesh(blastRingGeo,
     new THREE.MeshBasicMaterial({ color: 0xffc080, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
   ring.rotation.x = -Math.PI / 2;
   ring.position.set(x, y + 0.2, z);
@@ -84,19 +86,20 @@ export function explode(x, z, size, dmg, radius, o = {}) {
       ball.material.color.setHex(p < 0.4 ? 0xffd070 : (o.color ?? 0xff7020));
       ring.scale.setScalar(0.5 + radius * 1.6 * easeOut(clamp01(t / 0.5)));
       ring.material.opacity = 0.8 * (1 - clamp01(t / 0.5));
-      if (t >= 0.6) { scene.remove(ball, ring); ball.geometry.dispose(); ball.material.dispose(); ring.geometry.dispose(); ring.material.dispose(); return false; }
+      if (t >= 0.6) { scene.remove(ball, ring); ball.material.dispose(); ring.material.dispose(); return false; }
       return true;
     },
   });
 }
 
 // Railgun bolt: a thick white core with a cyan sheath along a line, sparks where it passes, fades in 0.4 s.
+const boltCoreGeo = new THREE.CylinderGeometry(0.16, 0.16, 1, 8, 1, true), boltSheathGeo = new THREE.CylinderGeometry(0.55, 0.55, 1, 12, 1, true);
 export function railBeam(from, to) {
   const g = new THREE.Group();
   flashes.add(from.x, from.y, from.z, { color: 0x8fdcff, power: 40, range: 12, life: 0.4 });
-  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 1, 8, 1, true),
+  const core = new THREE.Mesh(boltCoreGeo,
     new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-  const sheath = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1, 12, 1, true),
+  const sheath = new THREE.Mesh(boltSheathGeo,
     new THREE.MeshBasicMaterial({ color: 0x6fd8ff, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
   g.add(core, sheath);
   _v.subVectors(to, from);
@@ -116,7 +119,7 @@ export function railBeam(from, to) {
     const p = clamp01(t / 0.4);
     g.scale.x = g.scale.z = 1 - p;
     core.material.opacity = 1 - p;
-    if (p >= 1) { scene.remove(g); core.geometry.dispose(); core.material.dispose(); sheath.geometry.dispose(); sheath.material.dispose(); return false; }
+    if (p >= 1) { scene.remove(g); core.material.dispose(); sheath.material.dispose(); return false; }
     return true;
   } });
 }

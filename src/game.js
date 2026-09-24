@@ -20,6 +20,7 @@ import { flame } from './flame.js';
 import { puff } from './particles.js';
 import { acid } from './acid.js';
 import { flashes } from './flashes.js';
+import { wallBatch } from './walls.js';
 
 export const state = {
   scene: null,
@@ -75,6 +76,7 @@ export function init(scene) {
   gore.init(scene);
   acid.init(scene);
   flame.init(scene);
+  wallBatch.init(scene);
   const core = {
     id: nextId++, type: 'core', name: 'Core', hp: 1000, maxHp: 1000,
     x: 0, z: 0, y: heightAt(0, 0), cells: [], cooldown: 0,
@@ -179,7 +181,7 @@ export function placeStructure(type, i, j, opts = {}) {
   for (const [ci, cj] of s.cells) state.occ.set(cellKey(ci, cj), s);
   state.flowDirty = true;
   state.structures.push(s);
-  if (type === 'wall') refreshWalls(i, j);
+  if (type === 'wall') { refreshWalls(i, j); wallBatch.add(s.mesh); }     // walls are drawn instanced (walls.js)
   state.credits -= def.cost;
   return s;
 }

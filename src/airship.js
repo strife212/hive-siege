@@ -236,6 +236,12 @@ function drawAmmo(ud, a, def) {
 // ---------------------------------------------------------------- behaviour
 const ALT = 12.5, SPEED = 5.2, GUN_RANGE = 17, ART_MIN = 7, ART_RANGE = 30, BOMB_RADIUS = 3.4;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
+// Ordnance shapes, shared by every shell and bomb (they used to be built per round and never freed).
+let ordGeo = null;
+const ord = () => (ordGeo ??= {
+  shell: new THREE.CapsuleGeometry(0.09, 0.3, 4, 8), bomb: new THREE.CapsuleGeometry(0.17, 0.5, 4, 10),
+  band: new THREE.CylinderGeometry(0.178, 0.178, 0.09, 10), fin: bevelBox(0.42, 0.26, 0.02),
+});
 const shells = [], bombs = [];
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -407,7 +413,7 @@ export function updateAirship(s, dt) {
       ud.art.muzzle.getWorldPosition(_a);
       const l = Math.hypot(e.fx, e.fz) || 1, dur = 0.9 + Math.hypot(e.x - _a.x, e.z - _a.z) * 0.03;
       const ex = e.x + (e.fx / l) * e.speed * dur * 0.8, ez = e.z + (e.fz / l) * e.speed * dur * 0.8;
-      const m = mk(new THREE.CapsuleGeometry(0.09, 0.3, 4, 8), mats.shell, 0, 0, 0, state.scene);
+      const m = mk(ord().shell, mats.shell, 0, 0, 0, state.scene);
       m.position.copy(_a);
       shells.push({ m, from: _a.clone(), to: new THREE.Vector3(ex, heightAt(ex, ez), ez), t: 0, dur, arc: 2.5, dmg: def.artDamage, splash: def.artSplash });
       ud.art.flash.visible = true;
@@ -425,9 +431,9 @@ export function updateAirship(s, dt) {
     if (under) {
       A.bombCd = 1 / def.bombRate; A.bombs--;
       const m = new THREE.Group();
-      mk(new THREE.CapsuleGeometry(0.17, 0.5, 4, 10), mats.bomb, 0, 0, 0, m);
-      mk(new THREE.CylinderGeometry(0.178, 0.178, 0.09, 10), mats.bombBand, 0, -0.18, 0, m);
-      for (let k = 0; k < 2; k++) mk(bevelBox(0.42, 0.26, 0.02), mats.shell, 0, 0.42, 0, m).rotation.y = k * Math.PI / 2;
+      mk(ord().bomb, mats.bomb, 0, 0, 0, m);
+      mk(ord().band, mats.bombBand, 0, -0.18, 0, m);
+      for (let k = 0; k < 2; k++) mk(ord().fin, mats.shell, 0, 0.42, 0, m).rotation.y = k * Math.PI / 2;
       ship.localToWorld(m.position.set(rnd(-0.2, 0.2), -0.1, rnd(-0.6, 0.3)));
       state.scene.add(m);
       bombs.push({ m, vx: A.vx + rnd(-0.6, 0.6), vy: -1, vz: A.vz + rnd(-0.6, 0.6), dmg: def.bombDamage, splash: def.bombSplash });

@@ -34,24 +34,27 @@ export function createSky() {
         vec3 zenith = vec3(0.015, 0.015, 0.04);
         vec3 col = mix(uHorizon, zenith, pow(smoothstep(-0.05, 0.65, t), 0.8));
         float up = smoothstep(0.0, 0.35, t);
-        col += vec3(0.28, 0.08, 0.32) * smoothstep(0.45, 0.8, fbm3(d * 3.0)) * up * 0.9;
-        col += vec3(0.05, 0.22, 0.30) * smoothstep(0.5, 0.85, fbm3(d * 4.0 + 7.0)) * up * 0.7;
-        vec3 p = d * 260.0; vec3 ip = floor(p); vec3 fp = fract(p) - 0.5;
-        float h = hash13(ip);
-        float star = smoothstep(0.14, 0.0, length(fp)) * step(0.985, h) * (0.4 + 0.6 * hash13(ip + 3.0));
-        col += star * up * 1.8;
+        if (up > 0.0) {                                  // nebula and stars only above the horizon
+          col += vec3(0.28, 0.08, 0.32) * smoothstep(0.45, 0.8, fbm3(d * 3.0)) * up * 0.9;
+          col += vec3(0.05, 0.22, 0.30) * smoothstep(0.5, 0.85, fbm3(d * 4.0 + 7.0)) * up * 0.7;
+          vec3 p = d * 260.0; vec3 ip = floor(p); vec3 fp = fract(p) - 0.5;
+          float h = hash13(ip);
+          float star = smoothstep(0.14, 0.0, length(fp)) * step(0.985, h) * (0.4 + 0.6 * hash13(ip + 3.0));
+          col += star * up * 1.8;
+        }
         // Planet
         vec3 pd = normalize(vec3(0.55, 0.22, -0.8));
         float pr = 0.11;
         float dist = distance(d, pd);
         float disc = smoothstep(pr, pr - 0.004, dist);
-        vec3 lightDir = normalize(vec3(0.6, 0.6, 0.3));
-        vec3 pn = normalize(d - pd * dot(d, pd) * 0.0 - pd) ; // approx sphere normal
-        pn = normalize((d - pd) / pr + pd * sqrt(max(0.0, 1.0 - dot((d - pd) / pr, (d - pd) / pr))));
-        float lit = clamp(dot(pn, lightDir), 0.0, 1.0);
-        float bands = 0.7 + 0.3 * sin(pn.y * 22.0 + fbm3(pn * 4.0) * 3.0);
-        vec3 pcol = mix(vec3(0.35, 0.22, 0.14), vec3(0.75, 0.55, 0.35), bands) * (0.08 + lit * 1.1);
-        col = mix(col, pcol, disc * (1.0 - uStorm));
+        if (disc > 0.0) {                                // the planet's shading only where the planet is
+          vec3 lightDir = normalize(vec3(0.6, 0.6, 0.3));
+          vec3 pn = normalize((d - pd) / pr + pd * sqrt(max(0.0, 1.0 - dot((d - pd) / pr, (d - pd) / pr))));
+          float lit = clamp(dot(pn, lightDir), 0.0, 1.0);
+          float bands = 0.7 + 0.3 * sin(pn.y * 22.0 + fbm3(pn * 4.0) * 3.0);
+          vec3 pcol = mix(vec3(0.35, 0.22, 0.14), vec3(0.75, 0.55, 0.35), bands) * (0.08 + lit * 1.1);
+          col = mix(col, pcol, disc * (1.0 - uStorm));
+        }
         // Storm: a low, heavy overcast rolling across the whole sky, dark bellies and paler seams, blending into the
         // fog colour at the horizon; lightning lights the cloud deck from inside, brightest toward the strike.
         if (uStorm > 0.001) {
@@ -73,6 +76,8 @@ export function createSky() {
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(600, 48, 24), mat);
   mesh.frustumCulled = false;
-  mesh.renderOrder = -10;
+  // Drawn after every other opaque object, not before: it writes no depth and sits behind everything, so the depth
+  // test then leaves only the pixels that still show sky, instead of shading the whole screen for the ground to cover.
+  mesh.renderOrder = 1000;
   return mesh;
 }

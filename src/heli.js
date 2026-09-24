@@ -285,12 +285,14 @@ function nearestHeavy(x, z, r) {
   return best;
 }
 
+// Rocket shapes, shared by every rocket (they used to be built per shot and never freed).
+const rocketGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.6, 8).rotateX(Math.PI / 2), rocketTipGeo = new THREE.ConeGeometry(0.06, 0.18, 8).rotateX(Math.PI / 2);
 function launchRocket(h, heli, e, def) {
   const pod = heli.userData.pods[h.rocketsLeft % 2];
   heli.userData.body.localToWorld(_q.copy(pod));
   const m = new THREE.Group();
-  mk(new THREE.CylinderGeometry(0.06, 0.06, 0.6, 8).rotateX(Math.PI / 2), mats.rocket, 0, 0, 0, m);
-  mk(new THREE.ConeGeometry(0.06, 0.18, 8).rotateX(Math.PI / 2), mats.rocketTip, 0, 0, 0.39, m);
+  mk(rocketGeo, mats.rocket, 0, 0, 0, m);
+  mk(rocketTipGeo, mats.rocketTip, 0, 0, 0.39, m);
   m.position.copy(_q);
   state.scene.add(m);
   const l = Math.hypot(e.fx, e.fz) || 1, lead = _q.distanceTo(_a.set(e.x, _q.y, e.z)) / 34;

@@ -6,6 +6,15 @@ import { puff } from './particles.js';
 // bounce and skid on the terrain, then settle and sink away. Chunks are instanced per chunk type with a
 // per-instance colour, so a horde dying at once stays cheap. Oldest chunks are recycled when the pool fills.
 const CAP = 3000;
+
+// Upload only the first n instances: the buffers are sized for the worst case, and sending all of them every frame
+// moved megabytes over the bus however few were in use. Nothing past n is drawn, so it can stay stale.
+function upload(attr, n) {
+  attr.clearUpdateRanges();
+  if (n <= 0) return;
+  attr.addUpdateRange(0, n * attr.itemSize);
+  attr.needsUpdate = true;
+}
 const MAX_LIVE = 4800;                 // 6 of every 10 chunks are legs, keeps them inside CAP
 const LIFE = 4.5, SINK_AT = 3.4;
 const kinds = {};
@@ -135,8 +144,8 @@ export const gore = {
     live.length = alive;
     for (const k of Object.values(kinds)) {
       k.mesh.count = k.n;
-      k.mesh.instanceMatrix.needsUpdate = true;
-      k.mesh.instanceColor.needsUpdate = true;
+      upload(k.mesh.instanceMatrix, k.n);
+      upload(k.mesh.instanceColor, k.n);
     }
   },
   count: () => live.length,

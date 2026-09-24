@@ -62,11 +62,14 @@ export function worn(mat, { grime = 0.22, rough = 0.22, chips = 0.5, bump = 0.5,
     uWearScale: { value: scale },
     uWetW: WEATHER_U.wet, uRainW: WEATHER_U.rain, uRainTW: WEATHER_U.time,
   };
+  // The wear is looked up in the part's own local space. A part merged into a bigger mesh (bake.js) brings its original
+  // local position and normal along as wearPos / wearNrm, flagged by wearPos.w = 2; anything else reads its own.
+  mat.userData.worn = true;
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWearPos;\nvarying vec3 vWearNrm;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWearPos = position;\nvWearNrm = normal;');
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWearPos;\nvarying vec3 vWearNrm;\nattribute vec4 wearPos;\nattribute vec3 wearNrm;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nbool wearBaked = wearPos.w > 1.5;\nvWearPos = wearBaked ? wearPos.xyz : position;\nvWearNrm = wearBaked ? wearNrm : normal;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform sampler2D uWear; uniform vec4 uWearP; uniform float uWearScale;
