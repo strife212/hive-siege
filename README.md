@@ -1,6 +1,6 @@
-# Hive Siege — Alien Base Defense (proof of concept)
+# Hive Siege — Alien Base Defense
 
-A three.js base-defense prototype: build walls, towers, refineries and a research lab on a
+A three.js base-defense game: build walls, towers, refineries and a research lab on a
 procedurally generated 3D terrain, then hold off waves of insectoid aliens that chew through
 anything between them and your Core.
 
@@ -43,7 +43,7 @@ it off. Desktop is untouched: every rule is under `body.mobile`.
 
 Aiming then committing is on for any touch screen (tablets too); the touch bar is phone mode only.
 
-## What is in the prototype
+## What is in the game
 
 - **Terrain**: analytic domain-warped simplex heightmap (`src/terrain.js`) with a flatter plateau around
   the Core and ridged mountains beyond the playable square. Height is sampled analytically so bugs,
