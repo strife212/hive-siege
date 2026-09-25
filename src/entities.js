@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { makeHelipad } from './heli.js';
 import { makeAirshipPad } from './airship.js';
+import { apocalypseGun } from './apocalypse.js';
 import { bevelBox, softBox, worn } from './surface.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BUILDINGS } from './config.js';
@@ -975,6 +976,7 @@ export function makeBuildingMesh(type) {
     case 'mine': minefield(g); break;
     case 'heli': makeHelipad(g); break;
     case 'airship': makeAirshipPad(g); break;
+    case 'apoc': apocalypseGun(g); break;
     case 'hmg': hmg(g); break;
     case 'flame': flamethrower(g); break;
     case 'mortar': mortarPit(g); break;

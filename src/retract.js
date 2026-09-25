@@ -209,8 +209,8 @@ const UP = -1.36;                                                   // head pitc
 function capture(s, atRest) {
   const ud = s.mesh.userData, gun = ud.guns?.[0]?.gun;
   if (ud.head && ud.headY0 === undefined) ud.headY0 = ud.head.position.y;
-  if (atRest) return { elev: 0, pitch: ud.idlePitch ?? 0, tube: Math.PI / 6, gun: 0, hatch: 0 };
-  return { elev: ud.head?.rotation.x ?? 0, pitch: ud.pitch?.rotation.x ?? 0, tube: ud.tube?.rotation.x ?? 0, gun: gun?.rotation.x ?? 0, hatch: ud.hatch ?? 0 };
+  if (atRest) return { elev: 0, pitch: ud.idlePitch ?? 0, tube: Math.PI / 6, gun: 0, hatch: 0, cradle: -0.35 };
+  return { elev: ud.head?.rotation.x ?? 0, pitch: ud.pitch?.rotation.x ?? 0, tube: ud.tube?.rotation.x ?? 0, gun: gun?.rotation.x ?? 0, hatch: ud.hatch ?? 0, cradle: ud.cradle?.rotation.x ?? 0 };
 }
 const headUp = (lift) => (s, f, k) => {
   const head = s.mesh.userData.head;
@@ -227,6 +227,7 @@ const STOW = {
     ud.head.rotation.x = lerp(f.elev, 0, k);
     ud.guns[0].gun.rotation.x = lerp(f.gun, -1.47, k);
   },
+  apoc(s, f, k) { s.mesh.userData.cradle.rotation.x = lerp(f.cradle, -1.45, k); },      // the long barrel stands up on end to fit the shaft
   missile(s, f, k) {                                                // rack down, hatches shut (same curve as the launch cycle)
     const ud = s.mesh.userData, h = (ud.hatch = f.hatch * (1 - k));
     const e = h < 0.5 ? 2 * h * h : 1 - Math.pow(-2 * h + 2, 2) / 2;

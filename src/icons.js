@@ -103,6 +103,14 @@ const DRAW = {
     p.rect(6, 7, 4, 2, 'd').px(6, 8, 'k').px(8, 8, 'k').px(1, 9, 'b').px(14, 9, 'b').px(1, 10, 'w').px(14, 10, 'w');   // rocket pods, jet wash
     p.rect(3, 12, 10, 3, 'd').rect(3, 12, 10, 1, 'g').rect(6, 13, 1, 2, 'w').rect(9, 13, 1, 2, 'w').px(7, 13, 'w').px(8, 13, 'w');   // pad with H
   },
+  apoc(p) {
+    p.rect(1, 13, 14, 2, 's').rect(1, 13, 14, 1, 'd').px(2, 14, 'r').px(13, 14, 'r');                         // slab, lamps
+    p.rows(8, [[4, 7], [3, 9], [3, 9], [3, 9], [2, 11]], 'd').rect(4, 8, 7, 1, 'w').rect(3, 11, 9, 1, 'a');  // turret, white roof, glowing vents
+    p.line(8, 9, 14, 3, 'g').line(8, 8, 14, 2, 'g').line(8, 10, 13, 5, 's');                                   // long barrel, raised
+    p.px(10, 7, 'a').px(12, 5, 'a');                                                                          // coil rings
+    p.rect(13, 1, 3, 3, 'k').px(14, 2, 's').px(15, 0, 'y').px(15, 1, 'c');                                    // muzzle brake, flash
+    p.rect(1, 9, 2, 3, 'y').px(1, 9, 'c').px(1, 12, 'n');                                                     // spent case
+  },
   rail(p) {
     p.rect(2, 12, 9, 2, 's').rect(4, 11, 5, 1, 'd');
     p.rect(1, 5, 6, 6, 'd').rect(1, 5, 6, 1, 'g').rect(2, 7, 3, 2, 'B').px(2, 7, 'b');
@@ -252,6 +260,10 @@ const DRAW = {
   supercap(p) {                                                                                   // charged capacitor
     p.rect(5, 1, 2, 2, 'd').rect(9, 1, 2, 2, 'd').rect(4, 3, 8, 1, 'g').rect(4, 4, 8, 11, 'B').rect(5, 4, 1, 11, 'b');
     p.line(10, 5, 7, 9, 'y').rect(7, 9, 3, 1, 'y').line(9, 10, 7, 13, 'y');
+  },
+  override(p) {                                                                                   // a hand-placed target mark
+    p.disc(8, 8, 6.5, 'r').disc(8, 8, 5, null).disc(8, 8, 2.5, 'a').px(8, 8, 'c');
+    p.rect(7, 0, 2, 4, 'w').rect(7, 12, 2, 4, 'w').rect(0, 7, 4, 2, 'w').rect(12, 7, 4, 2, 'w');
   },
   penetrator(p) {                                                                                 // slug through armour
     p.rect(7, 2, 3, 12, 'd').rect(7, 2, 1, 12, 'g');

@@ -16,7 +16,7 @@ import { blackHoleBomb } from './blackhole.js';
 
 // ---------------------------------------------------------------- definitions
 export const ABILITIES = {
-  laser:     { name: 'Orbital Laser',    key: '1', cooldown: 20, radius: 1.65, desc: 'Sustained beam that follows your cursor for 6 s.' },
+  laser:     { name: 'Orbital Laser',    key: '1', cooldown: 20, radius: 2.9, desc: 'Sustained beam that follows your cursor for 6 s.' },
   lance:     { name: 'Orbital Lance',    key: '2', cooldown: 25, radius: 5.5, desc: 'Orbital beams converge into one devastating strike.' },
   strafe:    { name: 'Strafing Run',     key: '3', cooldown: 25, length: 24, width: 6.6, desc: 'Three jets rake a long strip with rockets and cannon fire.' },
   artillery: { name: 'Artillery Strike', key: '4', cooldown: 25, radius: 7.6, desc: 'Two dozen HE shells rain across the area.' },
@@ -36,7 +36,9 @@ const rnd = (a = 0, b = 1) => a + Math.random() * (b - a);
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const easeOut = (p) => 1 - Math.pow(1 - clamp01(p), 3);
 
-const ab = { scene: null, ui: null, camera: null, controls: null, cine: null, armed: null, anchor: null, seq: 0, cooldowns: {}, effects: [], reticle: null, hover: null, laser: null, buttons: {} };
+const ab = { scene: null, ui: null, camera: null, controls: null, cine: null, armed: null, anchor: null, seq: 0, cooldowns: {}, effects: [], reticle: null, hover: null, laser: null, buttons: {}, designate: null };
+// While a building borrows the targeting (abilities.designate), ab.armed is 'designate' and ab.designate stands in for its def.
+const defOf = (key) => (key === 'designate' ? ab.designate : ABILITIES[key]);
 
 // ---------------------------------------------------------------- terrain-draped shapes
 function gridGeo(nu, nv, fn, lift = 0.12) {
@@ -58,8 +60,8 @@ function gridGeo(nu, nv, fn, lift = 0.12) {
   geo.setIndex(idx);
   return geo;
 }
-const discGeo = (cx, cz, r) => gridGeo(48, 4, (u, v) => [cx + Math.cos(u * Math.PI * 2) * v * r, cz + Math.sin(u * Math.PI * 2) * v * r]);
-const ringGeo = (cx, cz, r, w) => gridGeo(64, 1, (u, v) => { const rr = r - w + v * w; return [cx + Math.cos(u * Math.PI * 2) * rr, cz + Math.sin(u * Math.PI * 2) * rr]; });
+export const discGeo = (cx, cz, r) => gridGeo(48, 4, (u, v) => [cx + Math.cos(u * Math.PI * 2) * v * r, cz + Math.sin(u * Math.PI * 2) * v * r]);
+export const ringGeo = (cx, cz, r, w) => gridGeo(64, 1, (u, v) => { const rr = r - w + v * w; return [cx + Math.cos(u * Math.PI * 2) * rr, cz + Math.sin(u * Math.PI * 2) * rr]; });
 function rectGeo(cx, cz, dx, dz, len, wid) {
   const px = -dz, pz = dx;
   return gridGeo(16, 4, (u, v) => [cx + dx * (u - 0.5) * len + px * (v - 0.5) * wid, cz + dz * (u - 0.5) * len + pz * (v - 0.5) * wid]);
@@ -191,11 +193,12 @@ function orbitalLance(x, z, R) {
 
 // ---------------------------------------------------------------- Orbital Laser (cursor guided)
 function orbitalLaser(x, z) {
+  const R = ABILITIES.laser.radius, K = R / 1.65;                // K: size relative to the original 1.65 m beam
   const P = new THREE.Vector3(x, heightAt(x, z), z);
   const T = new THREE.Vector3(x, 0, z);
-  const beam = makeBeam(0x5fd6ff, 0.32);
+  const beam = makeBeam(0x5fd6ff, 0.32 * K);
   ab.scene.add(beam);
-  const glow = puff(x, P.y + 0.3, z, { color: 0xbff4ff, size: 2.2, life: 99, opacity: 0.95, additive: true, priority: true });
+  const glow = puff(x, P.y + 0.3, z, { color: 0xbff4ff, size: 2.2 * K, life: 99, opacity: 0.95, additive: true, priority: true });
   const DUR = 6;
   let t = 0, scorchT = 0, sndT = 0;
   const snd = audio.loop('orbital_laser', { x, z });
@@ -211,14 +214,14 @@ function orbitalLaser(x, z) {
     from.set(P.x + 4, 150, P.z - 3);
     setBeam(beam, from, P, w * (0.9 + Math.random() * 0.25));
     glow.position.set(P.x, P.y + 0.3, P.z);
-    glow.scale.setScalar((2 + Math.random() * 0.6) * w);
-    for (let k = 0; k < 2; k++) puff(P.x, P.y + 0.2, P.z, { color: 0xffb060, size: 0.35, life: rnd(0.3, 0.6), opacity: 0.9, additive: true, vx: rnd(-4, 4), vz: rnd(-4, 4), vy: rnd(2, 6), grav: 12, drag: 0.5 });
-    if (Math.random() < 0.5) puff(P.x, P.y + 0.4, P.z, { color: 0x3a342e, size: 0.8, grow: 1.5, life: 1.2, opacity: 0.4, vy: rnd(1.5, 3), drag: 1 });
+    glow.scale.setScalar((2 + Math.random() * 0.6) * K * w);
+    for (let k = 0; k < 3; k++) puff(P.x + rnd(-R, R) * 0.5, P.y + 0.2, P.z + rnd(-R, R) * 0.5, { color: 0xffb060, size: 0.35, life: rnd(0.3, 0.6), opacity: 0.9, additive: true, vx: rnd(-4, 4) * K, vz: rnd(-4, 4) * K, vy: rnd(2, 6), grav: 12, drag: 0.5 });
+    if (Math.random() < 0.5) puff(P.x, P.y + 0.4, P.z, { color: 0x3a342e, size: 0.8 * K, grow: 1.5, life: 1.2, opacity: 0.4, vy: rnd(1.5, 3), drag: 1 });
     scorchT += dt;
-    if (scorchT > 0.2) { scorchT = 0; spawnScorch(ab.scene, P.x, P.z, 1.3); }
+    if (scorchT > 0.2) { scorchT = 0; spawnScorch(ab.scene, P.x, P.z, 1.3 * K); }
     sndT += dt;
     if (snd && sndT > 0.25) { sndT = 0; snd.setPos(P.x, P.z); }
-    damageCircle(P.x, P.z, 1.76, 91 * dt * w, 0.6);
+    damageCircle(P.x, P.z, R * 1.067, 91 * dt * w, 0.6);           // a touch wider than the reticle, as before
     if (t >= DUR) { disposeGroup(beam); killPuff(glow); if (snd) snd.stop(); ab.laser = null; return false; }
     return true;
   }, guide(p) { T.set(p.x, 0, p.z); } };
@@ -978,8 +981,8 @@ function archangelLance(cx, cz, R) {
 
 // ---------------------------------------------------------------- targeting / activation
 function buildReticle(key, p) {
-  const def = ABILITIES[key];
-  const color = key === 'nuke' ? 0xff4040 : key === 'strafe' ? 0xffb040 : key === 'artillery' ? 0xff8040 : key === 'troopers' ? 0x5dff8a : key === 'bomber' ? 0xff5a30 : key === 'archangel' ? 0xffe08a : key === 'blackhole' ? 0xa878ff : 0x7fe0ff;
+  const def = defOf(key);
+  const color = def.color ?? (key === 'nuke' ? 0xff4040 : key === 'strafe' ? 0xffb040 : key === 'artillery' ? 0xff8040 : key === 'troopers' ? 0x5dff8a : key === 'bomber' ? 0xff5a30 : key === 'archangel' ? 0xffe08a : key === 'blackhole' ? 0xa878ff : 0x7fe0ff);
   const g = new THREE.Group();
   if (def.global) return g;                                    // nothing to aim and nothing drawn: the cursor prompt is the whole UI
   if (def.line) {
@@ -1039,6 +1042,7 @@ export const abilities = {
     });
   },
   get armed() { return ab.armed; },
+  get armedDef() { return ab.armed ? defOf(ab.armed) : null; },  // what is armed: an ability's def, or a designation's options
   get cinematic() { return ab.cine; },                          // camera driver while a cinematic strike owns the view (main.js)
   get laserActive() { return !!ab.laser; },
   get anchored() { return !!ab.anchor; },                        // the bomber's run is pinned, its heading is next
@@ -1055,8 +1059,19 @@ export const abilities = {
     showHint();
     refreshBar();
   },
+  // Lend the targeting to a building: the same reticle, cursor prompt and click / tap-to-aim flow as an ability, but no
+  // bar button and no cooldown. opts: { name, hint, radius, color, pick(p) -> true once accepted, alive() -> false drops it }.
+  designate(opts) {
+    abilities.cancel();
+    ab.ui.cancel();
+    ab.armed = 'designate';
+    ab.designate = opts;
+    ab.seq++;
+    showHint();
+  },
   cancel() {
     ab.armed = null;
+    ab.designate = null;
     ab.seq++;
     ab.anchor = null;
     showHint();
@@ -1080,7 +1095,8 @@ export const abilities = {
   click(p) {
     if (p && ab.laser) ab.laser.guide(p);
     if (!ab.armed) return false;
-    const key = ab.armed, def = ABILITIES[key];
+    const key = ab.armed, def = defOf(key);
+    if (key === 'designate') { if (def.pick(p)) abilities.cancel(); return true; }
     if (def.line && !ab.anchor) {                              // first click: pin the run, next click sets its heading
       ab.anchor = { x: p.x, z: p.z };
       log('Bomber: now click to set the direction of the run.');
@@ -1107,7 +1123,7 @@ export const abilities = {
     for (const k of Object.keys(ab.cooldowns)) ab.cooldowns[k] = Math.max(0, ab.cooldowns[k] - dt);
     for (let k = ab.effects.length - 1; k >= 0; k--) if (!ab.effects[k].update(dt)) ab.effects.splice(k, 1);
     updateParticles(dt);
-    if (ab.armed && locked(ab.armed)) abilities.cancel();       // its enabling building was lost while armed
+    if (ab.armed === 'designate' ? !ab.designate.alive() : ab.armed && locked(ab.armed)) abilities.cancel();   // its building was lost while armed
     refreshBar();
   },
 };
@@ -1117,7 +1133,7 @@ const locked = (key) => !!ABILITIES[key].requires && !hasBuilding(ABILITIES[key]
 // Prompt that rides just above the cursor while an ability with a `hint` is armed.
 const mouse = { x: innerWidth / 2, y: innerHeight / 2 };
 function showHint() {
-  const el = document.getElementById('cursorhint'), text = ab.armed ? ABILITIES[ab.armed].hint : null;
+  const el = document.getElementById('cursorhint'), text = ab.armed ? defOf(ab.armed).hint : null;
   if (!text) { if (!el.hidden) el.hidden = true; return; }
   if (el.textContent !== text) el.textContent = text;
   el.hidden = false;
