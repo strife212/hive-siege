@@ -13,7 +13,7 @@ import { state, burst } from './game.js';
 // render, from the groups and from the state game.js keeps on them: userData.spent (one flag per mine) and
 // userData.reload (fraction of the reload still to run; 0 = no clock).
 const FIELDS = 800, CAP = FIELDS * 5;
-const CLOCK_SIZE = 1.3, CLOCK_Y = 1.45;                    // world units: disc diameter, height over the field
+const CLOCK_SIZE = 0.85, CLOCK_Y = 1.15;                    // world units: disc diameter, height over the field
 const fields = new Set();
 let parts = null, ghost = null, clock = null;
 const _m = new THREE.Matrix4(), _box = new THREE.Box3();
@@ -21,8 +21,7 @@ const _m = new THREE.Matrix4(), _box = new THREE.Box3();
 const shown = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
 
 // ---------------------------------------------------------------- countdown clock
-// A clock face: the wedge of time still to run (it starts full and the hand eats it clockwise from twelve), hour ticks,
-// a bright rim and the hand, all see-through.
+// Just the time still to run: a see-through grey disc that the passing time eats away clockwise from twelve.
 const clockVertex = `
   attribute vec3 iPos;       // clock centre, world space
   attribute float iLeft;     // fraction of the time still to run
@@ -49,28 +48,12 @@ const clockFragment = `
     vec2 p = vUv * 2.0 - 1.0;
     float r = length(p);
     float aa = fwidth(r) * 1.5;
-    float disc = 1.0 - smoothstep(1.0 - aa, 1.0, r);
-    if (disc <= 0.0) discard;
     float u = fract(atan(p.x, p.y) / 6.2831853 + 1.0);           // 0 at twelve o'clock, growing clockwise
     float done = 1.0 - vLeft;
-    vec3 col = vec3(0.02, 0.05, 0.08);
-    float a = 0.4;                                                 // the face
-    float wedge = step(done, u) * (1.0 - smoothstep(0.8 - aa, 0.8, r));
-    col = mix(col, vec3(0.25, 0.75, 1.0), wedge * 0.8);
-    a = mix(a, 0.6, wedge);
-    float rim = smoothstep(0.86 - aa, 0.86, r);
-    col = mix(col, vec3(0.62, 0.9, 1.0), rim);
-    a = mix(a, 0.85, rim);
-    float arc = abs(fract(u * 12.0 + 0.5) - 0.5) / 12.0 * 6.2831853 * r;   // distance along the rim to the nearest hour
-    float tick = (1.0 - smoothstep(0.02, 0.02 + aa, arc)) * step(0.64, r) * step(r, 0.8);
-    col = mix(col, vec3(0.9, 0.97, 1.0), tick * 0.85);
-    a = mix(a, 0.85, tick);
-    vec2 d = vec2(sin(done * 6.2831853), cos(done * 6.2831853));
-    float hand = 1.0 - smoothstep(0.05, 0.05 + aa, length(p - d * clamp(dot(p, d), 0.0, 0.76)));
-    hand = max(hand, 1.0 - smoothstep(0.1, 0.1 + aa, r));        // and its hub
-    col = mix(col, vec3(1.0), hand);
-    a = mix(a, 0.95, hand);
-    vec4 diffuseColor = vec4(col, a * disc * opacity);
+    float left = done <= 0.0 ? 1.0 : smoothstep(-aa, aa, (u - done) * 6.2831853 * r);   // soft along the moving edge
+    float a = (1.0 - smoothstep(1.0 - aa, 1.0, r)) * left;
+    if (a <= 0.0) discard;
+    vec4 diffuseColor = vec4(vec3(0.6, 0.62, 0.65), a * opacity);
     vec3 outgoingLight = diffuseColor.rgb;
     #include <opaque_fragment>
     #include <tonemapping_fragment>
@@ -86,7 +69,7 @@ function makeClocks(scene) {
   geo.setAttribute('iPos', iPos);
   geo.setAttribute('iLeft', iLeft);
   const mat = new THREE.ShaderMaterial({
-    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { size: { value: CLOCK_SIZE }, opacity: { value: 0.8 } }]),
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { size: { value: CLOCK_SIZE }, opacity: { value: 0.4 } }]),
     vertexShader: clockVertex, fragmentShader: clockFragment, fog: true, transparent: true, depthTest: false, depthWrite: false,
   });
   const mesh = new THREE.Mesh(geo, mat);

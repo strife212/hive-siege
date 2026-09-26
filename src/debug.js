@@ -16,7 +16,7 @@ export function initDebug() {
     if (e.code === 'KeyZ' && !e.repeat && !e.ctrlKey && !e.metaKey && !state.intro) el.hidden = !el.hidden;
   });
   el.addEventListener('pointerdown', (e) => e.stopPropagation());
-  document.getElementById('dbgCash').onclick = () => { state.credits += 1000; log('Debug: +1000 credits'); };
+  document.getElementById('dbgCash').onclick = () => { state.credits += 50000; log('Debug: +50,000 credits'); };
   document.getElementById('dbgWave').onclick = () => startWave(true);
   document.getElementById('dbgBoss').onclick = () => { const p = nestPosition(0, 1, Math.random() * 6.28, SPAWN_RADIUS); spawnEnemy('colossus', p.x, p.z); };
   document.getElementById('dbgSpecial').onclick = () => {        // a pack of each special from one nest

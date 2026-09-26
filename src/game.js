@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { MAPS, BOSS_EVERY, BUILDINGS, ENEMIES, SPECIALS, ANTS, RESEARCH, START_CREDITS, CELLS, MAX_SLOPE, SPAWN_RADIUS, CELL, HALF, FLAT, MAP } from './config.js';
+import { MAPS, BOSS_EVERY, BUILDINGS, ENEMIES, SPECIALS, ANTS, CORNERS, RESEARCH, START_CREDITS, CELLS, MAX_SLOPE, SPAWN_RADIUS, CELL, HALF, FLAT, MAP } from './config.js';
 import { heightAt, cellToWorld, worldToCell, cellKey, inBounds, cellSlope, nestPosition, confine, walkInPoint, approachDir, isScenery } from './terrain.js';
 import {
   makeBuildingMesh, setWallLinks,
-  makeProjectile, makeBeam, makeTracer, makeGibs, makeSpawnMarker, makeCasings, makeMortarShell, makeMissile,
+  makeProjectile, makeBeam, makeTracer, makeGibs, makeCasings, makeMortarShell, makeMissile,
 } from './entities.js';
 import { explode, railBeam } from './effects.js';
 import { spawnSplatter, updateDecals } from './decals.js';
@@ -22,6 +22,7 @@ import { acid } from './acid.js';
 import { flashes } from './flashes.js';
 import { wallBatch } from './walls.js';
 import { mineBatch, dropField, updateDrop, clearDrop } from './mines.js';
+import { burrows, PIT_R, PIT_DEPTH } from './burrows.js';
 import { hpBars, makeHpBar, setHpBar } from './hpbars.js';
 import { uploadUsed } from './instancing.js';
 
@@ -46,12 +47,13 @@ export const state = {
   demo: false,
   troopers: [],                  // player infantry (troopers.js); bugs hunt them when they get close                   // title-screen attract mode (see demo.js)
   corpses: [],
-  markers: [],
   occ: new Map(),          // "i,j" -> structure
   research: {},
   core: null,
   spawnQueue: [],
   walkQueue: [],                 // canyon: extra bugs that march in from beyond the mouth
+  cornerQueue: [],               // plains, late waves: extra bugs from the corner holes (CORNERS)
+  corners: [],
   spawnTimer: 0,
   waveHold: false,               // a strategic strike is holding the attack (strategic.js): nothing spawns, no new wave
   waveResumeAt: 0,               // ...and after it, a breather: the attack resumes at this time
@@ -268,7 +270,7 @@ function buildDefs() {
     if (type === 'missile' && R.reload) d.interval = 4;
     if (type === 'heli' && R.heliMags) { d.rounds = 160; d.rockets = 16; }
     if (type === 'airship' && R.deepMags) for (const k of ['gatRounds', 'hmgRounds', 'shells', 'bombs']) d[k] = Math.round(d[k] * 1.5);
-    if (type === 'rail' && R.supercap) d.charge = 2;
+    if (type === 'rail' && R.supercap) d.charge = 3;
     if (d.range && R.fireControl) d.range = Math.round(d.range * 1.1 * 10) / 10;
     DEFS[type] = d;
   }
@@ -361,7 +363,9 @@ function spreadNapalm(e) {
 
 // ---------------------------------------------------------------- enemies
 const HIVE_BUFF = 1.1;
-export function spawnEnemy(type, x, z, walkIn = false) {
+// from: a bug hole (burrows.js) the bug climbs out of: it starts deep in the shaft near the middle and comes up the
+// wall and over the lip on the side it faces.
+export function spawnEnemy(type, x, z, walkIn = false, from = null) {
   const def = ENEMIES[type];
   // +12% health per wave, up to the wave each species stops toughening at (hpCapWave; none = keeps scaling), times the
   // hive's adaptation to every Colossus killed so far
@@ -378,6 +382,12 @@ export function spawnEnemy(type, x, z, walkIn = false) {
   if (def.acid) Object.assign(e, { aimYaw: 0, recoil: 0, charge: 0, spitCd: 0.5 + Math.random(), scanT: Math.random() * 0.4, aim: null });
   if (def.boss) boss.init(e);
   else if (walkIn) { e.emerge = 1; e.fx = 0; e.fz = 1; }       // already above ground, marching in
+  else if (from) {
+    const dx = x - from.x, dz = z - from.z, l = Math.hypot(dx, dz) || 1, r1 = PIT_R + 0.35;
+    e.climb = { x0: x, z0: z, x1: from.x + dx / l * r1, z1: from.z + dz / l * r1 };
+    e.depth = PIT_DEPTH;
+    e.fx = dx; e.fz = dz;
+  }
   else burst(x, heightAt(x, z) + 0.2, z, 'soil', 4, 4);
   state.enemies.push(e);
   return e;
@@ -444,9 +454,8 @@ export function burst(x, y, z, kind, n, spread = 8) {
 // force (debug): pile the next wave on top of whatever is still coming.
 export function startWave(force = false) {
   if ((state.waveActive && force !== true) || state.gameOver) return;
-  const carry = state.waveActive ? { q: state.spawnQueue, w: state.walkQueue } : null;
-  for (const m of state.markers) state.scene.remove(m);
-  state.markers.length = 0;
+  const carry = state.waveActive ? { q: state.spawnQueue, w: state.walkQueue, c: state.cornerQueue } : null;
+  burrows.closeAll();                                      // a forced wave: the old holes give way to the new ones
   state.wave++;
   const n = state.wave;
   state.waveActive = true;
@@ -481,15 +490,31 @@ export function startWave(force = false) {
   for (let k = 0; k < nests; k++) {
     const { x, z } = nestPosition(k, nests, base, SPAWN_RADIUS);
     state.nests.push({ x, z });
-    const m = makeSpawnMarker();
-    m.position.set(x, heightAt(x, z) + 0.15, z);
-    state.scene.add(m);
-    state.markers.push(m);
+    burrows.open(x, z);                                    // the nest erupts out of the ground (burrows.js)
+  }
+  // Plains, late waves: four smaller contributions from holes in the diagonal corners, the same mix as the rest
+  state.cornerQueue = [];
+  state.corners = [];
+  if (MAP !== 'canyon' && n >= CORNERS.from) {
+    for (let k = Math.round(q.length * CORNERS.share); k > 0; k--) state.cornerQueue.push(q[Math.floor(Math.random() * q.length)]);
+    const c = FLAT - CORNERS.inset;
+    for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const x = sx * c + (Math.random() - 0.5) * 3, z = sz * c + (Math.random() - 0.5) * 3;
+      state.corners.push({ x, z });
+      burrows.open(x, z);
+    }
   }
   if (n % BOSS_EVERY === 0) { const at = state.nests[0]; spawnEnemy('colossus', at.x, at.z); }
   listeners.wave.forEach((f) => f(n, n % BOSS_EVERY === 0));
-  if (carry) { state.spawnQueue = carry.q.concat(state.spawnQueue); state.walkQueue = carry.w.concat(state.walkQueue); }
-  log(`Wave ${n}: ${q.length} bugs incoming from ${nests} nest${nests > 1 ? 's' : ''}${state.walkQueue.length ? `, ${state.walkQueue.length} more marching up the canyon` : ''}!`, true);
+  if (carry) {                                             // a forced wave on top: what was still to come comes too
+    state.spawnQueue = carry.q.concat(state.spawnQueue);
+    state.walkQueue = carry.w.concat(state.walkQueue);
+    if (state.corners.length) state.cornerQueue = carry.c.concat(state.cornerQueue);
+    else state.spawnQueue = state.spawnQueue.concat(carry.c);
+  }
+  const extra = state.walkQueue.length ? `, ${state.walkQueue.length} more marching up the canyon`
+    : state.cornerQueue.length ? `, ${state.cornerQueue.length} more from the corners` : '';
+  log(`Wave ${n}: ${q.length} bugs incoming from ${nests} nest${nests > 1 ? 's' : ''}${extra}!`, true);
 }
 
 function updateWave(dt) {
@@ -498,31 +523,32 @@ function updateWave(dt) {
     if (state.nextWave && !held) { state.nextWave = false; startWave(); }
     return;
   }
-  if (state.spawnQueue.length || state.walkQueue.length) {
+  if (state.spawnQueue.length || state.walkQueue.length || state.cornerQueue.length) {
     if (held) return;                                      // the rest of the wave waits at the nests
     state.spawnTimer -= dt;
     if (state.spawnTimer <= 0) {
       state.spawnTimer = 0.3;
       const walkers = Math.min(state.walkQueue.length, Math.ceil(state.walkQueue.length / 40));
       for (let k = 0; k < walkers; k++) { const p = walkInPoint(); spawnEnemy(state.walkQueue.pop(), p.x, p.z, true); }
+      const fromHole = (list, holes) => {                  // deep in one of the holes, climbing out
+        const nest = holes[Math.floor(Math.random() * holes.length)];
+        const a = Math.random() * Math.PI * 2, r = 0.15 + Math.random() * 0.45;
+        spawnEnemy(list.pop(), nest.x + Math.cos(a) * r, nest.z + Math.sin(a) * r, false, nest);
+      };
       const batch = Math.min(state.spawnQueue.length, Math.ceil(state.spawnQueue.length / 60));   // big waves pour out faster
-      for (let k = 0; k < batch; k++) {
-        const nest = state.nests[Math.floor(Math.random() * state.nests.length)];
-        const a = Math.random() * Math.PI * 2, r = Math.random() * 5;
-        spawnEnemy(state.spawnQueue.pop(), nest.x + Math.cos(a) * r, nest.z + Math.sin(a) * r);
-      }
+      for (let k = 0; k < batch; k++) fromHole(state.spawnQueue, state.nests);
+      const side = Math.min(state.cornerQueue.length, Math.ceil(state.cornerQueue.length / 60));  // the corners: a steady trickle
+      for (let k = 0; k < side; k++) fromHole(state.cornerQueue, state.corners);
     }
   } else if (state.enemies.length === 0) {
     state.waveActive = false;
     const bonus = 50 + state.wave * 25;
     state.credits += bonus;
-    for (const m of state.markers) state.scene.remove(m);
-    state.markers.length = 0;
+    burrows.closeAll();
     log(`Wave ${state.wave} cleared! +${bonus} credit bonus`);
     if (held) state.nextWave = true;                       // not while the base is still sheltering from a strike
     else startWave();                                      // only the first wave waits for the button
   }
-  for (const m of state.markers) m.scale.setScalar(1 + 0.15 * Math.sin(state.time * 6));
 }
 
 // ---------------------------------------------------------------- towers
@@ -1102,7 +1128,15 @@ function updateEnemies(dt) {
     if (e.boss) { boss.update(e, dt); continue; }
     if (e.held) continue;                                   // in a black hole's grip: blackhole.js moves it
     if (e.stun > 0) { e.stun -= dt; e.lunge = Math.max(0, e.lunge - dt * 4); continue; }   // just landed, getting its legs back
-    if (e.emerge < 1) { e.emerge = Math.min(1, e.emerge + dt / 0.6); continue; }
+    if (e.emerge < 1) {
+      e.emerge = Math.min(1, e.emerge + dt / (e.climb ? 1.1 : 0.6));
+      if (e.climb) {                                        // up the middle of the shaft, then over the lip at the very end
+        const c = e.climb, up = 1 - Math.pow(1 - e.emerge, 3), w = up ** 6;
+        e.x = c.x0 + (c.x1 - c.x0) * w; e.z = c.z0 + (c.z1 - c.z0) * w;
+        if (e.emerge >= 1) { e.climb = null; e.depth = undefined; }
+      }
+      continue;
+    }
     e.attackCd -= dt;
     e.lunge = Math.max(0, e.lunge - dt * 4);
     if (e.def.acid) updateSpitter(e, dt);
@@ -1164,7 +1198,7 @@ function updateEnemies(dt) {
 
   // Soft separation so bugs swarm instead of stacking (spatial hash: each nearby pair once).
   spatial.pairs(2.4, (a, b) => {
-    if (a.boss || b.boss || a.held || b.held) return;       // the swarm runs between the Colossus's legs; held bugs are off the ground
+    if (a.boss || b.boss || a.held || b.held || a.climb || b.climb) return;   // the swarm runs between the Colossus's legs; held bugs are off the ground, climbing ones in the shaft
     const r = 0.75 * (a.def.scale + b.def.scale);
     let dx = b.x - a.x, dz = b.z - a.z;
     const d2 = dx * dx + dz * dz;
@@ -1259,12 +1293,14 @@ export function update(dt) {
     if (s.mesh.userData.guns) updateRecoil(s, dt);
     if (s.mesh.userData.pitch && !s.target) aimPitch(s, null, dt);
     if (s.elev && !s.target) { s.elev *= Math.exp(-3 * dt); const hd = s.mesh.userData.head; if (hd) hd.rotation.x = s.elev; }   // guns settle back level
-    if (s.def?.income) state.credits += s.def.income * dt;
+    const producing = state.wave > 0 || state.demo;                // refineries idle until wave 1 is called
+    if (s.def?.income && producing) state.credits += s.def.income * dt;
     const spin = s.mesh.userData.spin;
-    if (spin) spin.rotation.y += dt * (s.type === 'refinery' ? 6 : 1.2);
+    if (spin) spin.rotation.y += dt * (s.type === 'refinery' ? (producing ? 6 : 0.8) : 1.2);   // the drill ticks over slowly till then
     s.mesh.userData.tick?.(dt, state.time);                  // idle animation (the uplink's dish and aviation lights)
   }
   retract.tick(dt);
+  burrows.update(dt, state.time);
   updateProjectiles(dt);
   updateHeliRockets(dt);
   updateAirshipOrdnance(dt);

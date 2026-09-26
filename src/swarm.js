@@ -409,7 +409,7 @@ export const swarm = {
         const lunge = e.lunge * 0.35 * sc;
         const emergeUp = 1 - Math.pow(1 - e.emerge, 3);
         px += e.fx / fl * lunge; pz += e.fz / fl * lunge;
-        py = y - 1.3 * sc * (1 - emergeUp);
+        py = y - (e.depth ?? 1.3 * sc) * (1 - emergeUp);   // e.depth: climbing out of a bug hole's shaft (game.js)
       }
       _qy.setFromAxisAngle(Y, Math.atan2(e.fx, e.fz));
       if (pitch) { _qp.setFromAxisAngle(X, pitch); _qy.multiply(_qp); }

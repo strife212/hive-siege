@@ -123,6 +123,17 @@ function splatWeights(x, z, h, slope) {
   return [soil, rock, moss];
 }
 
+// The terrain's baked vertex shade at (x, z): cavity AO from the height around it, and a slow colour drift (as
+// createTerrain bakes it, sampled analytically), so a mesh drawn with groundMaterial can meet the ground seamlessly.
+export function groundShade(x, z) {
+  const h = heightAt(x, z), s3 = 3 * SPACING, s10 = 10 * SPACING;
+  const near = (heightAt(x + s3, z) + heightAt(x - s3, z) + heightAt(x, z + s3) + heightAt(x, z - s3)) / 4;
+  const far = (heightAt(x + s10, z) + heightAt(x - s10, z) + heightAt(x, z + s10) + heightAt(x, z - s10)) / 4;
+  const ao = Math.min(1.15, Math.max(0.45, 1 + ((h - near) * 0.5 + (h - far) * 0.12) * 0.6));
+  const tint = fbm(x * 0.02 + 40, z * 0.02 - 40, 2) * 0.5 + 0.5;
+  return [ao * (1.0 - 0.08 * tint), ao * (0.97 + 0.02 * tint), ao * (0.9 + 0.14 * tint)];
+}
+
 export function sampleTerrain(x, z) {
   const e = 0.5;
   const h = heightAt(x, z);
@@ -153,9 +164,10 @@ export function pickTerrain(ray) {
   return null;
 }
 
-// Shaft openings for retracting buildings (retract.js): a coarse mask over the build area that the terrain shader
-// discards against, so a silo is a real hole in the ground. Counted, so overlapping openings can come and go freely.
-const HOLE_RES = 0.25, HOLE_HALF = HALF + 6, HOLE_N = Math.round((HOLE_HALF * 2) / HOLE_RES);
+// Openings in the ground: a coarse mask the terrain shader discards against, so a silo shaft (retract.js) or a bug
+// hole (burrows.js) is a real hole. It covers the basin out past the nests. Counted, so overlapping openings can come
+// and go freely.
+const HOLE_RES = 0.25, HOLE_HALF = FLAT + 2, HOLE_N = Math.round((HOLE_HALF * 2) / HOLE_RES);
 const holeCount = new Uint8Array(HOLE_N * HOLE_N);
 const holeTex = new THREE.DataTexture(new Uint8Array(HOLE_N * HOLE_N), HOLE_N, HOLE_N, THREE.RedFormat);
 holeTex.magFilter = holeTex.minFilter = THREE.NearestFilter;
@@ -169,6 +181,13 @@ export function cutHole(x0, z0, x1, z1, open) {
     holeTex.image.data[k] = holeCount[k] ? 255 : 0;
   }
   holeTex.needsUpdate = true;
+}
+// A round opening of radius r: one span of mask cells per row (a bug hole's rim hides the stepped edge).
+export function cutDisc(x, z, r, open) {
+  for (let zz = z - r; zz < z + r; zz += HOLE_RES) {
+    const dz = zz + HOLE_RES / 2 - z, w = Math.sqrt(Math.max(0, r * r - dz * dz));
+    if (w > 0) cutHole(x - w, zz, x + w, zz + HOLE_RES, open);
+  }
 }
 
 export function createTerrain(renderer) {
@@ -223,7 +242,9 @@ export function createTerrain(renderer) {
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
   geo.computeVertexNormals();
 
-  const mesh = new THREE.Mesh(geo, createTerrainMaterial(renderer));
+  const tex = generateTerrainTextures(renderer);
+  const mesh = new THREE.Mesh(geo, createTerrainMaterial(tex, true));
+  groundMaterial = createTerrainMaterial(tex, false);
   mesh.receiveShadow = true;
   mesh.name = 'terrain';
   // Drawn after every other solid object (only the sky comes later): its pixels are the most expensive in the scene,
@@ -234,10 +255,16 @@ export function createTerrain(renderer) {
 
 // MeshStandardMaterial extended with height/slope splatting of three procedural texture sets,
 // world-space normal mapping, a glowing playable-area boundary and darkening outside it.
-function createTerrainMaterial(renderer) {
-  const tex = generateTerrainTextures(renderer);
+// The selected tower's reach is drawn into the ground too (ui.js sets it): (x, z) centre, outer radius, inner radius
+// (the mortar's dead zone; 0 = none). Outer radius 0 = nothing selected.
+export const RANGE_U = { value: new THREE.Vector4(0, 0, 0, 0) };
+// The same ground for other meshes that sit in the landscape (the bug holes' craters and shafts, burrows.js): the
+// terrain's material without the openings mask, since those meshes are what fills the openings. A mesh drawn with it
+// needs the terrain's attributes: position, normal, splat (soil, rock, moss weights) and color (shade, as groundShade).
+export let groundMaterial = null;
+function createTerrainMaterial(tex, holes) {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0.0 });
-  mat.customProgramCacheKey = () => 'terrain-splat';
+  mat.customProgramCacheKey = () => (holes ? 'terrain-splat' : 'terrain-splat-solid');
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, {
       tSoil: { value: tex.soil.map }, tSoilN: { value: tex.soil.normal },
@@ -246,6 +273,7 @@ function createTerrainMaterial(renderer) {
       uBound: { value: HALF },
       uFlat: { value: FLAT },
       uGrid: { value: 0 },
+      uRange: RANGE_U,
       uCanyon: { value: MAP === 'canyon' ? 1 : 0 },
       tHoles: { value: holeTex }, uHoleHalf: { value: HOLE_HALF },
       uWet: WEATHER_U.wet, uRainAmt: WEATHER_U.rain, uRainT: WEATHER_U.time, uSkyRefl: WEATHER_U.sky,
@@ -262,7 +290,7 @@ function createTerrainMaterial(renderer) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform sampler2D tSoil, tSoilN, tRock, tRockN, tMoss, tMossN;
-        uniform float uBound; uniform float uFlat; uniform float uGrid; uniform float uCanyon;
+        uniform float uBound; uniform float uFlat; uniform float uGrid; uniform float uCanyon; uniform vec4 uRange;
         uniform sampler2D tHoles; uniform float uHoleHalf;
         uniform float uWet, uRainAmt, uRainT; uniform vec3 uSkyRefl;
         float gPuddle = 0.0; vec3 gPuddleN = vec3(0.0, 1.0, 0.0);
@@ -296,7 +324,7 @@ function createTerrainMaterial(renderer) {
         }`)
       .replace('#include <map_fragment>', `
         vec2 holeUv = (vWorldPos.xz + uHoleHalf) / (2.0 * uHoleHalf);
-        if (holeUv.x > 0.0 && holeUv.x < 1.0 && holeUv.y > 0.0 && holeUv.y < 1.0 && texture2D(tHoles, holeUv).r > 0.5) discard;
+        ${holes ? 'if (holeUv.x > 0.0 && holeUv.x < 1.0 && holeUv.y > 0.0 && holeUv.y < 1.0 && texture2D(tHoles, holeUv).r > 0.5) discard;' : ''}
         vec2 uvA = vWorldPos.xz * 0.22;
         vec2 uvB = vWorldPos.xz * 0.071 + vec2(0.37, 0.71);
         vec4 gA = vec4(dFdx(uvA), dFdy(uvA)), gB = vec4(dFdx(uvB), dFdy(uvB));
@@ -366,6 +394,14 @@ function createTerrainMaterial(renderer) {
         float gridLine = (1.0 - smoothstep(0.015, 0.015 + aa * 1.5, gd)) * min(1.0, 0.03 / max(aa, 1e-4));
         gridLine *= step(bd, uBound) * uGrid;
         totalEmissiveRadiance += vec3(0.2, 0.5, 0.7) * gridLine * 0.18;
+        if (uRange.z > 0.0) {                                             // selected tower: a ring at its reach, a faint tint inside
+          float rd = length(vWorldPos.xz - uRange.xy), raa = fwidth(rd);
+          float hw = max(0.07, raa * 0.9);                                // never thinner than about two pixels
+          float ring = max(1.0 - smoothstep(hw, hw + raa, abs(rd - uRange.z)),
+                           uRange.w > 0.0 ? 1.0 - smoothstep(hw, hw + raa, abs(rd - uRange.w)) : 0.0);
+          float inside = smoothstep(uRange.w - raa, uRange.w, rd) * (1.0 - smoothstep(uRange.z - raa, uRange.z, rd));
+          totalEmissiveRadiance += vec3(0.18, 0.62, 1.0) * (ring * 0.55 + inside * 0.05);
+        }
         if (gPuddle > 0.01) {                                             // standing water mirrors the sky
           vec3 V = normalize(cameraPosition - vWorldPos);
           float fres = 0.08 + 0.5 * pow(1.0 - max(dot(gPuddleN, V), 0.0), 5.0);

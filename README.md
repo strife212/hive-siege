@@ -66,7 +66,9 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   towers only start firing once fully risen.
 - **Sidebar**: Red Alert style card list grouped by category, TECH tab for research, a START WAVE 1 button that
   starts pulsing with a bright glow if it has not been pressed 10 s into the game, selected-structure
-  panel with sell (50% refund).
+  panel with sell (50% refund). A selected tower shows its reach as a ring drawn into the terrain shader (so it
+  follows the ground exactly), with a faint tint inside; the mortar's shows its 8-unit dead zone too, and research that
+  extends a range updates it live. Aircraft pads, economy and support buildings, walls and mines have none.
 - **Autocannon effects**: the gun assembly recoils 0.3 units on each shot (50 ms kick, 200 ms return) with an
   additive muzzle-flash sprite; a brass casing ejects from the side port, tumbles, bounces, rests on the
   terrain and vanishes after 3 s.
@@ -76,7 +78,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
 - **Big towers** (2x2 footprint; `size` in `src/config.js`, anchor and footprint helpers in `src/game.js`):
   Mortar Pit (sandbagged tube, 8-26 range, lobbed shells on a ballistic arc with lead, 55 damage in a 3-unit
   splash), Missile Silo (hatches open and a rack rises, six corkscrewing homing rockets every 6 s at the densest
-  cluster), Railgun Battery (capacitor banks glow as it charges for 3 s, then a bolt pierces every bug along a
+  cluster), Railgun Battery (capacitor banks glow as it charges for 5 s, then a bolt pierces every bug along a
   60-unit line for up to 400; the mount traverses at a fixed rate and holds its charge until aligned, and a blue
   gauge on the breech fills with the charge; target priority is the Colossus whenever it is in range, then medium
   bugs (brutes, spitters), then small ones, nearest first within a class; needs a lab).
@@ -91,7 +93,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   the strategic strike, and selling digs it up on the spot), HMG Turret (10 rounds/s instant tracers, low damage, short range), Autocannon (guided projectile), Dual Autocannon (two barrels, two shells per salvo,
   casings from both sides), Flamethrower (short-range gravity-arced fire stream; every bug in its 24° cone is
   set burning for 3 s at 14 damage/s, refreshed while it stays in the stream, with flames on the bug), Laser Tower (hitscan beam, needs a Research Lab),
-  Refinery (+3 credits/s), Research Lab (unlocks laser + research).
+  Refinery (+3 credits/s, only once wave 1 has been called; until then its drill idles), Research Lab (unlocks laser + research).
 - **Strategic Uplink Tower** (SUPPORT, 2x2, 2000 credits): a very tall comms tower. An armoured equipment hall carries a
   red-and-white banded lattice mast about 15 units high, bristling with hardware:
   - parabolic dishes, microwave drums, two rings of cellular panels, a yagi, crossed dipoles and whips
@@ -122,7 +124,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
     brutes, spitters and the Colossus; with the gun dry it hunts only those, or heads home).
   - Titan: Deep Magazines ($4,500, +50% of every ammo type), Fire Control Relay ($6,000, towers within 15 m of the
     ground under the airborne Titan fire 20% faster; the circle is traced on the terrain).
-  - Railgun: Supercapacitors ($1,800, charge 3 -> 2 s), Tungsten Penetrator ($2,250, x3 damage to the Colossus).
+  - Railgun: Supercapacitors ($1,800, charge 5 -> 3 s), Tungsten Penetrator ($2,250, x3 damage to the Colossus).
 - **Scale**: bugs are rendered as one instanced draw per species (`src/swarm.js`): the rig is baked into a single
   low-poly geometry with per-vertex pivot/axis/phase attributes and the gait, chomp, bob, burn glow and death curl
   run in the vertex shader, so the CPU writes one matrix and four floats per bug. HP bars are one instanced mesh.
@@ -205,7 +207,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
 - **Icons**: every building, research item and ability has a 16x16 pixel-art icon drawn in code (`src/icons.js`), no image files.
 - **Maps**: `?map=canyon` loads Deadrock Canyon, a box canyon with the Core at the closed end, a choke point in front of it
   and nests only at the mouth (`MAPS` in `src/config.js`, canyon shape in `src/terrain.js`). Default is the open basin.
-- **Debug menu**: press `Z` for a popup (bottom left) with *Add 1000 cash*, *Spawn next wave*, *Spawn boss*, *Spawn darters + spitters*, *Change map* and *Test map*
+- **Debug menu**: press `Z` for a popup (bottom left) with *Add 50,000 credits*, *Spawn next wave*, *Spawn boss*, *Spawn darters + spitters*, *Change map* and *Test map*
   (a debug-only basin kept at 1200 bugs with an invincible Core and 50,000 credits; it cannot be opened from the URL alone) (`src/debug.js`; changing map reloads).
   *Performance stats* toggles an overlay in the top left (`src/perf.js`, remembered per browser):
   - FPS, the average frame time and the worst frame in the last ~2.7 s, over a graph with one bar per frame.
@@ -294,7 +296,20 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   hardware exists while a building is just standing there. The Core has no player toggle: drive it from code for
   cutscenes with `retract.retract(state.core)` / `deploy` / `snap(s, down)` (`window.__retract` in the console, or the
   debug menu's Core silo button). The debug menu also has a base-wide retract / deploy drill.
-- **Waves**: manual start, scaling counts and HP, 1-4 spawn nests shown as red rings, clear bonus.
+- **Waves**: manual start, scaling counts and HP, 1-4 spawn nests, clear bonus. On the plains, from wave 12
+  (`CORNERS` in `src/config.js`) four more holes open in the basin's diagonal corners and add 20% more bugs between
+  them, the same mix as the rest of the wave, as a steady trickle: each gives out far fewer than a main nest. Each nest is a bug hole
+  (`src/burrows.js`) that erupts out of the ground when the wave is called: a crater of churned dirt draped over the
+  terrain, with bone-tipped chitin spikes and pulsing green egg sacs round a real hole. The ground is cut away inside
+  it (the terrain's opening mask, the one the silos use, now reaching out past the nests) and an unlit shaft goes about
+  3.5 units down under it, darkening to black with a faint glow at the bottom; the crater's inner slope stays above
+  the ground across the band where the mask's stepped edge can fall, then drops into the shaft. Crater and shaft are
+  drawn with the terrain's own material (a variant without the openings mask, `groundMaterial`), so they have its
+  soil / rock / moss textures, normal maps and rain wetness: the crater starts from the ground's own texture mix and
+  baked shade at its foot (`sampleTerrain`, `groundShade`), turns to churned soil up the slope with a resin-stained
+  crest, and to rock down the shaft, darkening with depth. Bugs start deep in the
+  shaft and climb up it and over the lip; hive haze drifts out. When the wave is cleared the hole caves in and the
+  crater sinks back into the ground.
 
 ## Debugging
 

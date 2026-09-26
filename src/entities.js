@@ -62,7 +62,6 @@ const M = {
   ichor: new THREE.MeshBasicMaterial({ color: 0x8fe33a }),
   debris: new THREE.MeshBasicMaterial({ color: 0x777777 }),
   soil: new THREE.MeshBasicMaterial({ color: 0x7a5a3a }),
-  marker: new THREE.MeshBasicMaterial({ color: 0xff3a3a, transparent: true, opacity: 0.8, side: THREE.DoubleSide }),
 };
 
 // Wear layer: painted armour chips and gets grimy, bare metal mostly just varies in sheen, fabric and concrete only stain.
@@ -1281,9 +1280,3 @@ export const makeCasings = (cap) => instancePool(casingGeo, M.brass, cap);      
 const gibGeo = new THREE.SphereGeometry(0.13, 6, 5);
 export const makeGibs = (kind, cap) => instancePool(gibGeo, M[kind] || M.ichor, cap);   // one draw per kind
 
-const markerGeo = new THREE.RingGeometry(1.6, 2.2, 24);
-export function makeSpawnMarker() {
-  const m = new THREE.Mesh(markerGeo, M.marker);
-  m.rotation.x = -Math.PI / 2;
-  return m;
-}

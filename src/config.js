@@ -1,4 +1,4 @@
-export const VERSION = '1.7';                 // shown on the main menu; goes up by 0.1 with every commit
+export const VERSION = '1.8';                 // shown on the main menu; goes up by 0.1 with every commit
 export const MAP_SIZE = 80;
 export const HALF = MAP_SIZE / 2;
 export const CELL = 2;
@@ -96,13 +96,13 @@ export const BUILDINGS = {
   },
   rail: {
     name: 'Railgun Battery', cost: 1000, hp: 300, cat: 'DEFENSE', size: [2, 2], requires: 'lab',
-    kind: 'rail', range: 40, damage: 400, charge: 3, turn: 1.3,
-    desc: 'Charges for 3 s then fires a bolt that pierces every bug in a line. Requires a Research Lab.',
+    kind: 'rail', range: 40, damage: 400, charge: 5, turn: 1.3,
+    desc: 'Charges for 5 s then fires a bolt that pierces every bug in a line. Requires a Research Lab.',
   },
   refinery: {
     name: 'Refinery', cost: 150, hp: 260, cat: 'ECONOMY',
     income: 3,
-    desc: 'Extracts credits from the crust: +3 credits / second.',
+    desc: 'Extracts credits from the crust: +3 credits / second, once the first wave has been called.',
   },
   lab: {
     name: 'Research Lab', cost: 500, hp: 220, cat: 'ECONOMY',
@@ -141,7 +141,7 @@ export const RESEARCH = {
   hunter:      { group: 'heli', name: 'Hunter-Killer Avionics', cost: 1050, desc: 'Gunship rockets are saved for brutes, spitters and the Colossus; small bugs only get the gatling.' },
   deepMags:    { group: 'airship', name: 'Deep Magazines', cost: 4500, desc: 'The Titan carries 50% more of everything: 750 gatling and 375 HMG rounds per gun, 38 shells and 45 bombs.' },
   relay:       { group: 'airship', name: 'Fire Control Relay', cost: 6000, desc: 'While the Titan is in the air, every tower within 15 m of the ground beneath it fires 20% faster.' },
-  supercap:    { group: 'rail', name: 'Supercapacitors', cost: 1800, desc: 'Railgun charge time 3 s → 2 s.' },
+  supercap:    { group: 'rail', name: 'Supercapacitors', cost: 1800, desc: 'Railgun charge time 5 s → 3 s.' },
   penetrator:  { group: 'rail', name: 'Tungsten Penetrator', cost: 2250, desc: 'Railgun bolts deal triple damage to the Colossus.' },
 };
 
@@ -176,4 +176,7 @@ export const ENEMIES = {
   },
 };
 export const SPECIALS = { from: 3, share: 0.1 };   // from wave 3, about one bug in ten is a Darter or an Acid Spitter
-export const ANTS = { share: 0.5 };                // on top of every wave: half as many again, in ants
+export const ANTS = { share: 0.5 };
+// Plains, from wave `from`: four more bug holes open in the basin's diagonal corners (`inset` in from its edge) and
+// add `share` more bugs between them, so each gives out far fewer than a main nest.
+export const CORNERS = { from: 12, share: 0.2, inset: 8 };                // on top of every wave: half as many again, in ants

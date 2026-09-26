@@ -4,8 +4,13 @@ import { abilities } from './abilities.js';
 import { iconImg } from './icons.js';
 import { retract } from './retract.js';
 import { MOBILE } from './mobile.js';
+import { RANGE_U } from './terrain.js';
 
 const $ = (id) => document.getElementById(id);
+
+// Towers whose reach is a plain circle round them show it on the ground while selected (the mortar's with its dead
+// zone). Not the aircraft pads (they patrol), nor economy or support buildings, walls or mines.
+const RINGED = new Set(['tracer', 'projectile', 'flame', 'hitscan', 'mortar', 'missile', 'rail']);
 
 function card(key, name, cost) {
   const el = document.createElement('div');
@@ -188,7 +193,7 @@ export function createUI({ onSelectBuild }) {
     els.start.disabled = state.waveActive || state.gameOver;
     waveBtn.classList.toggle('nudge', state.wave === 0 && !state.waveActive && !state.gameOver && !state.demo && state.time > NUDGE_AFTER);
     setText('start', state.waveActive
-      ? `WAVE ${state.wave}  •  ${state.enemies.length + state.spawnQueue.length + state.walkQueue.length} HOSTILES`
+      ? `WAVE ${state.wave}  •  ${state.enemies.length + state.spawnQueue.length + state.walkQueue.length + state.cornerQueue.length} HOSTILES`
       : `START WAVE ${state.wave + 1}`);
 
     const labBuilt = hasBuilding('lab');
@@ -210,6 +215,8 @@ export function createUI({ onSelectBuild }) {
       el.classList.toggle('locked', !done && !labBuilt);
       el.classList.toggle('poor', !done && state.credits < RESEARCH[key].cost);
     }
+    const d = selected?.hp > 0 && RINGED.has(selected.def?.kind) ? selected.def : null;   // live: research can extend it
+    if (d) RANGE_U.value.set(selected.x, selected.z, d.range, d.minRange || 0); else RANGE_U.value.z = 0;
     if (selected) {
       if (selected.hp <= 0) showSelected(null);
       else {
