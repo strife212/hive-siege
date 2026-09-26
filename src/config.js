@@ -1,4 +1,4 @@
-export const VERSION = '1.9';                 // shown on the main menu; goes up by 0.1 with every commit
+export const VERSION = '1.10';                 // shown on the main menu; the minor number goes up by one with every commit (1.9, 1.10, 1.11...)
 export const MAP_SIZE = 80;
 export const HALF = MAP_SIZE / 2;
 export const CELL = 2;
@@ -29,6 +29,7 @@ export const DEMO = SCENE ? false : RECORD > 0 || (!deployed && !query.has('noin
 let unlocked = false;
 try { unlocked = sessionStorage.getItem(TEST_KEY) === '1'; } catch { /* stays locked */ }
 export const MAP = DEMO ? 'canyon' : MAPS[mapParam] && (!MAPS[mapParam].hidden || unlocked) ? mapParam : 'basin';
+export const HEAVY = MAP === 'test' && query.has('heavy');     // the stress scene on the test range (heavy.js, debug menu)
 export const MAX_SLOPE = 1.6;
 
 export const BUILDINGS = {

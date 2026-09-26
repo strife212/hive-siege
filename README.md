@@ -139,6 +139,10 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
 - **Draw calls**: a building's fixed parts are merged into one mesh per material when it is built (`src/bake.js`);
   anything the game moves or toggles must be reachable from the building's userData so it stays separate. Merged
   parts carry their own local coordinates for the wear shader (`wearPos` / `wearNrm`), so they look identical.
+  All particles (smoke, dust, sparks, glows) are one instanced draw call, sorted back to front each frame, normal and
+  additive together through premultiplied blending, so they layer exactly as separate sprites did (`src/particles.js`).
+  All ground decals (splatter, scorch marks, burn scars) are one mesh too: a pool of slots whose draped patch is written
+  once when a decal lands, with its fade, ember glow and shine in a small per-slot float texture (`src/decals.js`).
   Every placed wall is drawn by six instanced meshes (`src/walls.js`), every mine in every minefield by five more,
   and all the reload clocks by one (`src/mines.js`). Instance buffers upload only the part in use,
   explosions and ordnance share their geometry, and the sky is drawn after the opaque scene so it only shades the
@@ -150,8 +154,8 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   weight is exactly zero at that pixel, and it is drawn after every other solid object so the depth test throws out
   the ground hidden under buildings and bugs before it is shaded (its pixels are the most expensive in the scene).
 - **Adaptive quality** (`src/quality.js`): if the frame rate stays under 45 fps for a 2 s window, rendering steps down
-  a level: resolution first (pixel-ratio cap 1.5 -> 1.0 -> 0.85 -> 0.8 -> 0.7), then MSAA 4 -> 2 -> 0 and the shadow
-  map 3072 -> 2048 -> 1536 -> 1024, bloom off only at the last level. All of it changes live, without shader
+  a level. Levels 0-4: pixel-ratio cap 1.5 / 1.0 / 0.85 / 0.8 / 0.7, MSAA 4 / 2 / 2 / 0 / 0, shadow map
+  3072 / 2048 / 2048 / 1536 / 1024, bloom off only at the last level. All of it changes live, without shader
   recompiles. Frames over 150 ms (compiles, GC, tab switches) are ignored unless ten come in a row, nothing is judged
   for 3 s after loading or 1.5 s after a change, and if two steps in a row buy under 5% more frames (CPU-bound, or the
   browser capping the frame rate on battery) they are handed back and the level is frozen. The level lasts for the tab
@@ -219,8 +223,11 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
 - **Icons**: every building, research item and ability has a 16x16 pixel-art icon drawn in code (`src/icons.js`), no image files.
 - **Maps**: `?map=canyon` loads Deadrock Canyon, a box canyon with the Core at the closed end, a choke point in front of it
   and nests only at the mouth (`MAPS` in `src/config.js`, canyon shape in `src/terrain.js`). Default is the open basin.
-- **Debug menu**: press `Z` for a popup (bottom left) with *Add 50,000 credits*, *Spawn next wave*, *Spawn boss*, *Spawn darters + spitters*, *Change map* and *Test map*
+- **Debug menu**: press `Z` for a popup (bottom left) with *Add 50,000 credits*, *Spawn next wave*, *Spawn boss*, *Spawn darters + spitters*, *Change map*, *Heavy scene* and *Test map*
   (a debug-only basin kept at 1200 bugs with an invincible Core and 50,000 credits; it cannot be opened from the URL alone) (`src/debug.js`; changing map reloads).
+  *Heavy scene* is the stress case the performance numbers are measured in (`src/heavy.js`, `?map=test&heavy` once the test
+  map is unlocked): the test range plus 350 darters, spitters and ants, rain, a walled base with every kind of tower, and
+  support strikes landing on the swarm every 1.2 s, overlapping, for as long as it runs.
   *Performance stats* toggles an overlay in the top left (`src/perf.js`, remembered per browser):
   - FPS, the average frame time and the worst frame in the last ~2.7 s, over a graph with one bar per frame.
   - CPU time for the game's own code, split into simulation and render submission.
@@ -344,7 +351,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
     src/surface.js   bevelled boxes and the triplanar wear shader shared by all built models
     src/intro.js     landing cinematic
     src/decals.js    ground splatter and scorch decals
-    src/particles.js shared sprite particle system (dust, smoke, fire)
+    src/particles.js shared particle system (dust, smoke, fire, glows): one instanced, depth-sorted draw call
     src/effects.js   explosions, impact rings, railgun beam (shared by turrets and abilities)
     src/gore.js      instanced death chunks with bounce/skid physics
     src/swarm.js     instanced bug renderer (vertex-shader gait) + instanced HP bars

@@ -17,7 +17,8 @@ import { audio } from './audio.js';
 import { initParticles, particleCount } from './particles.js';
 import { initEffects, updateEffects } from './effects.js';
 import { initDebug } from './debug.js';
-import { DEMO, DEPLOY_KEY, RECORD, MAP, MAPS } from './config.js';
+import { DEMO, DEPLOY_KEY, RECORD, MAP, MAPS, HEAVY } from './config.js';
+import { startHeavy } from './heavy.js';
 import { startDemo } from './demo.js';
 import { iconImg } from './icons.js';
 import { troopers } from './troopers.js';
@@ -107,10 +108,12 @@ const intro = DEMO ? null : playIntro({
       spawnEnemy(k % 7 === 6 ? 'brute' : 'skitter', Math.cos(a) * r, Math.sin(a) * r, true);
     }
     log(`Test range: ${MAPS[MAP].population} bugs, invincible Core, ${MAPS[MAP].credits} credits.`, true);
+    if (HEAVY) heavy = startHeavy();
   },
 });
 if (intro && (RECORD || location.search.includes('nointro'))) intro.skip();
 let director = null;                                   // scripted camera for recorded scenes (record.js)
+let heavy = null;                                      // the debug stress scene's strike rota (heavy.js)
 const stress = Number(new URLSearchParams(location.search).get('stress'));
 if (stress > 0) setTimeout(() => { spawnMany(stress); log(`Stress test: ${stress} bugs`, true); }, 500);
 
@@ -127,6 +130,7 @@ function tick(dt) {
   if (!state.gameOver) { update(dt); troopers.update(dt); }
   if (MAPS[MAP].population && state.enemies.length < MAPS[MAP].population) spawnMany(Math.min(25, MAPS[MAP].population - state.enemies.length));   // test range refills from the rim
   abilities.update(dt);
+  heavy?.update(dt);
   input.update();
   updateEffects(dt);
   flashes.update(dt);

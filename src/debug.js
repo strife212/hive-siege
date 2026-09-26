@@ -4,7 +4,7 @@ import { nestPosition } from './terrain.js';
 import { retract } from './retract.js';
 import { weather } from './weather.js';
 import { perf } from './perf.js';
-import { MAP, MAPS, DEPLOY_KEY, TEST_KEY } from './config.js';
+import { MAP, MAPS, DEPLOY_KEY, TEST_KEY, HEAVY } from './config.js';
 
 // Debug popup (Z): cheat credits and cycle the map. Maps are built at load, so changing one reloads the page.
 export function initDebug() {
@@ -49,8 +49,18 @@ export function initDebug() {
     const q = new URLSearchParams(location.search);
     try {
       sessionStorage.setItem(DEPLOY_KEY, '1');
-      if (MAP === 'test') { sessionStorage.removeItem(TEST_KEY); q.delete('map'); } else { sessionStorage.setItem(TEST_KEY, '1'); q.set('map', 'test'); }
+      if (MAP === 'test') { sessionStorage.removeItem(TEST_KEY); q.delete('map'); q.delete('heavy'); } else { sessionStorage.setItem(TEST_KEY, '1'); q.set('map', 'test'); }
     } catch { /* fine */ }
+    location.search = q.toString();
+  };
+  // The stress scene: the test range plus rain, a full base and non-stop strikes (heavy.js). Pressed in it: a fresh one.
+  const heavyBtn = document.getElementById('dbgHeavy');
+  if (HEAVY) heavyBtn.textContent = 'Heavy scene: restart';
+  heavyBtn.onclick = () => {
+    const q = new URLSearchParams(location.search);
+    try { sessionStorage.setItem(DEPLOY_KEY, '1'); sessionStorage.setItem(TEST_KEY, '1'); } catch { /* fine */ }
+    q.set('map', 'test');
+    q.set('heavy', '');
     location.search = q.toString();
   };
 }
