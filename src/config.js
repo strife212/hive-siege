@@ -1,4 +1,4 @@
-export const VERSION = '1.8';                 // shown on the main menu; goes up by 0.1 with every commit
+export const VERSION = '1.9';                 // shown on the main menu; goes up by 0.1 with every commit
 export const MAP_SIZE = 80;
 export const HALF = MAP_SIZE / 2;
 export const CELL = 2;
@@ -37,13 +37,13 @@ export const BUILDINGS = {
     desc: 'Cheap barrier. Bugs have to chew through it to reach the Core.',
   },
   // Walkable: bugs path straight over it and never attack it (game.js). One mine goes off per bug that steps on the
-  // tile, then the field re-arms for `rearm` s; once all `mines` are spent a new set takes `reload` s.
+  // tile (each bug trips a set once); once all `mines` are spent a new set takes `reload` s.
   // silo: false: no silo. The mines are fired down from orbit (mines.js), never retract, and stay out through the
   // strategic strike.
   mine: {
     name: 'Minefield', cost: 100, hp: 120, cat: 'STRUCTURES', walkable: true, silo: false,
-    mines: 5, damage: 80, rearm: 1, reload: 30,
-    desc: 'Five pressure mines on one tile. Bugs walk straight over it: each one that steps on it sets a mine off (80 damage, enough for a skitterer). Re-arms 1 s after each blast; once all five are spent a new set takes 30 s.',
+    mines: 5, damage: 80, reload: 30,
+    desc: 'Five pressure mines on one tile. Bugs walk straight over it: each one that steps on it sets a mine off (80 damage, enough for a skitterer). Once all five are spent a new set takes 30 s.',
   },
   hmg: {
     name: 'HMG Turret', cost: 85, hp: 170, cat: 'DEFENSE',
@@ -66,7 +66,7 @@ export const BUILDINGS = {
     desc: 'Short-range fire stream. Sets every bug in the cone burning for 3 s (damage over time, stacks by refreshing).',
   },
   laser: {
-    name: 'Laser Tower', cost: 210, hp: 160, cat: 'DEFENSE',
+    name: 'Laser Tower', cost: 250, hp: 160, cat: 'DEFENSE',
     kind: 'hitscan', range: 15, damage: 4.5, rate: 9, turn: 2.6, requires: 'lab',
     desc: 'Hitscan beam. Instant hits, no travel time. Requires a Research Lab.',
   },
@@ -91,19 +91,19 @@ export const BUILDINGS = {
     desc: 'Charges for 5 s then fires a bolt that pierces every bug in a line. Requires a Research Lab.',
   },
   airship: {
-    name: 'Titan Airship Pad', cost: 5000, hp: 600, cat: 'DEFENSE', size: [2, 3], limit: 1,
+    name: 'Titan Airship Pad', cost: 5000, hp: 600, cat: 'DEFENSE', size: [2, 3], limit: 1, requires: 'lab',
     kind: 'airship', range: 52, rearm: 8,
     damage: 4, gatRate: 14, gatRounds: 500,                       // two gatling cannons
     hmgDamage: 3, hmgRate: 8, hmgRounds: 250,                     // two HMGs
     shells: 25, artRate: 0.5, artDamage: 95, artSplash: 4.6,      // belly howitzer
     bombs: 30, bombRate: 2.2, bombDamage: 120, bombSplash: 4,     // bomb bay, straight down
-    desc: 'Titan Support Airship: twin gatlings (500 rds each), twin HMGs (250 each), a 25-shell howitzer and 30 bombs. Rearms on its pad for 8 s. Only one can be built.',
+    desc: 'Titan Support Airship: twin gatlings (500 rds each), twin HMGs (250 each), a 25-shell howitzer and 30 bombs. Rearms on its pad for 8 s. Only one can be built. Requires a Research Lab.',
   },
   // Ultimate artillery (apocalypse.js): reaches anywhere on the map and always shells the biggest clump of bugs.
   apoc: {
-    name: 'Apocalypse Heavy Artillery', cost: 6000, hp: 900, cat: 'DEFENSE', size: [3, 3], limit: 1,
+    name: 'Apocalypse Heavy Artillery', cost: 6000, hp: 900, cat: 'DEFENSE', size: [3, 3], limit: 1, requires: 'lab',
     kind: 'apoc', range: 180, minRange: 10, damage: 650, splash: 7, interval: 10, turn: 0.8,
-    desc: 'A colossal howitzer with cross-map range. Every 10 s it drops one giant shell (650 damage, 7 m blast) on the biggest clump of bugs on the field. Only one can be built.',
+    desc: 'A colossal howitzer with cross-map range. Every 10 s it drops one giant shell (650 damage, 7 m blast) on the biggest clump of bugs on the field. Only one can be built. Requires a Research Lab.',
   },
   refinery: {
     name: 'Refinery', cost: 150, hp: 260, cat: 'ECONOMY',

@@ -348,6 +348,12 @@ const DRAW = {
     p.rect(2, 6, 3, 4, 'd').rows(4, [[7, 1], [6, 2], [5, 3], [5, 3], [5, 3], [5, 3], [6, 2], [7, 1]], 'g');
     p.line(10, 5, 14, 10, 'r').line(14, 5, 10, 10, 'r');
   },
+  lock(p) {                                                                                       // padlock (locked build cards)
+    p.rect(5, 1, 6, 1, 'g').rect(4, 2, 2, 5, 'g').rect(10, 2, 2, 5, 'g').px(5, 2, 'w').px(4, 3, 'w').rect(11, 3, 1, 4, 'd');   // steel shackle
+    p.rect(2, 7, 12, 8, 'y').rect(2, 7, 12, 1, 'c').rect(2, 13, 12, 2, 'a').rect(13, 8, 1, 5, 'a').rect(3, 8, 1, 5, 'c');   // brass body
+    p.px(2, 14, 'n').px(13, 14, 'n');
+    p.rect(7, 9, 2, 2, 'N').rect(7, 11, 2, 2, 'N').px(8, 13, 'N');                                             // keyhole
+  },
 };
 
 const cache = {};

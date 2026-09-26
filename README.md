@@ -66,7 +66,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   towers only start firing once fully risen.
 - **Sidebar**: Red Alert style card list grouped by category, TECH tab for research, a START WAVE 1 button that
   starts pulsing with a bright glow if it has not been pressed 10 s into the game, selected-structure
-  panel with sell (50% refund). A selected tower shows its reach as a ring drawn into the terrain shader (so it
+  panel with sell (50% refund). A building that needs a Research Lab first shows a padlock over its card's icon. A selected tower shows its reach as a ring drawn into the terrain shader (so it
   follows the ground exactly), with a faint tint inside; the mortar's shows its 8-unit dead zone too, and research that
   extends a range updates it live. Aircraft pads, economy and support buildings, walls and mines have none.
 - **Autocannon effects**: the gun assembly recoils 0.3 units on each shot (50 ms kick, 200 ms return) with an
@@ -87,7 +87,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   smoke; premultiplied blending makes the core add light while the smoke occludes.
 - **Buildings**: Wall, Minefield ($100: five pressure mines on one tile that bugs walk straight over and never attack;
   each bug that steps on it sets the nearest mine off for 80 damage, enough for a skitterer at any wave before the hive
-  adapts; the field re-arms 1 s after a blast, and once all five are spent a new set takes 30 s, with a see-through
+  adapts; a bug trips a set only once (a brute that survives walks on), and once all five are spent a new set takes 30 s, with a see-through
   countdown clock over the tile and the spent mines shown as ghosts; it has no silo: its mines are fired down from
   orbit one after another as glowing streaks that slam into the dirt, it cannot be retracted, it stays out through
   the strategic strike, and selling digs it up on the spot), HMG Turret (10 rounds/s instant tracers, low damage, short range), Autocannon (guided projectile), Dual Autocannon (two barrels, two shells per salvo,
@@ -187,10 +187,10 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   Every Colossus killed, by any means, makes the hive adapt. Bugs that spawn from then on get +10% HP and +10% speed,
   compounding: x1.1, then x1.21, and so on. The next Colossus is included. Bugs already on the field keep their stats
   (`HIVE_BUFF` / `state.hiveBuff` in `src/game.js`).
-- **Titan Airship Pad** (2x3, 5000 credits, limit 1, `src/airship.js`): a big rigid airship (ring-framed cigar hull, cruciform tail, long lit
+- **Titan Airship Pad** (2x3, 5000 credits, limit 1, needs a Research Lab, `src/airship.js`): a big rigid airship (ring-framed cigar hull, cruciform tail, long lit
   gondola, four ducted fans, solar spine) that parks over the thickest knot of bugs. Twin gatlings (500 rds each), twin HMGs (250 each), a
   belly howitzer (25 shells, big splash) and a bomb bay that drops 30 bombs straight down. Returns when empty or idle, rearms moored for 8 s.
-- **Apocalypse Heavy Artillery** (3x3, 6000 credits, limit 1, `src/apocalypse.js`): a colossal sci-fi howitzer on a slab with four
+- **Apocalypse Heavy Artillery** (3x3, 6000 credits, limit 1, needs a Research Lab, `src/apocalypse.js`): a colossal sci-fi howitzer on a slab with four
   outrigger jacks: armoured turret, trunnion-mounted cradle with recuperators, a long barrel wrapped in glowing coil rings and a slotted
   muzzle brake. Range 180 (the whole map; nothing closer than 10), one 650-damage shell with a 7 m blast every 10 s. It shells the
   biggest clump on the field: bugs are binned into 4-unit cells weighted by size (ants count little, brutes and spitters double, the
@@ -320,7 +320,8 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   soil / rock / moss textures, normal maps and rain wetness: the crater starts from the ground's own texture mix and
   baked shade at its foot (`sampleTerrain`, `groundShade`), turns to churned soil up the slope with a resin-stained
   crest, and to rock down the shaft, darkening with depth. Bugs start deep in the
-  shaft and climb up it and over the lip; hive haze drifts out. When the wave is cleared the hole caves in and the
+  shaft and climb up it and over the lip; hive haze drifts out. A red ring pulses on the ground round each
+  new hole for 3 s, then fades, so a fresh nest catches the eye. When the wave is cleared the hole caves in and the
   crater sinks back into the ground.
 
 ## Debugging

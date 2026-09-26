@@ -176,6 +176,10 @@ button.big:disabled {
 .card.locked:hover, .card.maxed:hover { border-color: var(--line2); background: linear-gradient(180deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, .01)); }
 .card::after { position: absolute; top: 3px; right: 9px; font-family: var(--font-display); font-size: 9px; font-weight: 700; letter-spacing: .12em; }
 .card.locked::after { content: "LOCKED"; color: var(--muted); }
+/* a padlock over the icon of a building that needs another first (the Research Lab) */
+.card .lock { display: none; position: absolute; left: 50%; top: 11px; transform: translateX(-50%); pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .8)); }
+.card.locked > .lock { display: block; opacity: .6; }
+.card.locked .lock .pxicon { filter: none; }                          /* not greyed like the icon under it */
 .card.maxed::after { content: "BUILT"; color: var(--accent2); }
 .card.done { border-color: rgba(111, 224, 138, .5); cursor: default; }
 .card.done::after { content: "ONLINE"; color: var(--ok); }
@@ -496,6 +500,7 @@ body.mobile .cards .hint { padding: 6px 4px 2px; font-size: 9.5px; }
 body.mobile .card { padding: 4px 2px 3px; }
 body.mobile .card .icon { height: 28px; margin: 0 2px 3px; }
 body.mobile .card .pxicon { width: 24px; height: 24px; }
+body.mobile .card .lock { top: 6px; }
 body.mobile .card .name { font-size: 9.5px; line-height: 1.1; min-height: 2.2em; }
 body.mobile .card .cost { font-size: 11px; }
 body.mobile .card::after { top: 1px; right: 6px; font-size: 7px; letter-spacing: .06em; }

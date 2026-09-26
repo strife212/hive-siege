@@ -1230,38 +1230,37 @@ function updateEnemies(dt) {
 }
 
 // ---------------------------------------------------------------- minefields
-// The first bug on a field's tile sets off the armed mine nearest to it, and that bug alone takes the blast. The field
-// then needs def.rearm s before the next mine can go off, and once all are spent def.reload s to lay a new set (the
-// clock over the tile: mines.js). Nothing attacks a field (see blocker); in its silo it is idle and safe.
+// Every bug that steps onto a field's tile sets off the armed mine nearest to it, and that bug alone takes the blast.
+// A bug trips a set only once (a brute that survives its mine walks on over the rest). Once all are spent the field
+// needs def.reload s to lay a new set (the clock over the tile: mines.js). Nothing attacks a field (see blocker).
 function updateMines(s, dt) {
   if (s.landing && updateDrop(s, dt)) return;              // still coming down from orbit
   const d = s.def, ud = s.mesh.userData;
   if (s.reload > 0) {
     s.reload -= dt;
     ud.reload = Math.max(0.001, s.reload / d.reload);
-    if (s.reload <= 0) { s.reload = 0; ud.reload = 0; ud.spent.fill(false); s.arm = 0; }
+    if (s.reload <= 0) { s.reload = 0; ud.reload = 0; ud.spent.fill(false); s.tripped = null; }
     return;
   }
-  if (s.arm > 0) { s.arm -= dt; return; }
   const h = CELL / 2;
-  let hit = null;
+  s.tripped ??= new WeakSet();                               // bugs that have already set off a mine of this set
   eachEnemy(s.x, s.z, CELL * 0.75, (e) => {
-    if (e.dead || e.held || e.emerge < 1 || Math.abs(e.x - s.x) > h || Math.abs(e.z - s.z) > h) return false;
-    hit = e;
+    if (e.dead || e.held || e.emerge < 1 || s.tripped.has(e) || Math.abs(e.x - s.x) > h || Math.abs(e.z - s.z) > h) return false;
+    let k = -1, best = Infinity;
+    ud.mines.forEach((m, n) => {
+      const dd = (s.x + m.position.x - e.x) ** 2 + (s.z + m.position.z - e.z) ** 2;
+      if (!ud.spent[n] && dd < best) { best = dd; k = n; }
+    });
+    const m = ud.mines[k];
+    ud.spent[k] = true;
+    s.tripped.add(e);
+    damageEnemy(e, d.damage);
+    explode(s.x + m.position.x, s.z + m.position.z, 0.8, 0, 0.8, { shake: 0.04, smoke: 5 });   // the look only: the damage is the bug's
+    if (!ud.spent.every(Boolean)) return false;             // more bugs on the tile this frame take the next ones
+    s.reload = d.reload;
+    ud.reload = 1;
     return true;
   });
-  if (!hit) return;
-  let k = -1, best = Infinity;
-  ud.mines.forEach((m, n) => {
-    const dd = (s.x + m.position.x - hit.x) ** 2 + (s.z + m.position.z - hit.z) ** 2;
-    if (!ud.spent[n] && dd < best) { best = dd; k = n; }
-  });
-  const m = ud.mines[k];
-  ud.spent[k] = true;
-  damageEnemy(hit, d.damage);
-  explode(s.x + m.position.x, s.z + m.position.z, 0.8, 0, 0.8, { shake: 0.04, smoke: 5 });   // the look only: the damage is the bug's
-  s.arm = d.rearm;
-  if (ud.spent.every(Boolean)) { s.reload = d.reload; ud.reload = 1; }
 }
 
 // ---------------------------------------------------------------- effects

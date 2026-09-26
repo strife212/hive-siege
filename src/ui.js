@@ -36,6 +36,7 @@ export function createUI({ onSelectBuild }) {
     for (const [key, def] of Object.entries(BUILDINGS)) {
       if (def.cat !== cat) continue;
       const el = card(key, def.name, def.cost);
+      if (def.requires) el.insertAdjacentHTML('beforeend', `<span class="lock">${iconImg('lock')}</span>`);   // shown while locked
       el.addEventListener('click', () => {
         if (el.classList.contains('maxed')) return log(`Only ${def.limit} ${def.name} allowed`, true);
         if (el.classList.contains('locked')) return log(`${def.name} requires a ${BUILDINGS[def.requires].name}`, true);
@@ -157,7 +158,7 @@ export function createUI({ onSelectBuild }) {
       : d.kind === 'heli' ? `Patrols ${d.range} · ${d.rounds} x ${d.damage} gatling + ${d.rockets} x ${d.rocketDamage} rockets · ${d.rearm} s rearm`
       : d.kind === 'apoc' ? `Range ${d.minRange}-${d.range} · ${d.damage} dmg, ${d.splash} m blast · One shell every ${d.interval} s`
       : d.kind === 'rail' ? `Range ${d.range} · ${d.damage} piercing bolt · ${d.charge} s charge`
-      : d.mines ? `${d.mines} mines · ${d.damage} damage each · Re-arms in ${d.rearm} s · New set ${d.reload} s after the last`
+      : d.mines ? `${d.mines} mines · ${d.damage} damage each · New set ${d.reload} s after the last`
       : d.kind
       ? `Range ${d.range} · Damage ${d.damage} · ${d.rate}/s ${d.kind}`
       : d.income ? `+${d.income} credits / s` : '';

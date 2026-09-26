@@ -28,6 +28,11 @@ const M = {
   chitin: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.1 }),
   sac: new THREE.MeshStandardMaterial({ color: 0x9be04a, emissive: 0x7bd02a, emissiveIntensity: 1.4, roughness: 0.35 }),     // shared: they all pulse together
 };
+// A red ring on the ground round a hole that has just opened, so a new nest catches the eye: it pulses for RING_T s,
+// then fades out over RING_FADE s. Its own mesh (not in the hole's group, which squashes while the crater erupts).
+const RING_T = 3, RING_FADE = 1;
+const ringMat = () => new THREE.MeshBasicMaterial({ color: 0xff3a3a, transparent: true, opacity: 0, depthWrite: false, fog: false,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
 
 // A ring surface draped over the ground, from the outside in, one ring of vertices per profile row; lump(angle, ring)
 // = [dr, dh] roughens it (periodic in the angle, so the seam closes). Rows are [radius, height, color] for a plain
@@ -134,6 +139,10 @@ export const burrows = {
     cutDisc(x, z, PIT_R, true);
     h.cut = true;
     state.scene.add(h.group);
+    h.ring = new THREE.Mesh(drape(x, z, h.y, [[5.1, 0.15, col(0xffffff)], [4.4, 0.15, col(0xffffff)]], 64), ringMat());
+    h.ring.position.set(x, h.y, z);
+    h.ring.renderOrder = 4;
+    state.scene.add(h.ring);
     holes.push(h);
     burst(x, h.y + 0.3, z, 'soil', 22, 7);
     for (let k = 0; k < 8; k++) {
@@ -163,6 +172,13 @@ export const burrows = {
     for (let k = holes.length - 1; k >= 0; k--) {
       const h = holes[k], G = h.group;
       h.t += dt;
+      if (h.ring) {                                          // the attention ring: in, pulsing, then out
+        h.ringT = (h.ringT ?? 0) + dt;
+        const r = h.ringT, fade = h.closing ? 0 : Math.min(1, r / 0.2) * (1 - Math.max(0, (r - RING_T) / RING_FADE));
+        h.ring.material.opacity = fade * (0.72 + 0.23 * Math.sin(r * 6));
+        h.ring.scale.set(1 + 0.05 * Math.sin(r * 6), 1, 1 + 0.05 * Math.sin(r * 6));
+        if (fade <= 0 && r > 0.2) { state.scene.remove(h.ring); h.ring.geometry.dispose(); h.ring.material.dispose(); h.ring = null; }
+      }
       if (h.closing) {
         const u = Math.min(1, h.t / CLOSE_T), e = u * u;
         G.position.y = h.y - 0.9 * e;
