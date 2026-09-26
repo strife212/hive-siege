@@ -85,6 +85,11 @@ export const BUILDINGS = {
     kind: 'heli', range: 48, damage: 4, rate: 14, rounds: 100, rockets: 10, rocketDamage: 42, splash: 2.4, rearm: 5,
     desc: 'A heavy VTOL gunship lifts off to hunt the nearest bugs with 100 gatling rounds and 10 rockets, then returns to the pad for 5 s to rearm.',
   },
+  rail: {
+    name: 'Railgun Battery', cost: 2000, hp: 300, cat: 'DEFENSE', size: [2, 2], requires: 'lab',
+    kind: 'rail', range: 40, damage: 400, charge: 5, turn: 1.3,
+    desc: 'Charges for 5 s then fires a bolt that pierces every bug in a line. Requires a Research Lab.',
+  },
   airship: {
     name: 'Titan Airship Pad', cost: 5000, hp: 600, cat: 'DEFENSE', size: [2, 3], limit: 1,
     kind: 'airship', range: 52, rearm: 8,
@@ -94,10 +99,11 @@ export const BUILDINGS = {
     bombs: 30, bombRate: 2.2, bombDamage: 120, bombSplash: 4,     // bomb bay, straight down
     desc: 'Titan Support Airship: twin gatlings (500 rds each), twin HMGs (250 each), a 25-shell howitzer and 30 bombs. Rearms on its pad for 8 s. Only one can be built.',
   },
-  rail: {
-    name: 'Railgun Battery', cost: 1000, hp: 300, cat: 'DEFENSE', size: [2, 2], requires: 'lab',
-    kind: 'rail', range: 40, damage: 400, charge: 5, turn: 1.3,
-    desc: 'Charges for 5 s then fires a bolt that pierces every bug in a line. Requires a Research Lab.',
+  // Ultimate artillery (apocalypse.js): reaches anywhere on the map and always shells the biggest clump of bugs.
+  apoc: {
+    name: 'Apocalypse Heavy Artillery', cost: 6000, hp: 900, cat: 'DEFENSE', size: [3, 3], limit: 1,
+    kind: 'apoc', range: 180, minRange: 10, damage: 650, splash: 7, interval: 10, turn: 0.8,
+    desc: 'A colossal howitzer with cross-map range. Every 10 s it drops one giant shell (650 damage, 7 m blast) on the biggest clump of bugs on the field. Only one can be built.',
   },
   refinery: {
     name: 'Refinery', cost: 150, hp: 260, cat: 'ECONOMY',
@@ -141,6 +147,7 @@ export const RESEARCH = {
   hunter:      { group: 'heli', name: 'Hunter-Killer Avionics', cost: 1050, desc: 'Gunship rockets are saved for brutes, spitters and the Colossus; small bugs only get the gatling.' },
   deepMags:    { group: 'airship', name: 'Deep Magazines', cost: 4500, desc: 'The Titan carries 50% more of everything: 750 gatling and 375 HMG rounds per gun, 38 shells and 45 bombs.' },
   relay:       { group: 'airship', name: 'Fire Control Relay', cost: 6000, desc: 'While the Titan is in the air, every tower within 15 m of the ground beneath it fires 20% faster.' },
+  override:    { group: 'apoc', name: 'Priority Override', cost: 4000, desc: 'Take manual control of the Apocalypse Heavy Artillery: select it and press SET TARGET [T] to mark a spot, and it shells only that spot (whenever bugs are in the blast area) until you switch it back to AUTO.' },
   supercap:    { group: 'rail', name: 'Supercapacitors', cost: 1800, desc: 'Railgun charge time 5 s → 3 s.' },
   penetrator:  { group: 'rail', name: 'Tungsten Penetrator', cost: 2250, desc: 'Railgun bolts deal triple damage to the Colossus.' },
 };

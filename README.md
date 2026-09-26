@@ -1,6 +1,6 @@
-# Hive Siege — Alien Base Defense (proof of concept)
+# Hive Siege — Alien Base Defense
 
-A three.js base-defense prototype: build walls, towers, refineries and a research lab on a
+A three.js base-defense game: build walls, towers, refineries and a research lab on a
 procedurally generated 3D terrain, then hold off waves of insectoid aliens that chew through
 anything between them and your Core.
 
@@ -43,7 +43,7 @@ it off. Desktop is untouched: every rule is under `body.mobile`.
 
 Aiming then committing is on for any touch screen (tablets too); the touch bar is phone mode only.
 
-## What is in the prototype
+## What is in the game
 
 - **Terrain**: analytic domain-warped simplex heightmap (`src/terrain.js`) with a flatter plateau around
   the Core and ridged mountains beyond the playable square. Height is sampled analytically so bugs,
@@ -124,6 +124,10 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
     brutes, spitters and the Colossus; with the gun dry it hunts only those, or heads home).
   - Titan: Deep Magazines ($4,500, +50% of every ammo type), Fire Control Relay ($6,000, towers within 15 m of the
     ground under the airborne Titan fire 20% faster; the circle is traced on the terrain).
+  - Apocalypse Heavy Artillery: Priority Override ($4,000). Selecting the gun shows an AUTO / MANUAL button (T): pick a spot
+    with the same reticle and click / tap-to-aim flow as the abilities (`abilities.designate`), and the gun lays onto it and
+    shells only that spot, whenever a bug is inside the blast area, until it is switched back to AUTO. The spot is marked
+    on the ground with a pulsing ring the size of the blast.
   - Railgun: Supercapacitors ($1,800, charge 5 -> 3 s), Tungsten Penetrator ($2,250, x3 damage to the Colossus).
 - **Scale**: bugs are rendered as one instanced draw per species (`src/swarm.js`): the rig is baked into a single
   low-poly geometry with per-vertex pivot/axis/phase attributes and the gait, chomp, bob, burn glow and death curl
@@ -186,6 +190,14 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
 - **Titan Airship Pad** (2x3, 5000 credits, limit 1, `src/airship.js`): a big rigid airship (ring-framed cigar hull, cruciform tail, long lit
   gondola, four ducted fans, solar spine) that parks over the thickest knot of bugs. Twin gatlings (500 rds each), twin HMGs (250 each), a
   belly howitzer (25 shells, big splash) and a bomb bay that drops 30 bombs straight down. Returns when empty or idle, rearms moored for 8 s.
+- **Apocalypse Heavy Artillery** (3x3, 6000 credits, limit 1, `src/apocalypse.js`): a colossal sci-fi howitzer on a slab with four
+  outrigger jacks: armoured turret, trunnion-mounted cradle with recuperators, a long barrel wrapped in glowing coil rings and a slotted
+  muzzle brake. Range 180 (the whole map; nothing closer than 10), one 650-damage shell with a 7 m blast every 10 s. It shells the
+  biggest clump on the field: bugs are binned into 4-unit cells weighted by size (ants count little, brutes and spitters double, the
+  Colossus most), each cell scored with its neighbours, and the shell is aimed at the weighted centroid led by the clump's walking
+  speed. Each shot plays the full cycle: the barrel slams back and runs out, drops level, the breech door slides open and throws out the
+  spent brass case (it tumbles, bounces and lies on the ground before sinking away), a hoist lifts the next round out of the magazine,
+  a rammer drives it home, the breech shuts and the gun lays onto the next clump. In its silo the barrel stands on end.
 - **Gunship Pad** (2x2 tower, `src/heli.js`): a heavy off-white VTOL gunship (wingtip lift-jet nacelles that vector with the flight, multi-tube
   rocket pods, tall fin) lifts off, hunts the nearest bugs within 48 units of the pad with a 100-round chin gatling and 10 rockets, flies home
   when both are empty (or nothing is left to shoot), and rearms on the pad for 5 s. An ammo readout (gatling bar + one pip per rocket) hangs

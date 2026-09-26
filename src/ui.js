@@ -5,6 +5,7 @@ import { iconImg } from './icons.js';
 import { retract } from './retract.js';
 import { MOBILE } from './mobile.js';
 import { RANGE_U } from './terrain.js';
+import { setOverride, clearOverride, inRange } from './apocalypse.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -110,9 +111,30 @@ export function createUI({ onSelectBuild }) {
   $('restart').addEventListener('click', () => location.reload());
 
   // Selected structure panel (built once, text updated per frame)
-  info.innerHTML = '<h3></h3><div class="hp"><span>INTEGRITY</span><b></b></div><div class="bar"><div></div></div><div class="stats"></div><button class="silo"></button><button class="sell"></button>';
+  info.innerHTML = '<h3></h3><div class="hp"><span>INTEGRITY</span><b></b></div><div class="bar"><div></div></div><div class="stats"></div><button class="target"></button><button class="silo"></button><button class="sell"></button>';
   const infoName = info.querySelector('h3'), infoHp = info.querySelector('.hp b'), infoBar = info.querySelector('.bar > div'), infoStats = info.querySelector('.stats');
-  const sellBtn = info.querySelector('button.sell'), siloBtn = info.querySelector('button.silo');
+  const sellBtn = info.querySelector('button.sell'), siloBtn = info.querySelector('button.silo'), targetBtn = info.querySelector('button.target');
+  // Priority Override (Apocalypse Heavy Artillery): one button cycles AUTO -> picking a spot -> manual target -> AUTO.
+  const canOverride = (s) => s?.type === 'apoc' && !!state.research.override;
+  const designating = () => abilities.armed === 'designate';
+  function toggleOverride() {
+    const s = selected;
+    if (!canOverride(s)) return;
+    if (s.override) { clearOverride(s); log('Apocalypse Heavy Artillery: back on automatic targeting.'); return; }
+    if (designating()) { abilities.cancel(); return; }
+    abilities.designate({
+      name: 'Priority Override', hint: 'MARK A TARGET FOR THE APOCALYPSE', radius: s.def.splash, color: 0xff5a30,
+      alive: () => s.hp > 0 && state.structures.includes(s),
+      pick(p) {
+        if (!inRange(s, p)) { log(`Out of reach: the gun needs ${s.def.minRange}-${s.def.range} m`, true); return false; }
+        setOverride(s, p);
+        log('Apocalypse Heavy Artillery: shelling the marked spot. Press AUTO to hand targeting back.');
+        return true;
+      },
+    });
+  }
+  targetBtn.addEventListener('click', () => { toggleOverride(); targetBtn.blur(); });
+  addEventListener('keydown', (e) => { if (e.code === 'KeyT' && !e.repeat && !state.intro) toggleOverride(); });
   siloBtn.addEventListener('click', () => { if (selected) retract.toggle(selected); siloBtn.blur(); });
   addEventListener('keydown', (e) => { if (e.code === 'KeyR' && !e.repeat && selected && selected.type !== 'core' && !state.intro) retract.toggle(selected); });
   sellBtn.addEventListener('click', () => { if (selected) { sellStructure(selected); showSelected(null); } });
@@ -124,6 +146,7 @@ export function createUI({ onSelectBuild }) {
     infoName.textContent = s.name;
     sellBtn.hidden = s.type === 'core';
     siloBtn.hidden = s.type === 'core' || s.def?.silo === false;   // minefields have no silo
+    targetBtn.hidden = !canOverride(s);
     const d = s.def || {};
     sellBtn.textContent = `SELL  +$${Math.floor((d.cost || 0) * 0.5)}`;
     const stats = d.kind === 'flame'
@@ -132,6 +155,7 @@ export function createUI({ onSelectBuild }) {
       : d.kind === 'missile' ? `Range ${d.range} · ${d.salvo} x ${d.damage} rockets every ${d.interval} s`
       : d.kind === 'airship' ? `Patrols ${d.range} · 2x${d.gatRounds} gatling · 2x${d.hmgRounds} HMG · ${d.shells} shells (${d.artDamage}) · ${d.bombs} bombs (${d.bombDamage}) · ${d.rearm} s rearm`
       : d.kind === 'heli' ? `Patrols ${d.range} · ${d.rounds} x ${d.damage} gatling + ${d.rockets} x ${d.rocketDamage} rockets · ${d.rearm} s rearm`
+      : d.kind === 'apoc' ? `Range ${d.minRange}-${d.range} · ${d.damage} dmg, ${d.splash} m blast · One shell every ${d.interval} s`
       : d.kind === 'rail' ? `Range ${d.range} · ${d.damage} piercing bolt · ${d.charge} s charge`
       : d.mines ? `${d.mines} mines · ${d.damage} damage each · Re-arms in ${d.rearm} s · New set ${d.reload} s after the last`
       : d.kind
@@ -222,6 +246,11 @@ export function createUI({ onSelectBuild }) {
       else {
         const hp = `${Math.ceil(selected.hp)} / ${selected.maxHp}`;
         if (infoHp.textContent !== hp) { infoHp.textContent = hp; infoBar.style.width = `${(selected.hp / selected.maxHp) * 100}%`; }
+        if (canOverride(selected)) {
+          const t = (selected.override ? 'MANUAL · GO AUTO' : designating() ? 'CANCEL TARGETING' : 'AUTO · SET TARGET') + (MOBILE ? '' : '  [T]');
+          if (targetBtn.textContent !== t) { targetBtn.textContent = t; targetBtn.classList.toggle('on', !!selected.override || designating()); }
+        }
+        if (targetBtn.hidden === canOverride(selected)) targetBtn.hidden = !canOverride(selected);   // researched while selected
         const label = selected.selling ? 'CLEARING SITE…' : MOBILE ? retract.label(selected) : `${retract.label(selected)}  [R]`;
         if (siloBtn.textContent !== label) { siloBtn.textContent = label; siloBtn.disabled = !!selected.selling; }
       }

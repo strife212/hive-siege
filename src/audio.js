@@ -236,6 +236,23 @@ const SYNTH = {
     osc(c, o, t, { type: 'sine', f0: 2600, f1: 550, dur: 1.0, gain: 0.16, a: 0.15, hold: 0 });
     noise(c, o, t, { dur: 1.0, type: 'bandpass', f0: 2600, f1: 600, q: 6, gain: 0.12, a: 0.2 });
   } },
+  apoc_fire: { min: 0.5, fn: (c, o, t) => {               // the Apocalypse gun: a sharp crack over a huge, slow-rolling boom
+    noise(c, o, t, { dur: 0.07, type: 'highpass', f0: 1800, gain: 0.9, a: 0.001 });
+    osc(c, o, t, { type: 'sine', f0: 70, f1: 22, dur: 1.6, gain: 1.0, a: 0.004 });
+    osc(c, o, t, { type: 'triangle', f0: 140, f1: 40, dur: 0.6, gain: 0.35, a: 0.004, lp: 700 });
+    noise(c, o, t, { dur: 2.2, type: 'lowpass', f0: 2400, f1: 90, gain: 0.8, a: 0.004 });
+    noise(c, o, t + 0.25, { dur: 2.5, type: 'lowpass', f0: 500, f1: 80, gain: 0.3, a: 0.4 });   // echo off the mountains
+  } },
+  apoc_load: { min: 0.2, fn: (c, o, t) => {               // hoist / rammer: a hydraulic push ending in a heavy clank
+    osc(c, o, t, { type: 'triangle', f0: 80, f1: 110, dur: 0.5, gain: 0.12, a: 0.15, lp: 500 });
+    osc(c, o, t + 0.45, { type: 'square', f0: 150, f1: 90, dur: 0.12, gain: 0.14, a: 0.003, lp: 900 });
+    noise(c, o, t + 0.45, { dur: 0.15, type: 'bandpass', f0: 900, q: 2, gain: 0.2, a: 0.002 });
+  } },
+  apoc_eject: { min: 0.1, fn: (c, o, t) => {              // the spent case hitting metal or dirt: a hollow brass clang
+    osc(c, o, t, { type: 'triangle', f0: 620, f1: 560, dur: 0.35, gain: 0.12, a: 0.002 });
+    osc(c, o, t, { type: 'sine', f0: 1480, f1: 1400, dur: 0.25, gain: 0.05, a: 0.002 });
+    noise(c, o, t, { dur: 0.05, type: 'bandpass', f0: 2000, q: 1.5, gain: 0.18, a: 0.001 });
+  } },
   mortar_fire: { min: 0.05, fn: (c, o, t) => {
     osc(c, o, t, { type: 'sine', f0: 95, f1: 38, dur: 0.35, gain: 0.9 });
     noise(c, o, t, { dur: 0.3, type: 'lowpass', f0: 900, f1: 200, gain: 0.6, a: 0.003 });

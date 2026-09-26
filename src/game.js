@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MAPS, BOSS_EVERY, BUILDINGS, ENEMIES, SPECIALS, ANTS, CORNERS, RESEARCH, START_CREDITS, CELLS, MAX_SLOPE, SPAWN_RADIUS, CELL, HALF, FLAT, MAP } from './config.js';
-import { heightAt, cellToWorld, worldToCell, cellKey, inBounds, cellSlope, nestPosition, confine, walkInPoint, approachDir, isScenery } from './terrain.js';
+import { heightAt, cellToWorld, cellKey, inBounds, cellSlope, nestPosition, confine, walkInPoint, approachDir, isScenery } from './terrain.js';
 import {
   makeBuildingMesh, setWallLinks,
   makeProjectile, makeBeam, makeTracer, makeGibs, makeCasings, makeMortarShell, makeMissile,
@@ -13,6 +13,7 @@ import { updateHeli, updateHeliRockets, removeHeli } from './heli.js';
 import { boss } from './boss.js';
 import { retract } from './retract.js';
 import { updateAirship, updateAirshipOrdnance, removeAirship, airshipArrive } from './airship.js';
+import { updateApocalypse, updateApocalypseOrdnance } from './apocalypse.js';
 import { spatial } from './spatial.js';
 import { swarm } from './swarm.js';
 import { gore } from './gore.js';
@@ -75,6 +76,18 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3
 const _q = new THREE.Quaternion();
 
 // ---------------------------------------------------------------- setup
+// state.occ mirrored into a flat grid indexed by cell: the per-bug, per-frame blocker checks read this and skip
+// building "i,j" string keys. Always written through occSet / occDelete so the two never disagree.
+const occGrid = new Array(CELLS * CELLS).fill(null);
+function occSet(i, j, s) {
+  state.occ.set(cellKey(i, j), s);
+  if (inBounds(i, j)) occGrid[j * CELLS + i] = s;
+}
+function occDelete(i, j) {
+  state.occ.delete(cellKey(i, j));
+  if (inBounds(i, j)) occGrid[j * CELLS + i] = null;
+}
+
 export function init(scene) {
   state.scene = scene;
   swarm.init(scene);
@@ -92,7 +105,7 @@ export function init(scene) {
   };
   const c = CELLS / 2;
   for (const [i, j] of [[c - 1, c - 1], [c, c - 1], [c - 1, c], [c, c]]) {
-    state.occ.set(cellKey(i, j), core);
+    occSet(i, j, core);
     core.cells.push([i, j]);
   }
   core.mesh = makeBuildingMesh('core');
@@ -190,7 +203,7 @@ export function placeStructure(type, i, j, opts = {}) {
     retract.install(s);                                          // arrives locked down in its silo and deploys (retract.js)
     burst(x, y + 0.2, z, 'soil', 8 * s.cells.length, 3 + s.cells.length);
   }
-  for (const [ci, cj] of s.cells) state.occ.set(cellKey(ci, cj), s);
+  for (const [ci, cj] of s.cells) occSet(ci, cj, s);
   state.flowDirty = true;
   state.structures.push(s);
   if (type === 'wall') { refreshWalls(i, j); wallBatch.add(s.mesh); }     // walls are drawn instanced (walls.js)
@@ -222,8 +235,8 @@ function removeStructure(s) {
   clearDrop(s);
   retract.drop(s);
   state.scene.remove(s.mesh, s.bar);
-  if (s.cells) for (const [i, j] of s.cells) state.occ.delete(cellKey(i, j));
-  else state.occ.delete(cellKey(s.i, s.j));
+  if (s.cells) for (const [i, j] of s.cells) occDelete(i, j);
+  else occDelete(s.i, s.j);
   const k = state.structures.indexOf(s);
   if (k >= 0) state.structures.splice(k, 1);
   if (s.type === 'wall') refreshWalls(s.i, s.j);
@@ -600,6 +613,7 @@ function updateTower(s, dt) {
   if (def.kind === 'rail') return updateRailgun(s, dt);
   if (def.kind === 'heli') return updateHeli(s, dt);
   if (def.kind === 'airship') return updateAirship(s, dt);
+  if (def.kind === 'apoc') return updateApocalypse(s, dt);
   s.cooldown -= dt;
   if (s.target && (s.target.dead || Math.hypot(s.target.x - s.x, s.target.z - s.z) > def.range)) s.target = null;
   if (!s.target) s.target = nearestEnemy(s.x, s.z, def.range);
@@ -989,6 +1003,7 @@ function flameStream(s, dt) {
 }
 
 // Burning status: damage over time with flames licking off the bug.
+const burnY = (e) => heightAt(e.x, e.z) + (e.boss ? e.aimH - 1 : 0);
 function updateBurning(dt) {
   const en = state.enemies;
   let burning = 0;
@@ -998,13 +1013,13 @@ function updateBurning(dt) {
     const e = en[i];
     if (!e.burn || e.dead) continue;
     e.burn.t -= dt;
-    const y = heightAt(e.x, e.z) + (e.boss ? e.aimH - 1 : 0);
     const sc = e.def.scale;
-    if (Math.random() < dt * 7 * fxScale) {
+    if (Math.random() < dt * 7 * fxScale) {                       // ground height is looked up only when a particle goes out
+      const y = burnY(e);
       flame.emit(e.x + (Math.random() - 0.5) * 0.9 * sc, y + (0.2 + Math.random() * 0.6) * sc, e.z + (Math.random() - 0.5) * 0.9 * sc,
         { size: 0.22 * sc + 0.14, grow: 0.7, life: 0.4 + Math.random() * 0.2, vy: 2.2 + Math.random(), vx: (Math.random() - 0.5), vz: (Math.random() - 0.5), drag: 1, heat: 0.7 });
     }
-    if (Math.random() < dt * 4 * fxScale) puff(e.x, y + 0.8 * sc, e.z, { color: 0x2a2622, size: 0.5, grow: 1.4, life: 1.0, opacity: 0.35, vy: 2 });
+    if (Math.random() < dt * 4 * fxScale) puff(e.x, burnY(e) + 0.8 * sc, e.z, { color: 0x2a2622, size: 0.5, grow: 1.4, life: 1.0, opacity: 0.35, vy: 2 });
     damageEnemy(e, e.burn.dps * dt);
     if (e.burn && e.burn.t <= 0) e.burn = null;
   }
@@ -1111,7 +1126,13 @@ function updateSpitter(e, dt) {
 
 const _dir = { x: 0, z: 0 };
 // What stands in a bug's way (and gets chewed): not retracted buildings, and not minefields, which bugs walk over.
-const blocker = (i, j) => { const st = state.occ.get(cellKey(i, j)); return st && !st.buried && !st.def?.walkable ? st : null; };
+// The structure (if any) standing on the build cell under world point (x, z) that stops a bug: not buried, not walkable.
+function blockerAt(x, z) {
+  const i = Math.floor((x + HALF) / CELL), j = Math.floor((z + HALF) / CELL);
+  if (i < 0 || j < 0 || i >= CELLS || j >= CELLS) return null;
+  const st = occGrid[j * CELLS + i];
+  return st && !st.buried && !st.def?.walkable ? st : null;
+}
 const PREY_RANGE = 16;                 // bugs this close to a trooper go for it before anything else
 function updateEnemies(dt) {
   if (state.flowDirty || state.time - state.flowBuilt > 1.5) {
@@ -1162,8 +1183,7 @@ function updateEnemies(dt) {
       _dir.x = (prey.x - e.x) / l; _dir.z = (prey.z - e.z) / l;
       // Only charge straight at the trooper when the way is open. Behind a wall, keep following the normal route in
       // (or keep chewing) instead of piling up against the nearest structure.
-      const pc = worldToCell(e.x + _dir.x * 0.9, e.z + _dir.z * 0.9), here = worldToCell(e.x, e.z);
-      if (blocker(pc.i, pc.j) || blocker(here.i, here.j)) prey = null;
+      if (blockerAt(e.x + _dir.x * 0.9, e.z + _dir.z * 0.9) || blockerAt(e.x, e.z)) prey = null;
       else e.target = null;
     }
 
@@ -1184,9 +1204,7 @@ function updateEnemies(dt) {
     const dx = _dir.x * cj - _dir.z * sj, dz = _dir.x * sj + _dir.z * cj;
 
     // Anything in the cell ahead (or the one we stand in) blocks us: chew through it.
-    let c = worldToCell(e.x + dx * 0.9, e.z + dz * 0.9);
-    let st = blocker(c.i, c.j);
-    if (!st) { c = worldToCell(e.x, e.z); st = blocker(c.i, c.j); }
+    const st = blockerAt(e.x + dx * 0.9, e.z + dz * 0.9) || blockerAt(e.x, e.z);
     if (st) { e.target = st; continue; }
 
     e.x = Math.max(-limX, Math.min(limX, e.x + dx * e.speed * dt));
@@ -1276,6 +1294,7 @@ function updateEffects(dt) {
 }
 
 // ---------------------------------------------------------------- main tick
+let spareEnemies = [];
 export function update(dt) {
   state.time += dt;
   updateWave(dt);
@@ -1304,6 +1323,7 @@ export function update(dt) {
   updateProjectiles(dt);
   updateHeliRockets(dt);
   updateAirshipOrdnance(dt);
+  updateApocalypseOrdnance(dt);
   acid.update(dt, damageStructure);
   boss.updateDying(dt);
   updateShells(dt);
@@ -1314,7 +1334,14 @@ export function update(dt) {
   updateCasings(dt);
   updateDecals(state.scene, dt);
   if (state.deadCount) {
-    state.enemies = state.enemies.filter((e) => !e.dead);
+    // Survivors go into the spare array, then the two swap. Not compacted in place: the spatial index still points
+    // into this frame's array (by position) until updateEnemies rebuilds it, and troopers and abilities query it later
+    // this frame. The spare is only written again at the next compaction, after that rebuild.
+    const out = spareEnemies;
+    out.length = 0;
+    for (const e of state.enemies) if (!e.dead) out.push(e);
+    spareEnemies = state.enemies;
+    state.enemies = out;
     state.deadCount = 0;
   }
   gore.update(dt);

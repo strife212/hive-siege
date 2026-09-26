@@ -3,7 +3,7 @@ import { state, canPlace, placeStructure, log, anchorFor, footprintCenter, footp
 import { BUILDINGS, CELL } from './config.js';
 import { worldToCell, cellToWorld, cellKey, heightAt, pickTerrain } from './terrain.js';
 import { makeBuildingMesh, ghostify, setWallLinks } from './entities.js';
-import { abilities, ABILITIES } from './abilities.js';
+import { abilities } from './abilities.js';
 import { troopers } from './troopers.js';
 import { MOBILE } from './mobile.js';
 
@@ -89,7 +89,7 @@ export function createInput({ renderer, camera, scene, terrain, ui, controls }) 
 
   function tap(ev, p) {
     if (abilities.armed) {
-      const def = ABILITIES[abilities.armed];
+      const def = abilities.armedDef;
       if (def.line && !abilities.anchored) { pending = null; abilities.click(p); return; }   // bomber: pin the run first
       if (aimValid() && (def.global || Math.hypot(ev.clientX - pending.x, ev.clientY - pending.y) < RETAP)) return commit();
       pending = { x: ev.clientX, y: ev.clientY, p, seq: abilities.seq };
@@ -185,7 +185,7 @@ export function createInput({ renderer, camera, scene, terrain, ui, controls }) 
     let text = '', go = '', ok = false, x = 'CANCEL';
     const aimed = aimValid();
     if (abilities.armed) {
-      const def = ABILITIES[abilities.armed];
+      const def = abilities.armedDef;
       text = def.name;
       go = def.global ? 'LAUNCH' : 'FIRE';
       text += def.line && !abilities.anchored ? ' · tap a point on the run'

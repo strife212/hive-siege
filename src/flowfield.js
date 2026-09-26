@@ -12,7 +12,10 @@ const cost = new Float32Array(CELLS);
 const dist = new Float32Array(CELLS);
 const dirX = new Float32Array(CELLS);
 const dirZ = new Float32Array(CELLS);
-const NB = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.4142], [-1, 1, 1.4142], [1, -1, 1.4142], [-1, -1, 1.4142]];
+// Neighbour offsets and step weights as flat constant tables, so the inner loops allocate nothing. The weights stay
+// plain (double precision) numbers: path costs must add up exactly as they always have.
+const NI = [1, -1, 0, 0, 1, -1, 1, -1], NJ = [0, 0, 1, -1, 1, 1, -1, -1];
+const NW = [1, 1, 1, 1, 1.4142, 1.4142, 1.4142, 1.4142];
 
 for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
   const x0 = i * CELL - FLAT, z0 = j * CELL - FLAT;
@@ -21,31 +24,42 @@ for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
   baseCost[j * N + i] = slope > 3.2 ? 400 : 1 + Math.min(6, Math.max(0, (slope - 1.2) * 2.5));   // cliffs: effectively walls
 }
 
-// Binary heap of (dist, cell) pairs.
-const heapD = new Float32Array(CELLS * 4), heapC = new Int32Array(CELLS * 4);
-let heapN = 0;
+// Binary min-heap of (dist, cell) pairs. Sift by moving a hole rather than swapping, and pop() leaves the popped
+// distance in popD instead of returning an object: a rebuild pushes tens of thousands of entries.
+const heapD = new Float32Array(CELLS * 8), heapC = new Int32Array(CELLS * 8);
+let heapN = 0, popD = 0;
 function push(d, c) {
+  d = Math.fround(d);                                   // compare as stored (float32), exactly like the swap-based heap did
   let k = heapN++;
+  while (k > 0) {
+    const p = (k - 1) >> 1;
+    if (heapD[p] <= d) break;
+    heapD[k] = heapD[p]; heapC[k] = heapC[p]; k = p;
+  }
   heapD[k] = d; heapC[k] = c;
-  while (k > 0) { const p = (k - 1) >> 1; if (heapD[p] <= heapD[k]) break; [heapD[p], heapD[k]] = [heapD[k], heapD[p]]; [heapC[p], heapC[k]] = [heapC[k], heapC[p]]; k = p; }
 }
 function pop() {
-  const d = heapD[0], c = heapC[0];
-  heapN--;
-  if (heapN > 0) {
-    heapD[0] = heapD[heapN]; heapC[0] = heapC[heapN];
+  const c = heapC[0];
+  popD = heapD[0];
+  const n = --heapN;
+  if (n > 0) {
+    const d = heapD[n], cc = heapC[n];
     let k = 0;
     for (;;) {
-      const l = 2 * k + 1, r = l + 1;
-      let s = k;
-      if (l < heapN && heapD[l] < heapD[s]) s = l;
-      if (r < heapN && heapD[r] < heapD[s]) s = r;
-      if (s === k) break;
-      [heapD[s], heapD[k]] = [heapD[k], heapD[s]]; [heapC[s], heapC[k]] = [heapC[k], heapC[s]]; k = s;
+      let l = 2 * k + 1;
+      if (l >= n) break;
+      if (l + 1 < n && heapD[l + 1] < heapD[l]) l++;
+      if (heapD[l] >= d) break;
+      heapD[k] = heapD[l]; heapC[k] = heapC[l]; k = l;
     }
+    heapD[k] = d; heapC[k] = cc;
   }
-  return { d, c };
+  return c;
 }
+
+// The cost grid (and goals) of the last rebuild: when nothing has changed since, the field is already right.
+const lastCost = new Float32Array(CELLS).fill(-1);
+let lastGoals = '';
 
 export const flow = {
   // structures: iterable of { cells: [[i,j],...] | i,j, hp, type }
@@ -62,29 +76,36 @@ export const flow = {
         else cost[c] = 9 + s.hp / 40;
       }
     }
+    const goalKey = goals.join(',');
+    let same = goalKey === lastGoals;
+    for (let c = 0; same && c < CELLS; c++) same = cost[c] === lastCost[c];
+    if (same) return;
+    lastCost.set(cost);
+    lastGoals = goalKey;
+
     dist.fill(Infinity);
     heapN = 0;
     for (const c of goals) { dist[c] = 0; push(0, c); }
     while (heapN > 0) {
-      const { d, c } = pop();
+      const c = pop(), d = popD;
       if (d > dist[c]) continue;
       const ci = c % N, cj = (c - ci) / N;
-      for (const [di, dj, w] of NB) {
-        const ni = ci + di, nj = cj + dj;
+      for (let q = 0; q < 8; q++) {
+        const ni = ci + NI[q], nj = cj + NJ[q];
         if (ni < 0 || nj < 0 || ni >= N || nj >= N) continue;
         const n = nj * N + ni;
-        const nd = d + w * cost[n];
+        const nd = d + NW[q] * cost[n];
         if (nd < dist[n]) { dist[n] = nd; push(nd, n); }
       }
     }
     for (let c = 0; c < CELLS; c++) {
       const ci = c % N, cj = (c - ci) / N;
       let best = dist[c], bx = 0, bz = 0;
-      for (const [di, dj] of NB) {
-        const ni = ci + di, nj = cj + dj;
+      for (let q = 0; q < 8; q++) {
+        const ni = ci + NI[q], nj = cj + NJ[q];
         if (ni < 0 || nj < 0 || ni >= N || nj >= N) continue;
         const nd = dist[nj * N + ni];
-        if (nd < best) { best = nd; bx = di; bz = dj; }
+        if (nd < best) { best = nd; bx = NI[q]; bz = NJ[q]; }
       }
       const l = Math.hypot(bx, bz) || 1;
       dirX[c] = bx / l; dirZ[c] = bz / l;

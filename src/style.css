@@ -209,6 +209,9 @@ button.big:disabled {
 #infoPanel button.silo { border-color: rgba(91, 212, 255, .55); color: #d6f4ff; background: linear-gradient(180deg, rgba(91, 212, 255, .26), rgba(91, 212, 255, .08)); }
 #infoPanel button.silo:hover { background: linear-gradient(180deg, #6fdcff, #2a9fd0); color: #04121a; }
 #infoPanel button.silo:disabled { opacity: .5; cursor: default; }
+#infoPanel button.target { border-color: rgba(255, 176, 64, .55); color: #ffe9c7; background: linear-gradient(180deg, rgba(255, 176, 64, .24), rgba(255, 176, 64, .07)); }
+#infoPanel button.target:hover { background: linear-gradient(180deg, #ffc060, #d9861c); color: #1a0e02; }
+#infoPanel button.target.on { border-color: #ff7a40; color: #fff; background: linear-gradient(180deg, rgba(255, 106, 64, .55), rgba(214, 60, 40, .3)); box-shadow: 0 0 10px rgba(255, 106, 64, .45); }
 #infoPanel button.sell { margin-top: 5px; }
 
 /* ------------------------------------------------------------------ battlefield overlays */
