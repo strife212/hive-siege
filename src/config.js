@@ -1,4 +1,4 @@
-export const VERSION = '1.12';                 // shown on the main menu; the minor number goes up by one with every commit (1.9, 1.10, 1.11...)
+export const VERSION = '1.13';                 // shown on the main menu; the minor number goes up by one with every commit (1.9, 1.10, 1.11...)
 export const MAP_SIZE = 80;
 export const HALF = MAP_SIZE / 2;
 export const CELL = 2;

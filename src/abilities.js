@@ -18,10 +18,10 @@ import { tip } from './tooltip.js';
 
 // ---------------------------------------------------------------- definitions
 export const ABILITIES = {
-  laser:     { name: 'Orbital Laser',    key: '1', cooldown: 20, radius: 2.9, desc: 'Sustained beam that follows your cursor for 6 s.' },
-  lance:     { name: 'Orbital Lance',    key: '2', cooldown: 25, radius: 5.5, desc: 'Orbital beams converge into one devastating strike.' },
-  strafe:    { name: 'Strafing Run',     key: '3', cooldown: 25, length: 24, width: 6.6, desc: 'Three jets rake a long strip with rockets and cannon fire.' },
-  artillery: { name: 'Artillery Strike', key: '4', cooldown: 25, radius: 7.6, desc: 'Two dozen HE shells rain across the area.' },
+  laser:     { name: 'Orbital Laser',    key: '1', cooldown: 30, radius: 2.9, desc: 'Sustained beam that follows your cursor for 6 s.' },
+  lance:     { name: 'Orbital Lance',    key: '2', cooldown: 35, radius: 5.5, desc: 'Orbital beams converge into one devastating strike.' },
+  strafe:    { name: 'Strafing Run',     key: '3', cooldown: 35, length: 24, width: 6.6, desc: 'Three jets rake a long strip with rockets and cannon fire.' },
+  artillery: { name: 'Artillery Strike', key: '4', cooldown: 35, radius: 7.6, desc: 'Two dozen HE shells rain across the area.' },
   troopers:  { name: 'Shock Troopers',   key: '5', cooldown: 60, radius: 7,  desc: 'Five drop pods slam down and unload three troopers each. Drag to select them, click to move.' },
   bomber:    { name: 'Strategic Bomber', key: '6', cooldown: 90, width: 9.9, line: true, desc: 'Click a point, then a direction: a heavy bomber carpets that line across the entire map.' },
   nuke:      { name: 'Tactical Nuke',    key: '7', cooldown: 60, radius: 13.2, desc: '10 s countdown, then an ICBM levels the whole area. Bugs in the outer ring are set ablaze for 5 s.' },
