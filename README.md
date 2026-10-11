@@ -159,7 +159,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   weight is exactly zero at that pixel, and it is drawn after every other solid object so the depth test throws out
   the ground hidden under buildings and bugs before it is shaded (its pixels are the most expensive in the scene).
 - **Adaptive quality** (`src/quality.js`): if the frame rate stays under 45 fps for a 2 s window, rendering steps down
-  a level. Levels 0-4: pixel-ratio cap 1.5 / 1.0 / 0.85 / 0.8 / 0.7, MSAA 2 / 2 / 2 / 0 / 0, shadow map
+  a level. Levels 0-4: pixel-ratio cap 1.5 / 1.0 / 0.85 / 0.8 / 0.7, MSAA 2 / 2 / 0 / 0 / 0, shadow map
   3072 / 2048 / 2048 / 1536 / 1024, bloom off only at the last level. All of it changes live, without shader
   recompiles. Frames over 150 ms (compiles, GC, tab switches) are ignored unless ten come in a row, nothing is judged
   for 3 s after loading or 1.5 s after a change, and if two steps in a row buy under 5% more frames (CPU-bound, or the

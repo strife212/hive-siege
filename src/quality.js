@@ -20,8 +20,8 @@ const KEY = 'hive-siege-quality';
 const LEVELS = [
   { pr: null, msaa: 2, shadow: 3072, bloom: true },
   { pr: 1.0, msaa: 2, shadow: 2048, bloom: true },
-  { pr: 0.85, msaa: 2, shadow: 2048, bloom: true },
-  { pr: 0.8, msaa: 0, shadow: 1536, bloom: true },      // from here the resolution holds up and AA / shadows give way
+  { pr: 0.85, msaa: 0, shadow: 2048, bloom: true },     // no anti-aliasing from here
+  { pr: 0.8, msaa: 0, shadow: 1536, bloom: true },      // from here the resolution holds up and shadows give way
   { pr: 0.7, msaa: 0, shadow: 1024, bloom: false },
 ];
 
