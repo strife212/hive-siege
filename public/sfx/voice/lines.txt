@@ -9,3 +9,5 @@
 9. Micro-Singularity away.
 10. Landship authorised. Clear the dropzone.
 11. Strategic launch detected. All structures to defensive positions.
+12. Ability locked. Requires strategic uplink tower.
+13. Tower locked. Requires Research Lab.

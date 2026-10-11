@@ -15,5 +15,7 @@
   "voice_archangel": "voice/8.wav",
   "voice_blackhole": "voice/9.wav",
   "voice_battleship": "voice/10.wav",
-  "voice_strategic": "voice/11.wav"
+  "voice_strategic": "voice/11.wav",
+  "voice_ability_locked": "voice/12.wav",
+  "voice_tower_locked": "voice/13.wav"
 }

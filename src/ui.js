@@ -4,6 +4,7 @@ import { abilities } from './abilities.js';
 import { iconImg } from './icons.js';
 import { retract } from './retract.js';
 import { MOBILE } from './mobile.js';
+import { audio } from './audio.js';
 import { RANGE_U } from './terrain.js';
 import { setOverride, clearOverride, inRange } from './apocalypse.js';
 
@@ -39,7 +40,10 @@ export function createUI({ onSelectBuild }) {
       if (def.requires) el.insertAdjacentHTML('beforeend', `<span class="lock">${iconImg('lock')}</span>`);   // shown while locked
       el.addEventListener('click', () => {
         if (el.classList.contains('maxed')) return log(`Only ${def.limit} ${def.name} allowed`, true);
-        if (el.classList.contains('locked')) return log(`${def.name} requires a ${BUILDINGS[def.requires].name}`, true);
+        if (el.classList.contains('locked')) {
+          audio.voice('voice_tower_locked', { vol: 0.95 });    // "Tower locked. Requires Research Lab."
+          return log(`${def.name} requires a ${BUILDINGS[def.requires].name}`, true);
+        }
         setActive(activeBuild === key ? null : key);
         if (MOBILE && activeBuild) desc.textContent = def.desc;
       });

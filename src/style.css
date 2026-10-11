@@ -308,6 +308,44 @@ body.intro #abilities { opacity: 0; pointer-events: none; }
 .ability .cdtext { position: absolute; inset: 0 0 14px; display: flex; align-items: center; justify-content: center; pointer-events: none; font: 700 26px/1 var(--font-display); color: #fff; text-shadow: 0 0 8px #000, 0 2px 0 rgba(0, 0, 0, .8); font-variant-numeric: tabular-nums; }
 #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 15; }
 
+/* ------------------------------------------------------------------ hover tooltips (src/tooltip.js) */
+#tip {
+  position: fixed; left: 0; top: 0; z-index: 30; width: max-content; max-width: 260px; pointer-events: none;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, .7)); opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .16s var(--ease);
+}
+#tip.rich { max-width: 350px; }
+#tip.below { transform: translateY(-4px); }
+#tip.on { opacity: 1; transform: none; }
+#tip .box {
+  padding: 7px 11px 8px; font-size: 12px; line-height: 1.4; color: #c6cfdc;
+  background: linear-gradient(180deg, #161d28, #090c12); border: 1px solid var(--line2); border-top: 2px solid var(--accent); clip-path: var(--notch-sm);
+}
+#tip .arrow {                                        /* a square turned to a point, half under the box */
+  position: absolute; bottom: -5px; width: 10px; height: 10px; margin-left: -5px; transform: rotate(45deg);
+  background: #090c12; border-right: 1px solid var(--line2); border-bottom: 1px solid var(--line2);
+}
+#tip.below .arrow { bottom: auto; top: -5px; background: #161d28; border: 0; border-left: 2px solid var(--accent); border-top: 2px solid var(--accent); }
+#tip .head { display: flex; align-items: center; gap: 7px; margin: 1px 0 5px; }
+#tip .head b { font: 700 15px/1.1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--accent-hi); }
+#tip .key {
+  flex: none; min-width: 16px; padding: 0 4px; text-align: center; font: 700 10px/14px var(--font-display);
+  color: var(--accent); background: rgba(0, 0, 0, .55); border: 1px solid var(--accent-lo);
+}
+#tip p { margin: 0; }
+#tip .meta {
+  display: flex; align-items: baseline; gap: 14px; margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--line);
+  font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+}
+#tip .meta b { font: 700 12.5px/1 var(--font-display); letter-spacing: .03em; text-transform: none; color: var(--text); font-variant-numeric: tabular-nums; }
+#tip .state { margin-left: auto; padding-left: 8px; font: 700 11px/1 var(--font-display); letter-spacing: .16em; white-space: nowrap; }
+#tip .state.ready { color: var(--accent); }
+#tip .state.armed, #tip .state.cooling, #tip .state.cooling b { color: var(--accent2); }
+#tip .state.deployed, #tip .state.deployed b { color: #5dff8a; }
+#tip .state.locked { color: var(--danger); }
+#tip .req { margin-top: 6px; padding: 3px 7px; font-size: 11px; font-weight: 600; letter-spacing: .03em; }
+#tip .req.bad { color: #ffd2cb; background: rgba(255, 90, 69, .13); border-left: 2px solid var(--danger); }
+#tip .req.ok { color: #c9f5d4; background: rgba(111, 224, 138, .09); border-left: 2px solid var(--ok); }
+
 /* ------------------------------------------------------------------ debug menu (Z) */
 #debug {
   pointer-events: auto; display: flex; flex-direction: column; gap: 4px; width: 176px; padding: 9px;

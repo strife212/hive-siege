@@ -14,6 +14,7 @@ import { EXTENT } from './terrain.js';
 import { strategicStrike } from './strategic.js';
 import { blackHoleBomb } from './blackhole.js';
 import { battleships } from './battleship.js';
+import { tip } from './tooltip.js';
 
 // ---------------------------------------------------------------- definitions
 export const ABILITIES = {
@@ -31,9 +32,9 @@ export const ABILITIES = {
   // battleship.js. hull: the reticle is its footprint, facing away from the Core (the way it lands), red where it will not fit.
   // While one is on station its button counts down its 120 s (refreshBar), and its cooldown only starts once that is
   // over (lifted out, or destroyed first).
-  battleship: { name: 'Airdrop Land Battleship', key: '0', cooldown: 240, requires: 'uplink', hull: true, color: 0x5dff8a, desc: 'Requires a Strategic Uplink Tower. A tracked land battleship is dropped from orbit, braked by retro-thrusters, for two minutes. Every bug on the field goes for it first. It carries a railgun, two CIWS gatlings, an eight-cell missile battery, four dual autocannons, its own gunship and a shock trooper on the helipad, and has 15,000 HP. Select it like the shock troopers (drag a box or click it), then click to move it. When its time is up it stops, recovers its gunship and the drop rig lifts it out; the cooldown starts then.' },
+  battleship: { name: 'Airdrop Land Battleship', key: '0', cooldown: 240, requires: 'uplink', hull: true, color: 0x5dff8a, desc: 'Drops from orbit and becomes every bug\'s first target. Railgun, 2 CIWS, missile battery, 4 dual autocannons, an escort gunship and a trooper on the helipad; 15,000 HP. Select and move it like troopers. Lifted out when its time is up; the cooldown starts then.' },
   // the ultimate: the last button on the bar
-  strategic: { name: 'Strategic Nuclear Strike', key: '-', cooldown: 300, global: true, requires: 'uplink', hint: 'INITIATE STRATEGIC LAUNCH', desc: 'Requires a Strategic Uplink Tower. Last resort. Click anywhere on the map to launch. Every structure retracts into its silo, then a 10 s countdown and a giant ICBM hits the centre of the map: every bug on the surface dies, and a Colossus takes 30,000 damage. The base redeploys once the cloud clears.' },
+  strategic: { name: 'Strategic Nuclear Strike', key: '-', cooldown: 300, global: true, requires: 'uplink', hint: 'INITIATE STRATEGIC LAUNCH', desc: 'Last resort: click anywhere to launch. The base retracts into its silos, then 10 s later an ICBM kills every bug on the surface and hits a Colossus for 30,000. The base redeploys once the cloud clears.' },
 };
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -1063,7 +1064,10 @@ export const abilities = {
   get anchored() { return !!ab.anchor; },                        // the bomber's run is pinned, its heading is next
   get seq() { return ab.seq; },                                  // changes on every arm / cancel (input.js: touch aiming)
   arm(key) {
-    if (locked(key)) return log(`${ABILITIES[key].name} requires a ${BUILDINGS[ABILITIES[key].requires].name}`, true);
+    if (locked(key)) {
+      audio.voice('voice_ability_locked', { vol: 0.95 });      // "Ability locked. Requires strategic uplink tower."
+      return log(`${ABILITIES[key].name} requires a ${BUILDINGS[ABILITIES[key].requires].name}`, true);
+    }
     if (ab.cooldowns[key] > 0) return log(`${ABILITIES[key].name} recharging (${Math.ceil(ab.cooldowns[key])} s)`, true);
     if (ab.armed === key) return abilities.cancel();
     abilities.cancel();
@@ -1169,11 +1173,23 @@ function buildBar() {
     const b = document.createElement('button');
     b.className = 'ability';
     b.innerHTML = `<span class="key">${def.key}</span><span class="icon">${iconImg(`ab_${key}`)}</span><span class="name${def.name.length > 22 ? ' long' : ''}">${def.name}</span><span class="cd"></span><span class="cdtext"></span>`;
-    b.title = def.desc;
+    tip(b, () => abilityTip(key));
     b.addEventListener('click', () => abilities.arm(key));
     bar.appendChild(b);
     ab.buttons[key] = b;
   }
+}
+// The hover card for a call-in button: what it does, its cooldown and the building it needs, and its state right now.
+function abilityTip(key) {
+  const def = ABILITIES[key], cd = ab.cooldowns[key], lock = locked(key), dep = key === 'battleship' ? battleships.deployLeft() : null;
+  const [cls, label] = lock ? ['locked', 'Locked'] : dep !== null ? ['deployed', `<b>${Math.ceil(dep)} s</b> left`]
+    : ab.armed === key ? ['armed', 'Armed'] : cd > 0 ? ['cooling', `Recharging <b>${Math.ceil(cd)} s</b>`] : ['ready', 'Ready'];
+  const meta = [`Cooldown <b>${Math.round(cooldownOf(key))} s</b>`];
+  if (key === 'battleship') meta.push(`On station <b>${battleships.deploy} s</b>`);
+  const need = def.requires && BUILDINGS[def.requires].name;
+  return `<div class="head"><span class="key">${def.key}</span><b>${def.name}</b></div><p>${def.desc}</p>`
+    + `<div class="meta">${meta.map((m) => `<span>${m}</span>`).join('')}<span class="state ${cls}">${label}</span></div>`
+    + (need ? `<div class="req ${lock ? 'bad' : 'ok'}">${lock ? `Requires a ${need}` : `${need} online`}</div>` : '');
 }
 // Orbital Command Priority (research): every support ability but the Strategic Strike recharges 25% faster.
 const cooldownOf = (key) => ABILITIES[key].cooldown * (state.research.orbital && key !== 'strategic' ? 0.75 : 1);

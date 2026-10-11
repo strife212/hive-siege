@@ -3,6 +3,8 @@
 // query; Chromium does, Firefox usually does not), and the load behind it (draw calls, triangles, bugs, particles).
 // Text refreshes four times a second from averages so it stays readable; the graph shows every frame. Hidden, it
 // costs nothing: every hook returns straight away.
+import { tip } from './tooltip.js';
+
 const N = 160;                                 // frames kept for the graph and the worst-frame readout
 const KEY = 'hive-siege-perf';
 const LINES = [16.7, 33.3];                    // 60 and 30 fps guides
@@ -29,7 +31,7 @@ function build() {
   el.hidden = true;
   el.innerHTML = `
     <div class="top"><b data-k="fps">–</b><span>FPS</span><em data-k="ms">– ms</em></div>
-    <canvas title="Each bar is one frame (green under 16.7 ms, amber under 33.3 ms). The bright part is the CPU time spent in the game's own code."></canvas>
+    <canvas data-tip="Each bar is one frame (green under 16.7 ms, amber under 33.3 ms). The bright part is the CPU time spent in the game's own code."></canvas>
     <dl>
       <dt>worst</dt><dd data-k="worst">–</dd>
       <dt>CPU</dt><dd data-k="cpu">–</dd>
@@ -40,6 +42,7 @@ function build() {
   document.body.appendChild(el);
   for (const n of el.querySelectorAll('[data-k]')) out[n.dataset.k] = n;
   canvas = el.querySelector('canvas');
+  tip(canvas, canvas.dataset.tip);
   g = canvas.getContext('2d');
 }
 

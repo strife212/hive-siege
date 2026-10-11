@@ -65,15 +65,16 @@ async function loadAssets() {
     const base = (import.meta.env && import.meta.env.BASE_URL) || '/';
     const res = await fetch(`${base}sfx/manifest.json`);
     if (!res.ok) return;
-    const manifest = await res.json();
-    for (const [name, file] of Object.entries(manifest)) {
+    // Every file at once, the radio call-outs first, so a call-in made in the opening seconds already has its voice line.
+    const manifest = Object.entries(await res.json()).sort(([a], [b]) => b.startsWith('voice_') - a.startsWith('voice_'));
+    await Promise.all(manifest.map(async ([name, file]) => {
       try {
         const r = await fetch(`${base}sfx/${file}`);
-        if (!r.ok) continue;
+        if (!r.ok) return;
         state.assets[name] = trimSilence(state.ctx, await state.ctx.decodeAudioData(await r.arrayBuffer()));
         console.info(`[sfx] using asset for ${name}: ${file}`);
       } catch (e) { console.warn(`[sfx] could not load ${file}`, e); }
-    }
+    }));
   } catch { /* no manifest: all sounds synthesised */ }
 }
 
@@ -591,11 +592,13 @@ export const audio = {
     return ctx;
   },
   setPaused(v) { state.paused = v; },
-  // Radio call-outs (each support ability's voice line, a file listed in public/sfx/manifest.json as voice_<key>):
-  // not positional, and one at a time, a new call-out cutting the last one off rather than talking over it.
+  // Radio call-outs (each support ability's voice line, and the locked-ability / locked-tower warnings: files listed in
+  // public/sfx/manifest.json as voice_<name>): not positional, and one at a time, a new call-out cutting the last one
+  // off rather than talking over it. A line already playing is left to finish, so clicking again does not restart it.
   voice(name, p = {}) {
     const ctx = state.ctx, asset = state.assets[name];
     if (!ctx || !asset || state.paused || (!state.offline && ctx.state !== 'running')) return;
+    if (state.voice?.name === name) return;
     state.voice?.stop();
     const g = ctx.createGain();
     g.gain.value = p.vol ?? 1;
@@ -604,7 +607,7 @@ export const audio = {
     src.buffer = asset;
     src.connect(g);
     src.start();
-    const line = { stop() { g.gain.setTargetAtTime(0, ctx.currentTime, 0.03); try { src.stop(ctx.currentTime + 0.15); } catch { /* already over */ } } };
+    const line = { name, stop() { g.gain.setTargetAtTime(0, ctx.currentTime, 0.03); try { src.stop(ctx.currentTime + 0.15); } catch { /* already over */ } } };
     src.onended = () => { if (state.voice === line) state.voice = null; };
     state.voice = line;
   },
