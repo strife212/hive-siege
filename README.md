@@ -18,6 +18,7 @@ anything between them and your Core.
 | MMB drag or WASD | Pan |
 | Scroll | Zoom (to cursor) |
 | Q / E | Rotate |
+| LMB drag | Select shock troopers and battleships (then click to move them) |
 | Esc / RMB click | Cancel placement, deselect |
 | Shift+click | Keep placing the same building (walls always do) |
 
@@ -69,6 +70,10 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   panel with sell (50% refund). A building that needs a Research Lab first shows a padlock over its card's icon. A selected tower shows its reach as a ring drawn into the terrain shader (so it
   follows the ground exactly), with a faint tint inside; the mortar's shows its 8-unit dead zone too, and research that
   extends a range updates it live. Aircraft pads, economy and support buildings, walls and mines have none.
+  Every tower and minefield keeps a kill count, shown under its integrity bar: a kill goes to whichever structure lands
+  the killing blow. Shells, missiles, rockets, bombs and splash count for the structure that fired them, and a burning
+  bug counts for the last flamethrower or White Phosphorus mortar to set it alight (Clinging Napalm's spread too).
+  Strikes and troopers credit no structure.
 - **Autocannon effects**: the gun assembly recoils 0.3 units on each shot (50 ms kick, 200 ms return) with an
   additive muzzle-flash sprite; a brass casing ejects from the side port, tumbles, bounces, rests on the
   terrain and vanishes after 3 s.
@@ -100,8 +105,8 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   - three railed walkway platforms, guy wires, and blinking red aviation lights
   - a big uplink dish on the roof that slowly slews to hold its link
 
-  The Strategic Nuclear Strike stays locked until one stands, and locks again if it is lost. It sinks whole into a
-  deep silo like everything else.
+  The Strategic Nuclear Strike and the Airdrop Land Battleship stay locked until one stands, and lock again if it is
+  lost. It sinks whole into a deep silo like everything else.
 - **Research** (TECH tab, needs a Research Lab): GLOBAL is always listed; every building's own section appears the
   first time one is built and stays. Stat research rebuilds the live per-type stats that every structure points at
   (`s.def`), so towers, aircraft and the info panel update the moment it completes.
@@ -262,7 +267,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   seconds the hole strains, collapses and blows, and every survivor is flung on an arc back to the spot it was taken
   from, landing dazed. Held bugs are still valid targets for towers. `e.held` (moved by blackhole.js, skipped by the
   AI and the separation pass, lifted and tumbled by the swarm renderer) and `e.stun`.
-- **Strategic Nuclear Strike** (key 0, `src/strategic.js`, needs a Strategic Uplink Tower): a last resort played as a cinematic. It arms like the other
+- **Strategic Nuclear Strike** (key -, the last button on the bar, `src/strategic.js`, needs a Strategic Uplink Tower): a last resort played as a cinematic. It arms like the other
   call-ins, with INITIATE STRATEGIC LAUNCH riding above the cursor (no ground marker); any click on the map launches it.
   Every structure (minefields excepted: they stay out) and the Core retract into their silos; then a 10 s beeping countdown ("STRATEGIC LAUNCH DETECTED /
   IMPACT IN n") while a giant ICBM comes down on the centre of the map. With 7 s to go the camera leaves the player,
@@ -278,6 +283,59 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   - A wave the blast clears does not start the next one.
   - The hold lifts only once the camera is handed back and every sheltered structure is fully redeployed. The attack
     then resumes 5 s later (`BREATHER` in `src/strategic.js`). START WAVE still works if the player wants to go early.
+
+  The shock front does not destroy a Land Battleship: it takes half its max HP, once.
+- **Airdrop Land Battleship** (key 0, `src/battleship.js`, 240 s cooldown, needs a Strategic Uplink Tower): a
+  destroyer-hulled battleship on tracks, on station for two minutes (`SHIP.deploy`, 120 s). The cooldown only starts
+  once its time on the field is over (or it is destroyed first).
+  - **Hull:** 16.4 m by 4.2 m. A faceted stealth hull with tumblehome sides and a raked, wave-piercing ram bow; a gun
+    on the foredeck, then the VLS, a bridge block with its pyramid mast and radar, an aft deckhouse with two stacks
+    (black exhaust when it drives) and a helipad on the stern with its own gunship.
+  - **Drop:** the reticle is its footprint, facing away from the Core the way it will land, red where it will not fit
+    (buildings, scenery, another battleship). It falls at 40 m/s in an orange drop harness, the harness's four
+    retro-thrusters light at 58 m and brake it to a soft touchdown, crushing whatever is underneath. The harness then
+    lets go and boosts back to orbit.
+  - **Time on station:** while it is down, its call-in button turns into a green countdown from 120 (in place of the
+    cooldown; it shows 120 while the ship is still coming down). The log warns at 10 s. At 0 it holds where it is (no
+    more move orders) and calls its gunship home; once the gunship is on the deck a fresh drop rig comes down on its
+    retros, clamps on with a thump and lifts the whole ship, gunship and all, back to orbit. It keeps fighting, and the
+    bugs keep at it, right up to the lift. Destroyed while the rig is on its way down, the rig turns back empty.
+  - **Aggro:** every bug on the field goes for it first while it is down, ahead of troopers and the Core: they head
+    for the nearest point of its hull and bite it for their structure damage (only while the way there is open, as
+    with troopers), anywhere it goes: on the canyon map that includes out past the mouth, where bugs on the walk-in
+    ground turn for it too. Spitters lob acid at it, and a Colossus walks to it and stabs it instead of the Core.
+  - **Control:** select it like the shock troopers (drag a box over it or click it; it joins a trooper selection),
+    then click to move. Each order is planned as a route (A* on a 2 m grid round buildings, canyon walls and the
+    map's edge, cut down to its corners); it drives it corner to corner at 2.4 m/s, turning on the spot about the
+    middle of the hull, and backs up to a spot just behind it. Round anything the route did not foresee it turns the
+    long way when the short way is blocked, edges forward or back to make room to turn, and steers along walls; it
+    gives up only when it truly cannot move. On the canyon map it can go anywhere on the canyon floor, right up to the
+    foot of the walls (`SHIP.wall`) but never up them, and out through the mouth onto the open ground the bugs come
+    in from. It sits on a best-fit plane through the ground under its tracks, digging in up to 0.3 m rather than
+    perching on the highest bump. Selected, it shows its info panel: integrity, kills and weapons.
+  - **Ram:** driving forward, the bow kills any bug it runs into (a Colossus excepted); backing up, the stern runs
+    over small ones. Bugs elsewhere along the hull are shoved aside.
+  - **Weapons**, each within a firing arc so nothing ever swings through the superstructure: a railgun (500 piercing
+    bolt every 5 s, Colossus first, ±135° off the bow), CIWS gatlings fore and aft (25 rounds/s each), an eight-cell
+    VLS (40-damage missiles with a 2.5 m blast every 7 s, spread over up to three clusters) and four dual autocannon sponsons (a 25-damage shell
+    from each barrel per shot). CIWS rounds do 5. Everything it fields hits harder than its tower or trooper
+    counterpart. All kills go on
+    its own count.
+  - **Escort gunship** (`updateEscort` in `src/heli.js`): the Gunship Pad's aircraft, slightly smaller and in the
+    ship's naval livery (battleship greys, the gold trim as its one accent, pale LB / LBB-01 HS markings), parked on
+    the helipad (it rides along while the ship drives). It lifts off when bugs come within 24 m of the ship and circles
+    it about 9.5 m out, the circle leaning toward whatever it is fighting, nose on the bug nearest the ship. Out of
+    ammo, after 6 s with nothing to shoot, or when a strategic strike is coming, it flies back and lands on the deck,
+    matching the ship's speed if it is driving, then rearms for 5 s. Same gun, rockets and research as the Gunship
+    Pad, but harder-hitting (8 per round, 53 per rocket); its kills count for the ship. If the ship is destroyed it goes down too.
+  - **Helipad sentry** (`makeSentry` / `updateSentry` in `src/troopers.js`): a shock trooper posted on one of the
+    helipad's two aft corners, beside the parked gunship. He fires his machine gun (the troopers' own, but with 16 m of
+    reach up there instead of 10, and 3 damage a round instead of 2.5) at the nearest bug inside his corner's arc off that side and the stern, angling it
+    down off the deck, and never shoots across the ship. While the gunship is up and away, if his side is quiet and
+    the other side has bugs in reach, he runs across the stern to the other corner; he stays put while it is parked,
+    landing or lifting off. No grenades, and nothing bites him; he rides out the extraction and is lost if the ship is.
+  - **Integrity:** 15,000 HP. Below half it smokes, below a quarter it burns. Destroyed, explosions ripple along the
+    hull, the magazines go up (400 damage over 7 m), and the wreck burns out and sinks.
 
   A strike that wants the camera
   registers a driver through `abilities.cinematic`, which main.js runs in place of the player's controls (`body.cine`
@@ -347,6 +405,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
     src/weather.js   weather: storm blend, GPU rain and splashes, lightning, wet-surface uniforms
     src/blackhole.js the Micro-Singularity Gravity Bomb: singularity visuals, capture / orbit / consume / fling of held bugs
     src/strategic.js the Strategic Nuclear Strike cinematic (giant ICBM, camera choreography, map-wide blast)
+    src/battleship.js the Airdrop Land Battleship: model, drop, driving, footprint, weapons, wreck
     src/retract.js   retractable-building silos: timeline, stow poses, shaft/door/lock hardware
     src/surface.js   bevelled boxes and the triplanar wear shader shared by all built models
     src/intro.js     landing cinematic

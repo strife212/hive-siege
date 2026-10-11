@@ -362,7 +362,7 @@ function fire(s, aim, dist) {
   state.scene.add(round);
   shells.push({
     mesh: round, start: _a.clone(), end: new THREE.Vector3(ex, heightAt(ex, ez), ez), t: 0, dur,
-    h: Math.max(6, flat * Math.tan(s.apoc.elev) / 4), dmg: def.damage, splash: def.splash, whistled: false, puffT: 0,
+    h: Math.max(6, flat * Math.tan(s.apoc.elev) / 4), dmg: def.damage, splash: def.splash, whistled: false, puffT: 0, src: s,
   });
 
   // muzzle blast: flash, a jet of fire and smoke out of the brake, a dust ring kicked up around the mount
@@ -428,7 +428,7 @@ export function updateApocalypseOrdnance(dt) {
     if (sh.puffT <= 0) { sh.puffT = 0.04; puff(_b.x, _b.y, _b.z, { color: 0xcfc8c0, size: 0.6, grow: 2, life: 1.3, opacity: 0.4, drag: 0.6 }); }
     if (!sh.whistled && sh.dur - sh.t < 1.0) { sh.whistled = true; audio.play('artillery_whistle', { x: sh.end.x, z: sh.end.z, vol: 0.9 }); }
     if (u >= 1) {
-      explode(sh.end.x, sh.end.z, 4.2, sh.dmg, sh.splash, { shake: 1.1, smoke: 20 });
+      explode(sh.end.x, sh.end.z, 4.2, sh.dmg, sh.splash, { shake: 1.1, smoke: 20, src: sh.src });
       explode(sh.end.x, sh.end.z, 2.4, 0, 0, { shake: 0, smoke: 6, color: 0xffd080 });
       state.scene.remove(m);
       shells.splice(k, 1);

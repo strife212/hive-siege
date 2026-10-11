@@ -6,6 +6,8 @@ import { explode } from './effects.js';
 import { puff } from './particles.js';
 import { audio } from './audio.js';
 import { bevelBox, worn } from './surface.js';
+import { bakeStatic } from './bake.js';
+import { BUILDINGS } from './config.js';
 
 // Gunship Pad: a 2x2 pad with a heavy VTOL gunship parked on it. The aircraft lifts off, hunts the nearest bugs,
 // empties its gatling and rocket pods, then flies home and spends def.rearm seconds on the pad before going again.
@@ -69,11 +71,11 @@ export function makeHelipad(g) {
 // Heavy VTOL gunship, faces +z: slab-sided off-white hull with an angular greenhouse cockpit and amber chin glazing,
 // stub wings carrying multi-tube rocket pods, a big lift-jet nacelle on each wingtip (blue intake cowl, orange band,
 // blue nozzle) that vectors with the flight, a tall fin, and belly sponsons to sit on. Origin at the bottom.
-function decal(text, w = 256, h = 96) {
+function decal(text, w = 256, h = 96, ink = '#3a2f2a') {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const g = c.getContext('2d');
-  g.fillStyle = '#3a2f2a';
+  g.fillStyle = ink;
   g.font = `bold ${h * 0.78}px "Arial Narrow", Arial, sans-serif`;
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillText(text, w / 2, h / 2 + 4);
@@ -287,7 +289,7 @@ function nearestHeavy(x, z, r) {
 
 // Rocket shapes, shared by every rocket (they used to be built per shot and never freed).
 const rocketGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.6, 8).rotateX(Math.PI / 2), rocketTipGeo = new THREE.ConeGeometry(0.06, 0.18, 8).rotateX(Math.PI / 2);
-function launchRocket(h, heli, e, def) {
+function launchRocket(s, h, heli, e, def) {
   const pod = heli.userData.pods[h.rocketsLeft % 2];
   heli.userData.body.localToWorld(_q.copy(pod));
   const m = new THREE.Group();
@@ -297,7 +299,7 @@ function launchRocket(h, heli, e, def) {
   state.scene.add(m);
   const l = Math.hypot(e.fx, e.fz) || 1, lead = _q.distanceTo(_a.set(e.x, _q.y, e.z)) / 34;
   const tx = e.x + (e.fx / l) * e.speed * lead, tz = e.z + (e.fz / l) * e.speed * lead;
-  rockets.push({ m, to: new THREE.Vector3(tx, heightAt(tx, tz), tz), trail: 0, dmg: def.rocketDamage, splash: def.splash });
+  rockets.push({ m, to: new THREE.Vector3(tx, heightAt(tx, tz), tz), trail: 0, dmg: def.rocketDamage, splash: def.splash, src: s });
   puff(_q.x, _q.y, _q.z, { color: 0xffc070, size: 0.8, life: 0.1, opacity: 0.9, additive: true });
   audio.play('rocket_launch', { x: heli.position.x, z: heli.position.z, vol: 0.6 });
 }
@@ -308,7 +310,7 @@ export function updateHeliRockets(dt) {
     _a.subVectors(r.to, p);
     const d = _a.length(), step = 34 * dt;
     if (d <= step + 0.3) {
-      explode(r.to.x, r.to.z, 1.2, r.dmg, r.splash, { shake: 0, smoke: 4 });
+      explode(r.to.x, r.to.z, 1.2, r.dmg, r.splash, { shake: 0, smoke: 4, src: r.src });
       state.scene.remove(r.m);
       rockets.splice(k, 1);
       continue;
@@ -476,7 +478,7 @@ export function updateHeli(s, dt) {
     state.beams.push({ mesh: tr, life: 0.05, max: 0.05 });
     ud.flash.visible = true;
     ud.flash.rotation.z = Math.random() * Math.PI;
-    damageEnemy(e, def.damage);
+    damageEnemy(e, def.damage, s);
     if (Math.random() < 0.35) burst(_b.x, _b.y, _b.z, 'soil', 1, 3);
     audio.play('hmg_fire', { x: pos.x, z: pos.z, vol: 0.4 });
   }
@@ -485,7 +487,7 @@ export function updateHeli(s, dt) {
     const rt = rocketTarget(pos.x, pos.z, GUN_RANGE + 3, hk) || (hk ? null : e);
     if (rt) {
       h.rocketCd = 0.55;
-      launchRocket(h, heli, rt, def);
+      launchRocket(s, h, heli, rt, def);
       h.rocketsLeft--;
     }
   }
@@ -500,4 +502,196 @@ export function removeHeli(s) {
     burst(heli.position.x, heli.position.y, heli.position.z, 'debris', 14, 9);
     heli.parent.remove(heli);
   }
+}
+
+// ---------------------------------------------------------------- escort gunship (battleship.js)
+// The Land Battleship carries one of these gunships on its helipad. It flies differently from a pad's: it lifts off when
+// bugs come within E.DEFEND of the ship, circles the ship (the circle leaning toward whatever it is fighting) with its
+// nose on its target, and goes back down to the deck to rearm when its magazines run dry, when the ship has been quiet
+// for a while, or when a strategic strike is coming. It lands on the deck even while the ship is driving. Its gun,
+// rockets, rearm time and research are the Gunship Pad's, its gun and rockets harder-hitting; its kills go on the ship's count.
+const E = { R: 9.5, ALT: 7, DEFEND: 24, SPEED: 10, QUIET: 6 };   // orbit radius, height above the deck, reach, m/s, s idle
+const ESCORT_HITS = { damage: 8, rocketDamage: 53 };             // a pad's gunship does 4 and 42
+const escortDef = () => ({ ...BUILDINGS.heli, ...ESCORT_HITS, ...(state.research.heliMags ? { rounds: 160, rockets: 16 } : {}) });
+const _pad = new THREE.Vector3();
+
+// The escort's naval livery: the battleship's greys in place of the off-white, blue and orange, its gold trim as the
+// one accent, and pale markings like the hull's. Glazing, jets, lights and gun metal stay as they are.
+let navy = null;
+function navyLivery() {
+  if (navy) return navy;
+  const paint = (src, color, wear = { grime: 0.2, chips: 0.3 }) => {
+    const m = new THREE.MeshStandardMaterial({ color, roughness: src.roughness, metalness: src.metalness });
+    worn(m, wear);
+    return m;
+  };
+  navy = new Map([
+    [mats.skin, paint(mats.skin, 0x6f7883)],
+    [mats.skinDark, paint(mats.skinDark, 0x5f6771)],
+    [mats.panel, paint(mats.panel, 0x4c535c)],
+    [mats.blue, paint(mats.blue, 0x3a4048)],
+    [mats.orange, paint(mats.orange, 0xd9a633)],
+    [mats.pod, paint(mats.pod, 0x4a5159)],
+    [mats.podDark, paint(mats.podDark, 0x353a41)],
+    [decals.big, decal('LB', 160, 96, '#e8e2cf')],
+    [decals.id, decal('LBB-01 HS', 320, 80, '#e8e2cf')],
+  ]);
+  return navy;
+}
+
+export function makeEscort(scale) {
+  const g = makeHeli(), livery = navyLivery();
+  g.traverse((o) => { if (o.isMesh && livery.has(o.material)) o.material = livery.get(o.material); });
+  bakeStatic(g);                                                 // fixed parts merged, as a pad's gunship is
+  g.scale.setScalar(scale);
+  return g;
+}
+export const newEscort = () => ({ mode: 'rearm', t: 1, rounds: escortDef().rounds, rocketsLeft: escortDef().rockets, rpm: 0, vx: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, gunCd: 0, rocketCd: 1.2, idle: 0, scan: 0, target: null, ang: 0, dir: 1 });
+
+// s: the ship; s.escort = { heli, pad (the deck spot it parks on), h (its state, newEscort) }.
+export function updateEscort(s, dt) {
+  const { heli, pad, h } = s.escort, ud = heli.userData, def = escortDef(), pos = heli.position;
+  pad.getWorldPosition(_pad);
+
+  const wantRpm = h.mode === 'rearm' ? 0.18 : 1;
+  h.rpm += (wantRpm - h.rpm) * Math.min(1, dt * (wantRpm > h.rpm ? 1.6 : 0.9));
+  ud.glowMat.emissiveIntensity = 0.3 + h.rpm * 3.4;
+  for (const f of ud.thrust) { f.visible = h.rpm > 0.3; f.scale.set(0.9 + Math.random() * 0.2, (h.rpm - 0.25) * (0.85 + Math.random() * 0.4), 0.9 + Math.random() * 0.2); }
+  const prog = h.mode === 'rearm' ? 1 - Math.max(0, h.t) / def.rearm : 0;
+  ud.hud.visible = h.mode !== 'rearm' || (h.t > 0 && (h.rounds < def.rounds || h.rocketsLeft < def.rockets));
+  if (ud.hud.visible) drawAmmo(ud, h.mode === 'rearm' ? Math.round(h.rounds + (def.rounds - h.rounds) * prog) : h.rounds, def.rounds,
+    h.mode === 'rearm' ? Math.round(h.rocketsLeft + (def.rockets - h.rocketsLeft) * prog) : h.rocketsLeft, def.rockets);
+  ud.hud.position.y = h.mode === 'rearm' ? 3.6 : -1.5;
+
+  if (h.mode === 'rearm') {                                      // parked on the deck, riding along with the ship
+    h.t -= dt;
+    if (h.t <= 0) {
+      h.rounds = def.rounds; h.rocketsLeft = def.rockets;
+      if (s.phase === 'active' && !state.waveHold && nearestBug(s.x, s.z, E.DEFEND)) {
+        state.scene.attach(heli);
+        h.yaw = heli.rotation.y;
+        heli.rotation.set(0, h.yaw, 0);
+        h.mode = 'takeoff'; h.t = 0; h.idle = 0;
+        h.dir = Math.random() < 0.5 ? 1 : -1;
+        s.escortSnd = audio.loop('vtol_jet', { x: _pad.x, z: _pad.z, vol: 0.55 });
+      }
+    }
+    return;
+  }
+
+  // what to fight: the bug nearest the ship (Hunter-Killer Avionics with the gun empty: the nearest heavy)
+  h.scan -= dt;
+  if (h.mode === 'defend') {
+    if (h.target && (h.target.dead || Math.hypot(h.target.x - s.x, h.target.z - s.z) > E.DEFEND + 4)) h.target = null;
+    const dry = state.research.hunter && h.rounds <= 0;
+    if (dry && h.target && !isHeavy(h.target)) h.target = null;
+    if (h.scan <= 0 || !h.target) { h.scan = 0.4; h.target = dry ? nearestHeavy(s.x, s.z, E.DEFEND) : nearestBug(s.x, s.z, E.DEFEND); }
+    if ((h.rounds <= 0 && h.rocketsLeft <= 0) || state.waveHold || s.phase !== 'active') { h.mode = 'return'; h.target = null; }   // the ship's time is up: home
+    else if (!h.target) { h.idle += dt; if (h.idle > E.QUIET) h.mode = 'return'; }
+    else h.idle = 0;
+  }
+
+  // where to be: straight up off the deck, round the ship, back over the deck, down onto it
+  const e = h.mode === 'defend' ? h.target : null;
+  const sx = Math.sin(s.yaw) * s.v, sz = Math.cos(s.yaw) * s.v;   // the ship's way: matched over the deck so it never lags behind
+  let gx = _pad.x, gz = _pad.z, gy = _pad.y + E.ALT, vx = sx, vz = sz, faceX = null, faceZ = null;
+  if (h.mode === 'takeoff') {
+    gy = _pad.y + E.ALT * Math.min(1, h.t / 1.8);
+    h.t += dt;
+    if (h.t > 1.9) { h.mode = 'defend'; h.ang = Math.atan2(pos.x - s.x, pos.z - s.z); }
+  } else if (h.mode === 'defend') {
+    const cx = e ? s.x + (e.x - s.x) * 0.4 : s.x, cz = e ? s.z + (e.z - s.z) * 0.4 : s.z;
+    h.ang += (E.SPEED / E.R) * h.dir * dt;
+    gx = cx + Math.sin(h.ang) * E.R; gz = cz + Math.cos(h.ang) * E.R;
+    gy = Math.max(heightAt(pos.x, pos.z), s.y) + E.ALT + 2.7;
+    vx = sx + Math.cos(h.ang) * E.SPEED * h.dir; vz = sz - Math.sin(h.ang) * E.SPEED * h.dir;   // carried round the circle
+    if (e) { faceX = e.x - pos.x; faceZ = e.z - pos.z; }
+  }
+  const tx = gx - pos.x, tz = gz - pos.z, td = Math.hypot(tx, tz);
+  if (h.mode === 'land') {                                       // locked over the deck, matching the ship's way, settling down
+    pos.x += sx * dt + tx * Math.min(1, dt * 6); pos.z += sz * dt + tz * Math.min(1, dt * 6);
+    h.vx = h.vz = 0;
+    pos.y = Math.max(_pad.y, pos.y - dt * 2.2);
+  } else {
+    const k = h.mode === 'defend' ? 1.2 : 1.6, cap = h.mode === 'defend' ? 16 : 13;
+    let wx = vx + tx * k, wz = vz + tz * k;
+    const w = Math.hypot(wx, wz);
+    if (w > cap) { wx *= cap / w; wz *= cap / w; }
+    const acc = Math.min(1, dt * 1.8);
+    h.vx += (wx - h.vx) * acc; h.vz += (wz - h.vz) * acc;
+    pos.x += h.vx * dt; pos.z += h.vz * dt;
+    pos.y += (Math.max(gy, heightAt(pos.x, pos.z) + 3.5) - pos.y) * Math.min(1, dt * 1.4);
+    pos.y += Math.sin(state.time * 1.7 + 3) * 0.004;
+  }
+  const speed = Math.hypot(h.vx, h.vz);
+  if (faceX === null && speed > 1.5 && h.mode !== 'land') { faceX = h.vx; faceZ = h.vz; }
+  if (h.mode === 'land' || (h.mode === 'return' && td < 4)) { faceX = Math.sin(s.yaw); faceZ = Math.cos(s.yaw); }   // nose to the bow
+  if (faceX !== null) h.yaw += wrap(Math.atan2(faceX, faceZ) - h.yaw) * Math.min(1, dt * 2.6);
+  heli.rotation.set(0, h.yaw, 0);
+  const fwd = h.vx * Math.sin(h.yaw) + h.vz * Math.cos(h.yaw), side = h.vx * Math.cos(h.yaw) - h.vz * Math.sin(h.yaw);
+  h.pitch += (fwd * 0.03 - h.pitch) * Math.min(1, dt * 3);
+  h.roll += (-side * 0.035 - h.roll) * Math.min(1, dt * 3);
+  ud.body.rotation.set(h.pitch * 0.6 + (e ? 0.1 : 0), 0, h.roll);
+  const vector = Math.max(-0.2, Math.min(0.75, fwd * 0.055));
+  for (const n of ud.nacelles) n.rotation.x += (vector - n.rotation.x) * Math.min(1, dt * 3);
+  const agl = pos.y - heightAt(pos.x, pos.z);
+  if (agl < 4.5 && Math.hypot(pos.x - s.x, pos.z - s.z) > 9 && Math.random() < dt * 22) {   // jet wash on open ground (not over the ship)
+    const a = Math.random() * Math.PI * 2, r = 1 + Math.random() * 1.5;
+    puff(pos.x + Math.cos(a) * r, pos.y - agl + 0.3, pos.z + Math.sin(a) * r, { color: 0xb59468, size: 0.9 + Math.random(), grow: 2.2, life: 0.7 + Math.random() * 0.5, opacity: 0.4, vx: Math.cos(a) * 5, vz: Math.sin(a) * 5, vy: 0.6, drag: 2 });
+  }
+  s.escortSnd?.setPos(pos.x, pos.z);
+
+  if (h.mode === 'return' && td < 1 && Math.abs(pos.y - gy) < 1.2) h.mode = 'land';
+  if (h.mode === 'land' && pos.y - _pad.y < 0.02 && td < 0.08) {
+    pad.attach(heli);
+    heli.position.set(0, 0, 0);
+    heli.rotation.set(0, 0, 0);
+    ud.body.rotation.set(0, 0, 0);
+    for (const n of ud.nacelles) n.rotation.x = 0;
+    h.vx = h.vz = 0; h.pitch = h.roll = 0;
+    h.mode = 'rearm'; h.t = def.rearm;
+    s.escortSnd?.stop(); s.escortSnd = null;
+    return;
+  }
+
+  // weapons, as a pad's gunship: chin gatling on the target, rockets into the thickest cluster in reach
+  ud.flash.visible = false;
+  if (!e) return;
+  const dist = Math.hypot(e.x - pos.x, e.z - pos.z);
+  const aimYaw = wrap(Math.atan2(e.x - pos.x, e.z - pos.z) - h.yaw);
+  ud.gun.rotation.y += (Math.max(-1.2, Math.min(1.2, aimYaw)) - ud.gun.rotation.y) * Math.min(1, dt * 10);
+  ud.barrels.rotation.x = Math.atan2(pos.y - heightAt(e.x, e.z) - 0.5, Math.max(1, dist)) - h.pitch;
+  h.gunCd -= dt; h.rocketCd -= dt;
+  if (h.rounds > 0 && dist < GUN_RANGE && Math.abs(aimYaw) < 1.2 && h.gunCd <= 0) {
+    h.gunCd = 1 / def.rate;
+    h.rounds--;
+    ud.barrels.rotation.z += 0.9;
+    ud.muzzle.getWorldPosition(_a);
+    _b.set(e.x + (Math.random() - 0.5) * 0.7, aimY(e) - 0.2 * e.def.scale, e.z + (Math.random() - 0.5) * 0.7);
+    const tr = makeTracer(_a, _b);
+    state.scene.add(tr);
+    state.beams.push({ mesh: tr, life: 0.05, max: 0.05 });
+    ud.flash.visible = true;
+    ud.flash.rotation.z = Math.random() * Math.PI;
+    damageEnemy(e, def.damage, s);
+    if (Math.random() < 0.35) burst(_b.x, _b.y, _b.z, 'soil', 1, 3);
+    audio.play('hmg_fire', { x: pos.x, z: pos.z, vol: 0.4 });
+  }
+  if (h.rocketsLeft > 0 && h.rocketCd <= 0 && dist < GUN_RANGE + 4 && Math.abs(aimYaw) < 0.5) {
+    const hk = !!state.research.hunter;
+    const rt = rocketTarget(pos.x, pos.z, GUN_RANGE + 3, hk) || (hk ? null : e);
+    if (rt) { h.rocketCd = 0.55; launchRocket(s, h, heli, rt, def); h.rocketsLeft--; }
+  }
+}
+
+// The ship is lost: an escort in the air goes down where it is; one on the deck stays with the wreck.
+export function loseEscort(s) {
+  const { heli, pad } = s.escort;
+  s.escortSnd?.stop(); s.escortSnd = null;
+  heli.userData.hud.visible = false;
+  heli.userData.flash.visible = false;
+  if (heli.parent === pad) return;
+  explode(heli.position.x, heli.position.z, 1.6, 0, 0, { shake: 0.2, smoke: 8 });
+  burst(heli.position.x, heli.position.y, heli.position.z, 'debris', 14, 9);
+  heli.parent?.remove(heli);
 }

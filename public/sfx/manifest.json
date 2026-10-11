@@ -4,5 +4,16 @@
   "autocannon_fire": "autocannon_fire.mp3",
   "nuke_beep": "nuke_beep.mp3",
   "air_raid": "air_raid.mp3",
-  "missile_launch": "missiletrail.mp3"
+  "missile_launch": "missiletrail.mp3",
+  "voice_laser": "voice/1.wav",
+  "voice_lance": "voice/2.wav",
+  "voice_strafe": "voice/3.wav",
+  "voice_artillery": "voice/4.wav",
+  "voice_troopers": "voice/5.wav",
+  "voice_bomber": "voice/6.wav",
+  "voice_nuke": "voice/7.wav",
+  "voice_archangel": "voice/8.wav",
+  "voice_blackhole": "voice/9.wav",
+  "voice_battleship": "voice/10.wav",
+  "voice_strategic": "voice/11.wav"
 }

@@ -22,6 +22,7 @@ import { startHeavy } from './heavy.js';
 import { startDemo } from './demo.js';
 import { iconImg } from './icons.js';
 import { troopers } from './troopers.js';
+import { battleships } from './battleship.js';
 import { retract } from './retract.js';
 import { weather } from './weather.js';
 import { flashes } from './flashes.js';
@@ -48,6 +49,7 @@ quality.onChange = (level, desc) => {
 };
 abilities.init({ scene, ui, camera, controls });
 troopers.init(scene);
+battleships.init(scene);
 try { sessionStorage.removeItem(DEPLOY_KEY); } catch { /* fine */ }      // a manual refresh shows the title screen again
 if (!DEMO && !RECORD) audio.init({ getListener: () => controls.target });   // the demo plays silent; the recorder owns the audio graph
 weather.init({ scene, camera, renderer, auto: !DEMO && !RECORD });   // ?weather=rain starts in the rain
@@ -127,7 +129,7 @@ function tick(dt) {
     return;
   }
   if (director) director(dt); else if (abilities.cinematic) abilities.cinematic(dt); else if (!demo) updateCamera(dt);
-  if (!state.gameOver) { update(dt); troopers.update(dt); }
+  if (!state.gameOver) { update(dt); troopers.update(dt); battleships.update(dt); }
   if (MAPS[MAP].population && state.enemies.length < MAPS[MAP].population) spawnMany(Math.min(25, MAPS[MAP].population - state.enemies.length));   // test range refills from the rim
   abilities.update(dt);
   heavy?.update(dt);

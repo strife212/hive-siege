@@ -5,6 +5,7 @@ import { worldToCell, cellToWorld, cellKey, heightAt, pickTerrain } from './terr
 import { makeBuildingMesh, ghostify, setWallLinks } from './entities.js';
 import { abilities } from './abilities.js';
 import { troopers } from './troopers.js';
+import { battleships } from './battleship.js';
 import { MOBILE } from './mobile.js';
 
 // Touch screens have no hover, so a tap only aims (it puts down the ghost building, or the strike's target ring) and a
@@ -23,6 +24,27 @@ export function createInput({ renderer, camera, scene, terrain, ui, controls }) 
   let pending = null;                                         // touch: aimed but not committed yet
   const selBox = document.getElementById('selbox');
   const boxing = () => down && down.b === 0 && !down.touch && !ghostType && !abilities.armed && !abilities.laserActive;
+
+  // Player units: shock troopers and Land Battleships share one selection (drag a box or click, then click to move).
+  // A battleship in the selection shows its info panel.
+  const units = {
+    get count() { return troopers.selectedCount + battleships.selectedCount; },
+    clear() { troopers.clearSelection(); battleships.clearSelection(); },
+    box(b, ev) {
+      return troopers.selectBox(b.x, b.y, ev.clientX, ev.clientY, camera, ev.shiftKey) + battleships.selectBox(b.x, b.y, ev.clientX, ev.clientY, camera, ev.shiftKey);
+    },
+    at(p, add) {
+      if (battleships.selectAt(p, add)) { if (!add) troopers.clearSelection(); return true; }
+      if (troopers.selectAt(p, add)) { if (!add) battleships.clearSelection(); return true; }
+      return false;
+    },
+    order(p) { const n = battleships.order(p); troopers.order(p); if (n && !troopers.selectedCount) troopers.mark(p); },
+    label() {
+      const b = battleships.selectedCount, n = troopers.selectedCount;
+      return [b ? (b > 1 ? `${b} battleships` : 'Battleship') : '', n ? `${n} trooper${n > 1 ? 's' : ''}` : ''].filter(Boolean).join(' and ');
+    },
+    show() { ui.showSelected(battleships.selected()); },
+  };
 
   function pick(ev) {
     ndc.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
@@ -105,9 +127,8 @@ export function createInput({ renderer, camera, scene, terrain, ui, controls }) 
     }
     pending = null;
     abilities.steer(p);
-    const n = troopers.selectSquad(p);
-    if (n) { ui.showSelected(null); log(`${n} trooper${n > 1 ? 's' : ''} selected: tap the ground to move them`); }
-    else if (troopers.selectedCount) troopers.order(p);
+    if (battleships.selectAt(p, true) || troopers.selectSquad(p)) { units.show(); log(`${units.label()} selected: tap the ground to move`); }
+    else if (units.count) units.order(p);
     else { const c = worldToCell(p.x, p.z); ui.showSelected(state.occ.get(cellKey(c.i, c.j)) || null); }
   }
 
@@ -144,14 +165,13 @@ export function createInput({ renderer, camera, scene, terrain, ui, controls }) 
     down = null;
     selBox.style.display = 'none';
     if (box) {
-      const n = troopers.selectBox(box.x, box.y, ev.clientX, ev.clientY, camera, ev.shiftKey);
-      if (n) { ui.showSelected(null); log(`${n} trooper${n > 1 ? 's' : ''} selected: click to move, right-click to release`); }
+      if (units.box(box, ev)) { units.show(); log(`${units.label()} selected: click to move, right-click to release`); }
       return;
     }
     if (moved > (touch ? TAP_SLOP : 5)) return;              // it was a drag (camera), not a click
     if (ev.button === 2) {
       if (abilities.armed) abilities.cancel(); else if (ghostType) ui.cancel();
-      else if (troopers.selectedCount) troopers.clearSelection(); else ui.showSelected(null);
+      else { units.clear(); ui.showSelected(null); }
       return;
     }
     if (ev.button !== 0) return;
@@ -162,15 +182,15 @@ export function createInput({ renderer, camera, scene, terrain, ui, controls }) 
     const c = ghostType ? anchorFor(ghostType, p.x, p.z) : worldToCell(p.x, p.z);
     if (ghostType) {
       if (build(c, ev.shiftKey) && (ghostType === 'wall' || ev.shiftKey)) updateGhost(ev);
-    } else if (troopers.selectAt(p, ev.shiftKey)) {
-      ui.showSelected(null);
-    } else if (troopers.selectedCount) {
-      troopers.order(p);
+    } else if (units.at(p, ev.shiftKey)) {
+      units.show();
+    } else if (units.count) {
+      units.order(p);
     } else {
       ui.showSelected(state.occ.get(cellKey(c.i, c.j)) || null);
     }
   });
-  function cancelAll() { pending = null; abilities.cancel(); ui.cancel(); ui.showSelected(null); troopers.clearSelection(); }
+  function cancelAll() { pending = null; abilities.cancel(); ui.cancel(); ui.showSelected(null); units.clear(); }
   addEventListener('keydown', (e) => { if (e.code === 'Escape') cancelAll(); });
 
   // ---- phone mode: the touch bar (what a tap will do, confirm, cancel), since there is no right-click or Esc
@@ -197,9 +217,8 @@ export function createInput({ renderer, camera, scene, terrain, ui, controls }) 
       go = `BUILD $${def.cost.toLocaleString('en-US')}`;
       ok = aimed && canPlace(ghostType, pending.c.i, pending.c.j).ok;
       text = `${def.name} · ${!aimed ? 'tap to place' : ok ? 'tap again to build' : canPlace(ghostType, pending.c.i, pending.c.j).reason}`;
-    } else if (troopers.selectedCount) {
-      const n = troopers.selectedCount;
-      text = `${n} trooper${n > 1 ? 's' : ''} · tap to move`;
+    } else if (units.count) {
+      text = `${units.label()} · tap to move`;
       x = 'RELEASE';
     }
     const sig = `${text}|${go}|${ok}|${x}`;

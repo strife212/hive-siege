@@ -252,7 +252,7 @@ function densest(x, z, r, minD = 0) {
   return best;
 }
 
-function fireGun(mnt, e, dmg, sound, vol, pos) {
+function fireGun(s, mnt, e, dmg, sound, vol, pos) {
   mnt.pivot.parent.updateWorldMatrix(true, false);
   mnt.pivot.lookAt(_b.set(e.x, aimY(e), e.z));
   mnt.muzzle.getWorldPosition(_a);
@@ -261,7 +261,7 @@ function fireGun(mnt, e, dmg, sound, vol, pos) {
   state.scene.add(tr);
   state.beams.push({ mesh: tr, life: 0.05, max: 0.05 });
   mnt.flash.visible = true; mnt.flash.rotation.z = Math.random() * Math.PI;
-  damageEnemy(e, dmg);
+  damageEnemy(e, dmg, s);
   if (Math.random() < 0.25) burst(_b.x, _b.y, _b.z, 'soil', 1, 3);
   audio.play(sound, { x: pos.x, z: pos.z, vol });
 }
@@ -273,14 +273,14 @@ export function updateAirshipOrdnance(dt) {
     const u = Math.min(1, sh.t / sh.dur);
     sh.m.position.lerpVectors(sh.from, sh.to, u);
     sh.m.position.y += Math.sin(u * Math.PI) * sh.arc;
-    if (u >= 1) { explode(sh.to.x, sh.to.z, 2.4, sh.dmg, sh.splash, { shake: 0.2, smoke: 8 }); state.scene.remove(sh.m); shells.splice(k, 1); }
+    if (u >= 1) { explode(sh.to.x, sh.to.z, 2.4, sh.dmg, sh.splash, { shake: 0.2, smoke: 8, src: sh.src }); state.scene.remove(sh.m); shells.splice(k, 1); }
   }
   for (let k = bombs.length - 1; k >= 0; k--) {
     const b = bombs[k], p = b.m.position;
     b.vy -= 24 * dt;
     p.y += b.vy * dt; p.x += b.vx * dt; p.z += b.vz * dt;
     b.m.rotation.z += dt * 2;
-    if (p.y <= heightAt(p.x, p.z) + 0.3) { explode(p.x, p.z, 2.0, b.dmg, b.splash, { shake: 0.15, smoke: 7 }); state.scene.remove(b.m); bombs.splice(k, 1); }
+    if (p.y <= heightAt(p.x, p.z) + 0.3) { explode(p.x, p.z, 2.0, b.dmg, b.splash, { shake: 0.15, smoke: 7, src: b.src }); state.scene.remove(b.m); bombs.splice(k, 1); }
   }
 }
 
@@ -399,7 +399,7 @@ export function updateAirship(s, dt) {
     if (!e || e.dead || mag[i] <= 0 || cds[i] > 0) return;
     cds[i] = 1 / rate;
     mag[i]--;
-    fireGun(mnt, e, dmg, 'hmg_fire', vol, pos);
+    fireGun(s, mnt, e, dmg, 'hmg_fire', vol, pos);
   });
 
   // artillery: lobs a heavy shell into the densest group it can reach (not straight down: that is the bombs' job)
@@ -415,7 +415,7 @@ export function updateAirship(s, dt) {
       const ex = e.x + (e.fx / l) * e.speed * dur * 0.8, ez = e.z + (e.fz / l) * e.speed * dur * 0.8;
       const m = mk(ord().shell, mats.shell, 0, 0, 0, state.scene);
       m.position.copy(_a);
-      shells.push({ m, from: _a.clone(), to: new THREE.Vector3(ex, heightAt(ex, ez), ez), t: 0, dur, arc: 2.5, dmg: def.artDamage, splash: def.artSplash });
+      shells.push({ m, from: _a.clone(), to: new THREE.Vector3(ex, heightAt(ex, ez), ez), t: 0, dur, arc: 2.5, dmg: def.artDamage, splash: def.artSplash, src: s });
       ud.art.flash.visible = true;
       puff(_a.x, _a.y, _a.z, { color: 0xd8d0c4, size: 1.6, grow: 3, life: 0.9, opacity: 0.6 });
       audio.play('mortar_fire', { x: pos.x, z: pos.z, vol: 1 });
@@ -436,7 +436,7 @@ export function updateAirship(s, dt) {
       for (let k = 0; k < 2; k++) mk(ord().fin, mats.shell, 0, 0.42, 0, m).rotation.y = k * Math.PI / 2;
       ship.localToWorld(m.position.set(rnd(-0.2, 0.2), -0.1, rnd(-0.6, 0.3)));
       state.scene.add(m);
-      bombs.push({ m, vx: A.vx + rnd(-0.6, 0.6), vy: -1, vz: A.vz + rnd(-0.6, 0.6), dmg: def.bombDamage, splash: def.bombSplash });
+      bombs.push({ m, vx: A.vx + rnd(-0.6, 0.6), vy: -1, vz: A.vz + rnd(-0.6, 0.6), dmg: def.bombDamage, splash: def.bombSplash, src: s });
       if (Math.random() < 0.4) audio.play('artillery_whistle', { x: pos.x, z: pos.z, vol: 0.4 });
     } else A.bombCd = 0.15;
   }

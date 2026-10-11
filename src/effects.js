@@ -21,10 +21,11 @@ export function updateEffects(dt) {
   for (let k = fx.length - 1; k >= 0; k--) if (!fx[k].update(dt)) fx.splice(k, 1);
 }
 
-export function damageCircle(x, z, r, dmg, falloff = 0.4) {
+// src: the structure whose ordnance this is (kill credit: damageEnemy)
+export function damageCircle(x, z, r, dmg, falloff = 0.4, src = null) {
   eachEnemy(x, z, r, (e, d2) => {
     const d = Math.sqrt(d2);
-    damageEnemy(e, dmg * (d < r * 0.6 ? 1 : 1 - (1 - falloff) * (d - r * 0.6) / (r * 0.4)));
+    damageEnemy(e, dmg * (d < r * 0.6 ? 1 : 1 - (1 - falloff) * (d - r * 0.6) / (r * 0.4)), src);
   });
 }
 
@@ -73,7 +74,7 @@ export function explode(x, z, size, dmg, radius, o = {}) {
   burst(x, y + 0.5, z, 'debris', Math.round(4 * size), 10 * size);
   burst(x, y + 0.5, z, 'soil', Math.round(4 * size), 8 * size);
   spawnScorch(scene, x, z, radius * 1.3);
-  damageCircle(x, z, radius, dmg);
+  damageCircle(x, z, radius, dmg, 0.4, o.src);
   audio.play('explosion', { x, z, size: Math.min(2.5, size * 0.9), vol: Math.min(1, 0.45 + size * 0.2) });
   state.shake += (o.shake ?? size * 0.12);
   let t = 0;

@@ -36,11 +36,13 @@ export const acid = {
   // Lob a glob from (x, y, z) at building s.
   fire(x, y, z, s, damage) {
     const big = s.cells && s.cells.length > 1;
-    // land on the face toward the spitter (a splash at the centre would be buried inside the model)
+    // land on the face toward the spitter (a splash at the centre would be buried inside the model). The battleship
+    // names its own spot: the side of its hull nearest the spitter (battleship.js).
     const d = Math.hypot(s.x - x, s.z - z) || 1, back = s.type === 'core' ? 1.7 : big ? 1.3 : 0.62;
     const side = rnd(-0.3, 0.3) * (big ? 2 : 1);
-    const tx = s.x - (s.x - x) / d * back - (s.z - z) / d * side, tz = s.z - (s.z - z) / d * back + (s.x - x) / d * side;
-    const ty = s.y + (s.type === 'core' ? 2.2 : big ? 1.2 : 0.75) + rnd(-0.15, 0.15);
+    const hull = s.aimPoint?.(x, z);
+    const tx = hull ? hull.x : s.x - (s.x - x) / d * back - (s.z - z) / d * side, tz = hull ? hull.z : s.z - (s.z - z) / d * back + (s.x - x) / d * side;
+    const ty = hull ? hull.y : s.y + (s.type === 'core' ? 2.2 : big ? 1.2 : 0.75) + rnd(-0.15, 0.15);
     const T = 0.45 + Math.hypot(tx - x, tz - z) * 0.05;
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, y, z);

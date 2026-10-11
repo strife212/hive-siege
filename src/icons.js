@@ -329,6 +329,15 @@ const DRAW = {
     p.px(4, 7, 'w').px(5, 6, 'w').px(6, 6, 'c').px(3, 9, 'c').px(11, 12, 'c').px(10, 13, 'w').px(9, 13, 'c');   // photon ring glints
     p.rect(11, 0, 2, 4, 'g').px(11, 0, 'r').px(12, 0, 'r').px(10, 3, 'd').px(13, 3, 'd').px(11, 4, 'p').px(12, 4, 'p');   // the bomb coming down
   },
+  ab_battleship(p) {                                                                               // tracked hull coming down on its retros
+    p.rows(11, [[2, 12], [1, 14], [2, 12]], 's');                                                     // tracks
+    for (const x of [3, 5, 7, 9, 11, 13]) p.px(x, 12, 'g');                                         // road wheels
+    p.rows(8, [[1, 14], [1, 15], [2, 13]], 'd').rect(1, 8, 14, 1, 'g');                            // hull, lit deck edge
+    p.rect(4, 4, 3, 4, 'g').rect(4, 5, 3, 1, 'b').rect(5, 1, 1, 3, 'd').rect(4, 1, 3, 1, 'w');      // bridge, windows, radar mast
+    p.rect(1, 6, 2, 2, 'w');                                                                        // CIWS dome
+    p.rect(8, 6, 4, 2, 'g').rect(8, 6, 4, 1, 'w').rect(12, 6, 4, 1, 'w').px(15, 6, 'b');           // railgun turret and rails
+    p.px(2, 14, 'a').px(2, 15, 'y').px(3, 14, 'y').px(12, 14, 'y').px(13, 14, 'a').px(13, 15, 'y');   // retro-thruster flames
+  },
   ab_nuke(p) {
     p.disc(7.5, 7.5, 7, 'y').disc(7.5, 7.5, 6, 'a').disc(7.5, 7.5, 5.4, 'y');
     p.disc(7.5, 7.5, 1.2, 'k');

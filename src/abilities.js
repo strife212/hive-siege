@@ -13,6 +13,7 @@ import { bombingRun, lineSpan } from './bomber.js';
 import { EXTENT } from './terrain.js';
 import { strategicStrike } from './strategic.js';
 import { blackHoleBomb } from './blackhole.js';
+import { battleships } from './battleship.js';
 
 // ---------------------------------------------------------------- definitions
 export const ABILITIES = {
@@ -27,7 +28,12 @@ export const ABILITIES = {
   // global: nothing to aim (ground zero is the centre of the map). It arms like the rest and any click on the map
   // launches it; `hint` is the prompt that rides above the cursor while it is armed.
   blackhole: { name: 'Micro-Singularity Gravity Bomb', key: '9', cooldown: 45, radius: 9, desc: 'A bomb opens a singularity that drags every bug in the area in, crushing the small ones and holding the rest in orbit, then collapses and spits the survivors back out.' },
-  strategic: { name: 'Strategic Nuclear Strike', key: '0', cooldown: 300, global: true, requires: 'uplink', hint: 'INITIATE STRATEGIC LAUNCH', desc: 'Requires a Strategic Uplink Tower. Last resort. Click anywhere on the map to launch. Every structure retracts into its silo, then a 10 s countdown and a giant ICBM hits the centre of the map: every bug on the surface dies, and a Colossus takes 30,000 damage. The base redeploys once the cloud clears.' },
+  // battleship.js. hull: the reticle is its footprint, facing away from the Core (the way it lands), red where it will not fit.
+  // While one is on station its button counts down its 120 s (refreshBar), and its cooldown only starts once that is
+  // over (lifted out, or destroyed first).
+  battleship: { name: 'Airdrop Land Battleship', key: '0', cooldown: 240, requires: 'uplink', hull: true, color: 0x5dff8a, desc: 'Requires a Strategic Uplink Tower. A tracked land battleship is dropped from orbit, braked by retro-thrusters, for two minutes. Every bug on the field goes for it first. It carries a railgun, two CIWS gatlings, an eight-cell missile battery, four dual autocannons, its own gunship and a shock trooper on the helipad, and has 15,000 HP. Select it like the shock troopers (drag a box or click it), then click to move it. When its time is up it stops, recovers its gunship and the drop rig lifts it out; the cooldown starts then.' },
+  // the ultimate: the last button on the bar
+  strategic: { name: 'Strategic Nuclear Strike', key: '-', cooldown: 300, global: true, requires: 'uplink', hint: 'INITIATE STRATEGIC LAUNCH', desc: 'Requires a Strategic Uplink Tower. Last resort. Click anywhere on the map to launch. Every structure retracts into its silo, then a 10 s countdown and a giant ICBM hits the centre of the map: every bug on the surface dies, and a Colossus takes 30,000 damage. The base redeploys once the cloud clears.' },
 };
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -985,7 +991,16 @@ function buildReticle(key, p) {
   const color = def.color ?? (key === 'nuke' ? 0xff4040 : key === 'strafe' ? 0xffb040 : key === 'artillery' ? 0xff8040 : key === 'troopers' ? 0x5dff8a : key === 'bomber' ? 0xff5a30 : key === 'archangel' ? 0xffe08a : key === 'blackhole' ? 0xa878ff : 0x7fe0ff);
   const g = new THREE.Group();
   if (def.global) return g;                                    // nothing to aim and nothing drawn: the cursor prompt is the whole UI
-  if (def.line) {
+  if (def.hull) {
+    // the hull's outline round the drop point (its pointed bow shows which way it will face)
+    const pts = battleships.outline(p.x, p.z), n = pts.length, c = battleships.canLand(p.x, p.z) ? color : 0xff4040;
+    const at = (u) => { const f = u * n, i = Math.min(n - 1, Math.floor(f)), t = f - i, a = pts[i], b = pts[(i + 1) % n]; return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; };
+    g.add(new THREE.Mesh(gridGeo(n * 4, 1, (u, v) => { const [x, z] = at(u); return [p.x + (x - p.x) * v, p.z + (z - p.z) * v]; }), fillMat(c)));
+    g.add(new THREE.Mesh(gridGeo(n * 4, 1, (u, v) => {
+      const [x, z] = at(u), k = 1 - (0.25 * (1 - v)) / (Math.hypot(x - p.x, z - p.z) || 1);
+      return [p.x + (x - p.x) * k, p.z + (z - p.z) * k];
+    }, 0.16), bandMat(c)));
+  } else if (def.line) {
     // Two-step targeting: before the first click just mark the spot; after it, show the full run through the anchor.
     const a = ab.anchor || p, d = lineDir(a, p);
     const [t0, t1] = lineSpan(a.x, a.z, d.x, d.z, EXTENT - 1);
@@ -1089,7 +1104,9 @@ export const abilities = {
   // Attract mode: call an ability in directly, ignoring cooldowns.
   demoFire(key, p) {
     ab.armed = key;
+    ab.quiet = true;                                            // no radio call-outs for these
     abilities.click(p);
+    ab.quiet = false;
     ab.cooldowns[key] = 0;
   },
   click(p) {
@@ -1114,13 +1131,17 @@ export const abilities = {
     else if (key === 'blackhole') fx = blackHoleBomb(ab.scene, p.x, p.z, def.radius);
     else if (key === 'strategic') fx = strategicStrike({ scene: ab.scene, camera: ab.camera, controls: ab.controls, setCinematic: (fn) => { ab.cine = fn; } });
     else if (key === 'bomber') { const d = lineDir(ab.anchor, p); fx = bombingRun(ab.scene, ab.anchor.x, ab.anchor.z, d.x, d.z, def.width); }
+    else if (key === 'battleship') fx = battleships.drop(p.x, p.z);
+    if (!fx) return true;                                       // refused (no room for the battleship there): stays armed
+    if (!ab.quiet) audio.voice(`voice_${key}`, { vol: 0.95 }); // the radio call-out (public/sfx/voice, lines.txt)
     ab.effects.push(fx);
     ab.cooldowns[key] = cooldownOf(key);
     abilities.cancel();
     return true;
   },
   update(dt) {
-    for (const k of Object.keys(ab.cooldowns)) ab.cooldowns[k] = Math.max(0, ab.cooldowns[k] - dt);
+    const onStation = battleships.deployLeft() !== null;     // the battleship's cooldown waits until its time on the field is up
+    for (const k of Object.keys(ab.cooldowns)) if (k !== 'battleship' || !onStation) ab.cooldowns[k] = Math.max(0, ab.cooldowns[k] - dt);
     for (let k = ab.effects.length - 1; k >= 0; k--) if (!ab.effects[k].update(dt)) ab.effects.splice(k, 1);
     updateParticles(dt);
     if (ab.armed === 'designate' ? !ab.designate.alive() : ab.armed && locked(ab.armed)) abilities.cancel();   // its building was lost while armed
@@ -1157,17 +1178,20 @@ function buildBar() {
 // Orbital Command Priority (research): every support ability but the Strategic Strike recharges 25% faster.
 const cooldownOf = (key) => ABILITIES[key].cooldown * (state.research.orbital && key !== 'strategic' ? 0.75 : 1);
 
+// A Land Battleship on station turns its button into a green countdown of its time left, in place of the cooldown.
 const barCache = {};
 function refreshBar() {
+  const onStation = battleships.deployLeft();
   for (const [key, b] of Object.entries(ab.buttons)) {
-    const cd = ab.cooldowns[key], lock = locked(key);
-    const sig = `${ab.armed === key}|${Math.ceil(cd)}|${lock}`;
+    const cd = ab.cooldowns[key], lock = locked(key), dep = key === 'battleship' ? onStation : null;
+    const sig = `${ab.armed === key}|${Math.ceil(cd)}|${lock}|${dep === null ? '' : Math.ceil(dep)}`;
     if (barCache[key] === sig) continue;
     barCache[key] = sig;
     b.classList.toggle('active', ab.armed === key);
     b.classList.toggle('cooling', cd > 0);
     b.classList.toggle('locked', lock);
-    b.querySelector('.cd').style.height = `${Math.min(1, cd / cooldownOf(key)) * 100}%`;
-    b.querySelector('.cdtext').textContent = lock ? 'LOCKED' : cd > 0 ? Math.ceil(cd) : '';
+    b.classList.toggle('deployed', dep !== null);
+    b.querySelector('.cd').style.height = `${(dep !== null ? dep / battleships.deploy : Math.min(1, cd / cooldownOf(key))) * 100}%`;
+    b.querySelector('.cdtext').textContent = lock ? 'LOCKED' : dep !== null ? Math.ceil(dep) : cd > 0 ? Math.ceil(cd) : '';
   }
 }

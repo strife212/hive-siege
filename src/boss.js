@@ -5,6 +5,7 @@ import { spawnSplatter } from './decals.js';
 import { explode } from './effects.js';
 import { puff } from './particles.js';
 import { audio } from './audio.js';
+import { nearestShip, hullGap, hurtShip } from './battleship.js';
 
 // The Colossus: a boss bug on eight very long, spindly legs. Its body rides far above the ground, so it simply steps
 // over walls and towers on its way to the Core. Legs are procedural: every foot stays planted until the body has
@@ -14,6 +15,8 @@ const UP = new THREE.Vector3(0, 1, 0);
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
 const rnd = (a, b) => a + Math.random() * (b - a);
 const ease = (u) => u * u * (3 - 2 * u);
+const SHIP_REACH = 3.4;                                    // how close to the battleship's hull it gets before it strikes
+const _hull = { x: 0, z: 0 };
 
 const geo = {
   unit: new THREE.SphereGeometry(1, 20, 14),
@@ -161,9 +164,13 @@ export const boss = {
       }
     }
 
-    // --- walk straight at the Core, over anything in the way; stop within striking distance
-    const dx = core.x - e.x, dz = core.z - e.z, dist = Math.hypot(dx, dz) || 1;
-    const attacking = dist < REACH && !e.held;
+    // --- walk straight at the Core (or a Land Battleship, while one is down: the nearest point of its hull), over
+    // anything in the way; stop within striking distance
+    const ship = nearestShip(e.x, e.z);
+    if (ship) hullGap(ship, e.x, e.z, _hull);
+    const tx = ship ? _hull.x : core.x, tz = ship ? _hull.z : core.z, topY = ship ? ship.y + 3.2 : core.y + 6.5;
+    const dx = tx - e.x, dz = tz - e.z, dist = Math.hypot(dx, dz) || 1;
+    const attacking = dist < (ship ? SHIP_REACH : REACH) && !e.held;
     let speed = 0;
     if (e.held) { height += e.held.lift; e.walk += dt * 6; }  // hauled across the ground by a black hole (blackhole.js moves it)
     else if (e.emerge >= 1 && !attacking) {
@@ -204,17 +211,17 @@ export const boss = {
       const hipW = _a.copy(leg.hip).applyMatrix4(rig.body.matrixWorld).clone();
       const a = e.yaw + leg.ang, lead = speed ? 2.6 : 0;
       const hx = e.x + Math.sin(a) * leg.rad + sinY * lead, hz = e.z + Math.cos(a) * leg.rad + cosY * lead;
-      if (leg.strike >= 0) {                                       // front leg stabbing the Core
+      if (leg.strike >= 0) {                                       // front leg stabbing the Core (or the battleship)
         leg.strike += dt / 0.62;
-        const u = leg.strike, top = _c.set(core.x + leg.side * 0.8, core.y + 6.5, core.z);
-        if (u < 0.55) leg.foot.lerpVectors(leg.from, _d.set(hx * 0.4 + core.x * 0.6, ground + 13, hz * 0.4 + core.z * 0.6), ease(u / 0.55));
-        else if (u < 0.75) { leg.foot.lerpVectors(_d.set(hx * 0.4 + core.x * 0.6, ground + 13, hz * 0.4 + core.z * 0.6), top, (u - 0.55) / 0.2); }
+        const u = leg.strike, top = _c.set(tx + leg.side * 0.8, topY, tz);
+        if (u < 0.55) leg.foot.lerpVectors(leg.from, _d.set(hx * 0.4 + tx * 0.6, ground + 13, hz * 0.4 + tz * 0.6), ease(u / 0.55));
+        else if (u < 0.75) { leg.foot.lerpVectors(_d.set(hx * 0.4 + tx * 0.6, ground + 13, hz * 0.4 + tz * 0.6), top, (u - 0.55) / 0.2); }
         else if (!leg.hit) {
           leg.hit = true;
-          damageStructure(core, e.def.damage);
+          if (ship) hurtShip(ship, e.def.damage); else damageStructure(core, e.def.damage);
           burst(top.x, top.y, top.z, 'debris', 10, 8);
           puff(top.x, top.y, top.z, { color: 0xffc070, size: 2.4, life: 0.14, opacity: 0.9, additive: true });
-          audio.play('hub_land', { x: core.x, z: core.z, vol: 0.55, rate: 1.5 });
+          audio.play('hub_land', { x: tx, z: tz, vol: 0.55, rate: 1.5 });
           state.shake += 0.35;
         }
         if (u >= 1.25) { leg.strike = -1; leg.hit = false; leg.from.copy(leg.foot); leg.to.set(hx, heightAt(hx, hz), hz); leg.stepT = 0; }

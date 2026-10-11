@@ -7,6 +7,7 @@ import { explode } from './effects.js';
 import { puff } from './particles.js';
 import { audio } from './audio.js';
 import { bevelBox, worn } from './surface.js';
+import { shipAt } from './battleship.js';
 
 // Orbital Shock Troopers: drop pods slam in from orbit and each unloads a fire team. Troopers are player-controlled
 // infantry (drag a box to select, click to move): a light machine gun, a grenade every few seconds, and almost no
@@ -197,7 +198,7 @@ const blocked = (x, z) => {
   if (Math.abs(x) > FLAT - 1 || Math.abs(z) > FLAT - 1 || isScenery(x, z)) return true;
   const c = worldToCell(x, z);
   const st = state.occ.get(cellKey(c.i, c.j));
-  return !!st && !st.buried && !st.def?.walkable;                // closed blast doors and minefields can be walked over
+  return (!!st && !st.buried && !st.def?.walkable) || shipAt(x, z);   // closed blast doors and minefields can be walked over
 };
 
 function spawnTrooper(x, z, tx, tz) {
@@ -298,7 +299,7 @@ function updateTrooper(t, dt) {
 function animateTrooper(t, dt, moving, aiming) {
   const ud = t.mesh.userData, k = Math.min(1, dt * 14);
   const to = (obj, axis, v, rate = k) => { obj.rotation[axis] += (v - obj.rotation[axis]) * rate; };
-  t.mesh.position.set(t.x, heightAt(t.x, t.z), t.z);
+  if (!t.posted) t.mesh.position.set(t.x, heightAt(t.x, t.z), t.z);   // a posted sentry stands where it was put
 
   // facing: legs toward travel (or the target when standing), torso the rest of the way to the target
   const aimYaw = aiming ? Math.atan2(t.aimX, t.aimZ) : null;
@@ -335,7 +336,7 @@ function animateTrooper(t, dt, moving, aiming) {
   t.raise = (t.raise ?? 0) + ((aiming && !throwing ? 1 : 0) - (t.raise ?? 0)) * Math.min(1, dt * 9);
   t.recoil = Math.max(0, (t.recoil ?? 0) - dt * 11);
   t.flash = Math.max(0, (t.flash ?? 0) - dt);
-  const lowReady = moving ? 0.42 : 0.62, gunPitch = mix(lowReady, 0, t.raise) + wind * 0.5 - t.recoil * 0.07;
+  const lowReady = moving ? 0.42 : 0.62, gunPitch = mix(lowReady, t.dip ?? 0, t.raise) + wind * 0.5 - t.recoil * 0.07;   // dip: aiming down off a height
   to(ud.gun, 'x', gunPitch, Math.min(1, dt * 18));
   to(ud.gun, 'y', moving && !aiming ? -0.35 + s * 0.06 : 0);
   ud.gunBody.position.z = -0.07 * t.recoil;
@@ -529,7 +530,10 @@ export const troopers = {
       t.moveTo = blocked(x, z) ? { x: p.x, z: p.z } : { x, z };
       t.moveLeft = undefined;
     });
-    if (!sel.length) return;
+    if (sel.length) troopers.mark(p);
+  },
+  // The move marker: a green ring that pops out from the clicked spot (the battleship's orders show it too).
+  mark(p) {
     const m = new THREE.Mesh(geo.order, mat.order.clone());
     m.position.set(p.x, heightAt(p.x, p.z) + 0.12, p.z);
     m.renderOrder = 3;
@@ -537,3 +541,74 @@ export const troopers = {
     orders.push({ m, life: 0.6 });
   },
 };
+
+// ---- a sentry: one trooper posted on something else (the Land Battleship's helipad, battleship.js). He holds one of
+// its posts and fires his machine gun at the nearest bug within frame.range inside that post's arc (relative to what he
+// stands on, so he never shoots across it), angling the gun down when he is above them. When his side is quiet and
+// frame.free allows it, he runs across to a post that has something to shoot at. No grenades, and nothing bites him.
+export function makeSentry(parent, y, posts) {
+  const mesh = makeTrooperMesh(), p = posts[0];
+  mesh.position.set(p.x, y, p.z);
+  mesh.rotation.y = p.arc;
+  parent.add(mesh);
+  return { mesh, posted: true, post: 0, run: null, hp: T.hp, target: null, scan: 0, cd: rnd(0.2, 0.6), walk: 0, seed: Math.random() * 20, selected: false, hurt: false,
+    flash: 0, recoil: 0, raise: 0, aimX: Math.sin(p.arc), aimZ: Math.cos(p.arc), dip: 0, fx: 0, fz: 1 };
+}
+// frame: { yaw (the heading of what he stands on), posts [{ x, z, arc }] (in its frame), half (each arc's half-width),
+// range, damage (per MG round), free (he may cross over now), src (gets the kills) }
+const _o = new THREE.Vector3();
+export function updateSentry(t, dt, frame) {
+  const ud = t.mesh.userData;
+  if (t.run !== null) {                                       // running across to the other post: no shooting on the move
+    const goal = frame.posts[t.run], p = t.mesh.position;
+    const dx = goal.x - p.x, dz = goal.z - p.z, d = Math.hypot(dx, dz), step = T.speed * dt;
+    if (d > step) {
+      p.x += dx / d * step; p.z += dz / d * step;
+      t.fx = dx; t.fz = dz; t.walk += T.speed * dt * 3.3;
+      t.target = null;
+      animateTrooper(t, dt, true, false);
+      return;
+    }
+    p.x = goal.x; p.z = goal.z;
+    t.post = t.run; t.run = null; t.scan = 0;
+  }
+  t.mesh.getWorldPosition(_p);
+  const arcFrom = (post, x, z, e) => Math.abs(wrap(Math.atan2(e.x - x, e.z - z) - frame.yaw - post.arc)) <= frame.half;
+  const post = frame.posts[t.post], R = frame.range;
+  if (t.target && (t.target.dead || Math.hypot(t.target.x - _p.x, t.target.z - _p.z) > R + 1 || !arcFrom(post, _p.x, _p.z, t.target))) t.target = null;
+  t.scan -= dt;
+  if (t.scan <= 0) {
+    t.scan = 0.25;
+    let best = null, bd = R * R;
+    eachEnemy(_p.x, _p.z, R, (e, d2) => { if (d2 < bd && arcFrom(post, _p.x, _p.z, e)) { bd = d2; best = e; } });
+    t.target = best;
+    if (!best && frame.free) {                                // nothing on this side: is there anything over there?
+      for (let k = 0; k < frame.posts.length && t.run === null; k++) {
+        if (k === t.post) continue;
+        const o = frame.posts[k];
+        t.mesh.parent.localToWorld(_o.set(o.x, t.mesh.position.y, o.z));
+        eachEnemy(_o.x, _o.z, R, (e) => { if (arcFrom(o, _o.x, _o.z, e)) { t.run = k; return true; } });
+      }
+    }
+  }
+  const e = t.target;
+  t.cd -= dt;
+  if (e) {
+    const wx = e.x - _p.x, wz = e.z - _p.z, c = Math.cos(frame.yaw), s = Math.sin(frame.yaw);
+    t.aimX = wx * c - wz * s; t.aimZ = wx * s + wz * c;          // into the frame of what he stands on
+    t.dip = Math.min(0.9, Math.atan2(_p.y + 0.6 - aimY(e), Math.max(1, Math.hypot(wx, wz))));
+    if (t.cd <= 0 && t.raise > 0.8) {
+      t.cd = 1 / T.mgRate + rnd(0, 0.05);
+      ud.muzzle.getWorldPosition(_a);
+      _b.set(e.x + rnd(-0.2, 0.2), aimY(e) + rnd(-0.25, 0.1) * e.def.scale, e.z + rnd(-0.2, 0.2));
+      const tr = makeTracer(_a, _b);
+      scene.add(tr);
+      state.beams.push({ mesh: tr, life: 0.05, max: 0.05 });
+      damageEnemy(e, frame.damage ?? T.mgDamage, frame.src);
+      audio.play('hmg_fire', { x: _p.x, z: _p.z, vol: 0.22 });
+      t.flash = 0.045;
+      t.recoil = 1;
+    }
+  }
+  animateTrooper(t, dt, false, !!e);
+}

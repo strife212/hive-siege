@@ -112,8 +112,9 @@ export function createUI({ onSelectBuild }) {
   $('restart').addEventListener('click', () => location.reload());
 
   // Selected structure panel (built once, text updated per frame)
-  info.innerHTML = '<h3></h3><div class="hp"><span>INTEGRITY</span><b></b></div><div class="bar"><div></div></div><div class="stats"></div><button class="target"></button><button class="silo"></button><button class="sell"></button>';
+  info.innerHTML = '<h3></h3><div class="hp"><span>INTEGRITY</span><b></b></div><div class="bar"><div></div></div><div class="hp kills"><span>KILLS</span><b></b></div><div class="stats"></div><button class="target"></button><button class="silo"></button><button class="sell"></button>';
   const infoName = info.querySelector('h3'), infoHp = info.querySelector('.hp b'), infoBar = info.querySelector('.bar > div'), infoStats = info.querySelector('.stats');
+  const killsRow = info.querySelector('.kills'), infoKills = killsRow.querySelector('b');
   const sellBtn = info.querySelector('button.sell'), siloBtn = info.querySelector('button.silo'), targetBtn = info.querySelector('button.target');
   // Priority Override (Apocalypse Heavy Artillery): one button cycles AUTO -> picking a spot -> manual target -> AUTO.
   const canOverride = (s) => s?.type === 'apoc' && !!state.research.override;
@@ -137,7 +138,7 @@ export function createUI({ onSelectBuild }) {
   targetBtn.addEventListener('click', () => { toggleOverride(); targetBtn.blur(); });
   addEventListener('keydown', (e) => { if (e.code === 'KeyT' && !e.repeat && !state.intro) toggleOverride(); });
   siloBtn.addEventListener('click', () => { if (selected) retract.toggle(selected); siloBtn.blur(); });
-  addEventListener('keydown', (e) => { if (e.code === 'KeyR' && !e.repeat && selected && selected.type !== 'core' && !state.intro) retract.toggle(selected); });
+  addEventListener('keydown', (e) => { if (e.code === 'KeyR' && !e.repeat && selected && selected.type !== 'core' && !selected.ship && !state.intro) retract.toggle(selected); });
   sellBtn.addEventListener('click', () => { if (selected) { sellStructure(selected); showSelected(null); } });
 
   function showSelected(s) {
@@ -145,10 +146,11 @@ export function createUI({ onSelectBuild }) {
     info.hidden = !s;
     if (!s) return;
     infoName.textContent = s.name;
-    sellBtn.hidden = s.type === 'core';
+    sellBtn.hidden = s.type === 'core' || !!s.ship;           // the battleship: integrity, kills and weapons only
     siloBtn.hidden = s.type === 'core' || s.def?.silo === false;   // minefields have no silo
     targetBtn.hidden = !canOverride(s);
     const d = s.def || {};
+    killsRow.hidden = !(d.kind || d.mines);                  // only what can kill a bug keeps a count
     sellBtn.textContent = `SELL  +$${Math.floor((d.cost || 0) * 0.5)}`;
     const stats = d.kind === 'flame'
       ? `Range ${d.range} · Burns ${d.damage}/s for ${d.burn} s · ${d.cone}° cone`
@@ -158,6 +160,7 @@ export function createUI({ onSelectBuild }) {
       : d.kind === 'heli' ? `Patrols ${d.range} · ${d.rounds} x ${d.damage} gatling + ${d.rockets} x ${d.rocketDamage} rockets · ${d.rearm} s rearm`
       : d.kind === 'apoc' ? `Range ${d.minRange}-${d.range} · ${d.damage} dmg, ${d.splash} m blast · One shell every ${d.interval} s`
       : d.kind === 'rail' ? `Range ${d.range} · ${d.damage} piercing bolt · ${d.charge} s charge`
+      : d.kind === 'battleship' ? `Railgun: ${d.rail.damage} piercing bolt every ${d.rail.charge} s · 2 CIWS gatlings · ${d.vls.cells}-cell missile battery · 4 dual autocannons · Escort gunship · Shock trooper on the helipad · Lifted out after ${d.deploy} s`
       : d.mines ? `${d.mines} mines · ${d.damage} damage each · New set ${d.reload} s after the last`
       : d.kind
       ? `Range ${d.range} · Damage ${d.damage} · ${d.rate}/s ${d.kind}`
@@ -243,10 +246,12 @@ export function createUI({ onSelectBuild }) {
     const d = selected?.hp > 0 && RINGED.has(selected.def?.kind) ? selected.def : null;   // live: research can extend it
     if (d) RANGE_U.value.set(selected.x, selected.z, d.range, d.minRange || 0); else RANGE_U.value.z = 0;
     if (selected) {
-      if (selected.hp <= 0) showSelected(null);
+      if (selected.hp <= 0 || (selected.ship && !state.ships.includes(selected))) showSelected(null);   // a battleship lifted out counts as gone
       else {
         const hp = `${Math.ceil(selected.hp)} / ${selected.maxHp}`;
         if (infoHp.textContent !== hp) { infoHp.textContent = hp; infoBar.style.width = `${(selected.hp / selected.maxHp) * 100}%`; }
+        const kills = (selected.kills ?? 0).toLocaleString('en-US');
+        if (infoKills.textContent !== kills) infoKills.textContent = kills;
         if (canOverride(selected)) {
           const t = (selected.override ? 'MANUAL · GO AUTO' : designating() ? 'CANCEL TARGETING' : 'AUTO · SET TARGET') + (MOBILE ? '' : '  [T]');
           if (targetBtn.textContent !== t) { targetBtn.textContent = t; targetBtn.classList.toggle('on', !!selected.override || designating()); }

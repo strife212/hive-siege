@@ -413,6 +413,27 @@ LOOPS.airship_engine = (c, out) => {
   return { gain: g, level: 0.4, nodes };
 };
 
+// Land Battleship: a big diesel throbbing low, a turbine whine over it and the track links clattering.
+LOOPS.tank_engine = (c, out) => {
+  const g = c.createGain(); g.gain.value = 0; g.connect(out);
+  const nodes = [];
+  for (const [f, gn, lfo] of [[31, 0.55, 7], [62, 0.22, 0]]) {
+    const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 180;
+    const og = c.createGain(); og.gain.value = gn; o.connect(lp).connect(og).connect(g); nodes.push(o);
+    if (lfo) { const am = c.createOscillator(); am.frequency.value = lfo; const ag = c.createGain(); ag.gain.value = gn * 0.4; am.connect(ag).connect(og.gain); nodes.push(am); }
+  }
+  const whine = c.createOscillator(); whine.type = 'sine'; whine.frequency.value = 820;
+  const wg = c.createGain(); wg.gain.value = 0.018; whine.connect(wg).connect(g); nodes.push(whine);
+  const n = c.createBufferSource(); n.buffer = noiseBuffer(c); n.loop = true;
+  const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1500; bp.Q.value = 1.2;
+  const ng = c.createGain(); ng.gain.value = 0.05;
+  const tick = c.createOscillator(); tick.type = 'square'; tick.frequency.value = 13; const tg = c.createGain(); tg.gain.value = 0.04; tick.connect(tg).connect(ng.gain);
+  n.connect(bp).connect(ng).connect(g); nodes.push(n, tick);
+  nodes.forEach((x) => x.start());
+  return { gain: g, level: 0.35, nodes };
+};
+
 // Rain: a wide hiss with a softer body under it and a slow swell, like a downpour on open ground.
 LOOPS.rain = (c, out) => {
   const g = c.createGain(); g.gain.value = 0; g.connect(out);
@@ -570,6 +591,23 @@ export const audio = {
     return ctx;
   },
   setPaused(v) { state.paused = v; },
+  // Radio call-outs (each support ability's voice line, a file listed in public/sfx/manifest.json as voice_<key>):
+  // not positional, and one at a time, a new call-out cutting the last one off rather than talking over it.
+  voice(name, p = {}) {
+    const ctx = state.ctx, asset = state.assets[name];
+    if (!ctx || !asset || state.paused || (!state.offline && ctx.state !== 'running')) return;
+    state.voice?.stop();
+    const g = ctx.createGain();
+    g.gain.value = p.vol ?? 1;
+    g.connect(state.master);
+    const src = ctx.createBufferSource();
+    src.buffer = asset;
+    src.connect(g);
+    src.start();
+    const line = { stop() { g.gain.setTargetAtTime(0, ctx.currentTime, 0.03); try { src.stop(ctx.currentTime + 0.15); } catch { /* already over */ } } };
+    src.onended = () => { if (state.voice === line) state.voice = null; };
+    state.voice = line;
+  },
   play(name, p = {}) {
     const ctx = state.ctx;
     if (!ctx || (!state.offline && ctx.state !== 'running')) return;

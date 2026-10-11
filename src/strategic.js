@@ -9,6 +9,7 @@ import { puff } from './particles.js';
 import { explode } from './effects.js';
 import { audio } from './audio.js';
 import { worn } from './surface.js';
+import { hurtShip } from './battleship.js';
 
 // Strategic Nuclear Strike: the last-resort call-in, played as a short cinematic.
 //
@@ -222,6 +223,11 @@ export function strategicStrike({ scene, camera, controls, setCinematic }) {
         if (!e.dead) log('The Colossus survived the strike!', true);
       }
       for (const tr of state.troopers) if (tr.hp > 0 && (tr.x - gx) ** 2 + (tr.z - gz) ** 2 < r2) tr.hp = 0;
+      for (const sh of state.ships) {                            // a Land Battleship rides it out, at half its max HP
+        if (struck.has(sh) || (sh.x - gx) ** 2 + (sh.z - gz) ** 2 >= r2) continue;
+        struck.add(sh);
+        hurtShip(sh, sh.maxHp * 0.5);
+      }
     }
     state.shake = Math.max(state.shake, 1.3 * (1 - a / 5.5));
     flashEl.style.opacity = String(Math.max(0, 1 - a / 3.2));

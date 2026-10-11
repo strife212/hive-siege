@@ -26,6 +26,7 @@ import { mineBatch, dropField, updateDrop, clearDrop } from './mines.js';
 import { burrows, PIT_R, PIT_DEPTH } from './burrows.js';
 import { hpBars, makeHpBar, setHpBar } from './hpbars.js';
 import { uploadUsed } from './instancing.js';
+import { hullGap, nearestShip, hurtShip } from './battleship.js';
 
 export const state = {
   scene: null,
@@ -47,6 +48,7 @@ export const state = {
   shake: 0,
   demo: false,
   troopers: [],                  // player infantry (troopers.js); bugs hunt them when they get close                   // title-screen attract mode (see demo.js)
+  ships: [],                     // Land Battleships (battleship.js): every bug's first target while one is down
   corpses: [],
   occ: new Map(),          // "i,j" -> structure
   research: {},
@@ -164,6 +166,8 @@ export function canPlace(type, i, j) {
   let blocked = false;
   spatial.each(x, z, clear, () => (blocked = true));
   if (blocked) return { ok: false, reason: 'A bug is in the way' };
+  const half = Math.max(w, h) * CELL * 0.5;
+  if (state.ships.some((s) => hullGap(s, x, z) < half * 1.2)) return { ok: false, reason: 'The battleship is in the way' };
   if (state.credits < def.cost) return { ok: false, reason: 'Not enough credits' };
   return { ok: true };
 }
@@ -186,7 +190,7 @@ export function placeStructure(type, i, j, opts = {}) {
   const { x, z } = footprintCenter(type, i, j);
   const y = heightAt(x, z);
   const maxHp = def.hp;
-  const s = { id: nextId++, type, def, name: def.name, i, j, x, y, z, hp: maxHp, maxHp, cooldown: 0, target: null, cells: footprintCells(type, i, j) };
+  const s = { id: nextId++, type, def, name: def.name, i, j, x, y, z, hp: maxHp, maxHp, cooldown: 0, target: null, kills: 0, cells: footprintCells(type, i, j) };
   s.mesh = makeBuildingMesh(type);
   s.baseY = y - 0.15;
   s.mesh.position.set(x, s.baseY, z);
@@ -244,6 +248,7 @@ function removeStructure(s) {
 }
 
 export function damageStructure(s, dmg) {
+  if (s.ship) return hurtShip(s, dmg);                      // acid on the battleship's hull
   if (s.hp <= 0 || s.buried) return;                        // nothing reaches a building under its blast doors
   if (s === state.core && MAPS[MAP].invincibleCore) return;
   s.hp -= dmg;
@@ -358,15 +363,16 @@ const relayBoost = (s) => {
 };
 
 // Set a bug alight, keeping whichever burn is hotter and longer. flame: a Flamethrower burn (Clinging Napalm spreads it).
-function ignite(e, dps, t, flameBurn = false) {
+// src: the structure that set it alight; the last one to do so is credited if the fire kills it.
+function ignite(e, dps, t, flameBurn = false, src = null) {
   const b = e.burn;
-  e.burn = { dps: Math.max(dps, b?.dps ?? 0), t: Math.max(t, b?.t ?? 0), flame: flameBurn || !!b?.flame };
+  e.burn = { dps: Math.max(dps, b?.dps ?? 0), t: Math.max(t, b?.t ?? 0), flame: flameBurn || !!b?.flame, src: src ?? b?.src };
 }
 
 // Clinging Napalm: a bug that dies in Flamethrower fire splashes it onto its neighbours.
 function spreadNapalm(e) {
   const burn = e.burn;
-  eachEnemy(e.x, e.z, 2, (n) => { if (n !== e) ignite(n, burn.dps, BUILDINGS.flame.burn, true); });
+  eachEnemy(e.x, e.z, 2, (n) => { if (n !== e) ignite(n, burn.dps, BUILDINGS.flame.burn, true, burn.src); });
   const y = heightAt(e.x, e.z) + 0.3 * e.def.scale;
   for (let k = 0; k < 5; k++) {
     const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 2.5;
@@ -420,15 +426,18 @@ export function eachEnemy(x, z, r, fn) { spatial.each(x, z, r, fn); }
 // World height to shoot at: a bug's body. Ground bugs sit low; the Colossus reports how high its hull is (e.aimH).
 export const aimY = (e) => heightAt(e.x, e.z) + (e.aimH ?? 0.5 * e.def.scale);
 
-export function damageEnemy(e, dmg) {
+// src: the structure whose shot (or shell, missile, fire) this is. Whichever lands the killing blow gets the kill on
+// its count (s.kills, shown in the info panel); strikes and troopers pass none.
+export function damageEnemy(e, dmg, src = null) {
   if (e.dead) return;
   e.hp -= dmg;
-  if (e.hp <= 0) killEnemy(e);
+  if (e.hp <= 0) killEnemy(e, false, src);
 }
 
 // quiet: no splatter, gibs or pop (something else ate it: the black hole)
-function killEnemy(e, quiet = false) {
+function killEnemy(e, quiet = false, src = null) {
   e.dead = true;
+  if (src) src.kills++;
   state.credits += e.def.reward;
   state.kills++;
   if (e.burn?.flame && state.research.napalm) spreadNapalm(e);
@@ -645,7 +654,7 @@ function updateTower(s, dt) {
       const m = makeProjectile();
       m.position.copy(_a);
       state.scene.add(m);
-      state.projectiles.push({ mesh: m, target: t, speed: 30, damage: def.damage, life: 3, sabot: s.type === 'turret' && !!state.research.sabot });
+      state.projectiles.push({ mesh: m, src: s, target: t, speed: 30, damage: def.damage, life: 3, sabot: s.type === 'turret' && !!state.research.sabot });
       ejectCasing(s, gp);
     }
     flashes.add(_a.x, _a.y, _a.z, { color: 0xffc070, power: 9, range: 6, life: 0.1, key: s });
@@ -660,8 +669,8 @@ function updateTower(s, dt) {
       state.scene.add(tr);
       state.beams.push({ mesh: tr, life: 0.05, max: 0.05 });
       const alive = !t.dead, before = t.hp;
-      damageEnemy(t, def.damage);
-      if (alive && t.dead && state.research.overpen) overpenetrate(t, def.damage - before);
+      damageEnemy(t, def.damage, s);
+      if (alive && t.dead && state.research.overpen) overpenetrate(s, t, def.damage - before);
       if (Math.random() < 0.3) burst(_b.x, _b.y, _b.z, 'ichor', 1, 3);
       ejectCasing(s, gp);
     }
@@ -678,14 +687,14 @@ function updateTower(s, dt) {
     flashes.add(_b.x, _b.y + 0.3, _b.z, { color: 0x7fb8ff, power: 5, range: 5, life: 0.14, key: s });
     state.beams.push({ mesh: beam, life: 0.12 });
     const dmg = def.damage * focus;
-    damageEnemy(t, dmg);
-    if (state.research.prism) prismArc(t, _b, dmg * 0.5);
+    damageEnemy(t, dmg, s);
+    if (state.research.prism) prismArc(s, t, _b, dmg * 0.5);
   }
 }
 
 // Overpenetration: an HMG round that kills its bug carries on into the nearest one within 2 m with what is left.
 const _pa = new THREE.Vector3(), _pb = new THREE.Vector3();
-function overpenetrate(t, left) {
+function overpenetrate(s, t, left) {
   if (left <= 0) return;
   const n = nearestOther(t, 2);
   if (!n) return;
@@ -694,11 +703,11 @@ function overpenetrate(t, left) {
   const tr = makeTracer(_pa, _pb);
   state.scene.add(tr);
   state.beams.push({ mesh: tr, life: 0.05, max: 0.05 });
-  damageEnemy(n, left);
+  damageEnemy(n, left, s);
 }
 
 // Prism Splitter: every pulse forks to the nearest other bug within 3 m.
-function prismArc(t, from, dmg) {
+function prismArc(s, t, from, dmg) {
   const n = nearestOther(t, 3);
   if (!n) return;
   _pb.set(n.x, aimY(n), n.z);
@@ -706,7 +715,7 @@ function prismArc(t, from, dmg) {
   beam.scale.x = beam.scale.z = 0.6;
   state.scene.add(beam);
   state.beams.push({ mesh: beam, life: 0.1 });
-  damageEnemy(n, dmg);
+  damageEnemy(n, dmg, s);
 }
 
 function nearestOther(t, r) {
@@ -727,9 +736,9 @@ function updateProjectiles(dt) {
     const dist = _a.length();
     const step = p.speed * dt;
     if (dist <= step + 0.3) {
-      damageEnemy(t, p.damage * (p.sabot && t.def.scale >= 1 ? 1.5 : 1));   // Sabot Shells: medium bugs and the Colossus
+      damageEnemy(t, p.damage * (p.sabot && t.def.scale >= 1 ? 1.5 : 1), p.src);   // Sabot Shells: medium bugs and the Colossus
       if (state.research.he) {
-        spatial.each(t.x, t.z, 2.2, (e) => { if (e !== t) damageEnemy(e, p.damage * 0.6); });
+        spatial.each(t.x, t.z, 2.2, (e) => { if (e !== t) damageEnemy(e, p.damage * 0.6, p.src); });
         burst(t.x, _b.y, t.z, 'debris', 4);
       }
       state.scene.remove(p.mesh);
@@ -785,7 +794,7 @@ function updateMortar(s, dt) {
   const shell = makeMortarShell();
   shell.position.copy(_a);
   state.scene.add(shell);
-  state.shells.push({ mesh: shell, start: _a.clone(), end: new THREE.Vector3(ex, heightAt(ex, ez), ez), t: 0, dur, h: 9 + dist * 0.28, dmg: def.damage, splash: def.splash, whistled: false, wp: !!state.research.phosphorus });
+  state.shells.push({ mesh: shell, start: _a.clone(), end: new THREE.Vector3(ex, heightAt(ex, ez), ez), t: 0, dur, h: 9 + dist * 0.28, dmg: def.damage, splash: def.splash, whistled: false, wp: !!state.research.phosphorus, src: s });
   flashes.add(_a.x, _a.y + 0.5, _a.z, { color: 0xffb060, power: 22, range: 8, life: 0.18 });
   for (let q = 0; q < 3; q++) puff(_a.x, _a.y, _a.z, { color: 0xd8d0c8, size: 0.8, grow: 2, life: 0.9, opacity: 0.5, vy: 2 + Math.random() * 2, vx: (Math.random() - 0.5) * 2, vz: (Math.random() - 0.5) * 2 });
   audio.play('mortar_fire', { x: s.x, z: s.z });
@@ -804,8 +813,8 @@ function updateShells(dt) {
     m.position.copy(_b);
     if (!sh.whistled && sh.dur - sh.t < 0.9) { sh.whistled = true; audio.play('artillery_whistle', { x: sh.end.x, z: sh.end.z, vol: 0.5 }); }
     if (u >= 1) {
-      explode(sh.end.x, sh.end.z, 1.9, sh.dmg, sh.splash, { shake: 0, smoke: 8 });
-      if (sh.wp) phosphorus(sh.end.x, sh.end.z, sh.splash);
+      explode(sh.end.x, sh.end.z, 1.9, sh.dmg, sh.splash, { shake: 0, smoke: 8, src: sh.src });
+      if (sh.wp) phosphorus(sh.end.x, sh.end.z, sh.splash, sh.src);
       state.scene.remove(m);
       state.shells.splice(k, 1);
     }
@@ -813,8 +822,8 @@ function updateShells(dt) {
 }
 
 // White Phosphorus: everything in the blast burns, under a burst of dense white smoke with burning streamers.
-function phosphorus(x, z, r) {
-  eachEnemy(x, z, r, (e) => ignite(e, 12, 4));
+function phosphorus(x, z, r, src) {
+  eachEnemy(x, z, r, (e) => ignite(e, 12, 4, false, src));
   const y = heightAt(x, z);
   for (let k = 0; k < 7; k++) {
     const a = Math.random() * Math.PI * 2, sp = 1.5 + Math.random() * 2.5;
@@ -852,7 +861,7 @@ function updateSilo(s, dt) {
       m.position.copy(_a);
       state.scene.add(m);
       const tgt = state.research.distrib ? salvoTarget(s) : s.target && !s.target.dead ? s.target : clusterTarget(s.x, s.z, def.range);
-      state.missiles.push({ mesh: m, pos: _a.clone(), vel: new THREE.Vector3((Math.random() - 0.5) * 3, 12, (Math.random() - 0.5) * 3), target: tgt, last: new THREE.Vector3(s.x, s.y, s.z + 5), t: 0, spin: Math.random() * 6.28, dmg: def.damage, splash: def.splash, trail: 0 });
+      state.missiles.push({ mesh: m, pos: _a.clone(), vel: new THREE.Vector3((Math.random() - 0.5) * 3, 12, (Math.random() - 0.5) * 3), target: tgt, last: new THREE.Vector3(s.x, s.y, s.z + 5), t: 0, spin: Math.random() * 6.28, dmg: def.damage, splash: def.splash, trail: 0, src: s });
       audio.play('missile_launch', { x: s.x, z: s.z, vol: 0.4 });           // one at a time (voices in audio.js)
       puff(_a.x, _a.y, _a.z, { color: 0xffd090, size: 1.2, life: 0.15, opacity: 0.9, additive: true });
       puff(_a.x, _a.y - 0.3, _a.z, { color: 0xd8d0c8, size: 1.0, grow: 2.5, life: 1.2, opacity: 0.5, vy: 1.5 });
@@ -897,7 +906,7 @@ function updateMissiles(dt) {
     if (ms.trail > 0.03) { ms.trail = 0; puff(ms.pos.x, ms.pos.y, ms.pos.z, { color: 0xe0d8d0, size: 0.45, grow: 1.4, life: 1.0, opacity: 0.45, drag: 0.5 }); }
     const ground = heightAt(ms.pos.x, ms.pos.z);
     if ((ms.t > 0.5 && ms.pos.distanceTo(ms.last) < 1.0) || ms.pos.y <= ground + 0.15 || ms.t > 8) {
-      explode(ms.pos.x, ms.pos.z, 1.3, ms.dmg, ms.splash, { shake: 0, smoke: 5 });
+      explode(ms.pos.x, ms.pos.z, 1.3, ms.dmg, ms.splash, { shake: 0, smoke: 5, src: ms.src });
       state.scene.remove(m);
       state.missiles.splice(k, 1);
     }
@@ -965,7 +974,7 @@ function updateRailgun(s, dt) {
     const along = ox * _c.x + oz * _c.z;
     if (along < 0 || along > reach) continue;
     const perp = Math.abs(-ox * _c.z + oz * _c.x);
-    if (perp < 0.9 + 0.4 * e.def.scale) damageEnemy(e, def.damage * (1 - 0.35 * along / reach) * (e.boss && state.research.penetrator ? 3 : 1));
+    if (perp < 0.9 + 0.4 * e.def.scale) damageEnemy(e, def.damage * (1 - 0.35 * along / reach) * (e.boss && state.research.penetrator ? 3 : 1), s);
   }
   s.recoilT = 0;
   audio.play('railgun_fire', { x: s.x, z: s.z });
@@ -984,7 +993,7 @@ function flameStream(s, dt) {
     const dx = e.x - s.x, dz = e.z - s.z;
     const d = Math.sqrt(d2);
     if (d < 0.01 || (dx * fx + dz * fz) / d < cosCone) return;
-    ignite(e, dps, def.burn, true);
+    ignite(e, dps, def.burn, true, s);
   });
   flashes.add(_nz.x + fx * 3 * reach, _nz.y + 0.4, _nz.z + fz * 3 * reach, { color: 0xff7a2a, power: 22, range: 9, life: 0.15, flicker: 0.35, key: s });
   s.flameAcc = (s.flameAcc || 0) + dt * 64;
@@ -1020,7 +1029,7 @@ function updateBurning(dt) {
         { size: 0.22 * sc + 0.14, grow: 0.7, life: 0.4 + Math.random() * 0.2, vy: 2.2 + Math.random(), vx: (Math.random() - 0.5), vz: (Math.random() - 0.5), drag: 1, heat: 0.7 });
     }
     if (Math.random() < dt * 4 * fxScale) puff(e.x, burnY(e) + 0.8 * sc, e.z, { color: 0x2a2622, size: 0.5, grow: 1.4, life: 1.0, opacity: 0.35, vy: 2 });
-    damageEnemy(e, e.burn.dps * dt);
+    damageEnemy(e, e.burn.dps * dt, e.burn.src);
     if (e.burn && e.burn.t <= 0) e.burn = null;
   }
 }
@@ -1091,6 +1100,8 @@ function updateCasings(dt) {
 // Acid Spitter: the cannon on its back tracks the nearest building in reach and fires while the bug keeps walking (or
 // chewing). Walls are beneath its notice: it lobs straight over them at whatever they protect.
 function acidTarget(e, range) {
+  const ship = nearestShip(e.x, e.z);                      // the battleship first, whenever it is in reach
+  if (ship && hullGap(ship, e.x, e.z) < range) return ship;
   let best = null, bd = range;
   for (const s of state.structures) {
     if (s.type === 'wall' || s.def?.walkable || s.buried || s.hp <= 0) continue;
@@ -1124,7 +1135,7 @@ function updateSpitter(e, dt) {
   }
 }
 
-const _dir = { x: 0, z: 0 };
+const _dir = { x: 0, z: 0 }, _hull = { x: 0, z: 0 };
 // What stands in a bug's way (and gets chewed): not retracted buildings, and not minefields, which bugs walk over.
 // The structure (if any) standing on the build cell under world point (x, z) that stops a bug: not buried, not walkable.
 function blockerAt(x, z) {
@@ -1162,10 +1173,27 @@ function updateEnemies(dt) {
     e.lunge = Math.max(0, e.lunge - dt * 4);
     if (e.def.acid) updateSpitter(e, dt);
 
-    // Troopers are the bugs' top priority: anything within PREY_RANGE drops what it is doing and hunts the nearest
-    // one (a small bug's bite costs 1 HP, a brute or spitter takes 2), only chewing a structure when it is actually in the way.
+    // A Land Battleship on the field (battleship.js) comes before everything: every bug heads for the nearest point of
+    // its hull and bites it for its structure damage. As with troopers, only while the way there is open. On the canyon
+    // map that holds beyond the mouth too (the ship can drive out there): confine() still keeps them off the walls.
+    let chase = false;
+    const ship = state.ships.length ? nearestShip(e.x, e.z) : null;
+    if (ship) {
+      const gap = hullGap(ship, e.x, e.z, _hull), reach = 0.55 + 0.5 * e.def.scale;
+      if (gap < reach) {
+        e.target = null;
+        e.fx = _hull.x - e.x; e.fz = _hull.z - e.z;
+        if (e.attackCd <= 0) { e.attackCd = 1 / e.def.attackRate; e.lunge = 1; hurtShip(ship, e.def.damage); }
+        continue;
+      }
+      _dir.x = (_hull.x - e.x) / gap; _dir.z = (_hull.z - e.z) / gap;
+      if (!blockerAt(e.x + _dir.x * 0.9, e.z + _dir.z * 0.9) && !blockerAt(e.x, e.z)) { e.target = null; chase = true; }
+    }
+
+    // Troopers come next: anything within PREY_RANGE drops what it is doing and hunts the nearest one (a small bug's
+    // bite costs 1 HP, a brute or spitter takes 2), only chewing a structure when it is actually in the way.
     let prey = null, pd = PREY_RANGE * PREY_RANGE;
-    for (let k = 0; k < state.troopers.length; k++) {
+    for (let k = 0; k < state.troopers.length && !chase; k++) {
       const tr = state.troopers[k];
       if (tr.hp <= 0) continue;
       const d = (tr.x - e.x) ** 2 + (tr.z - e.z) ** 2;
@@ -1198,7 +1226,7 @@ function updateEnemies(dt) {
     }
     e.target = null;
 
-    if (!prey) { if (canyon && e.z < -lim) approachDir(e.x, e.z, _dir); else flow.sample(e.x, e.z, _dir); }
+    if (!prey && !chase) { if (canyon && e.z < -lim) approachDir(e.x, e.z, _dir); else flow.sample(e.x, e.z, _dir); }
     // per-bug lateral bias so a column fans out instead of walking a single line
     const cj = Math.cos(e.jit), sj = Math.sin(e.jit);
     const dx = _dir.x * cj - _dir.z * sj, dz = _dir.x * sj + _dir.z * cj;
@@ -1254,7 +1282,7 @@ function updateMines(s, dt) {
     const m = ud.mines[k];
     ud.spent[k] = true;
     s.tripped.add(e);
-    damageEnemy(e, d.damage);
+    damageEnemy(e, d.damage, s);
     explode(s.x + m.position.x, s.z + m.position.z, 0.8, 0, 0.8, { shake: 0.04, smoke: 5 });   // the look only: the damage is the bug's
     if (!ud.spent.every(Boolean)) return false;             // more bugs on the tile this frame take the next ones
     s.reload = d.reload;
