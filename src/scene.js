@@ -32,7 +32,7 @@ const SHADOW_REACH = 1.15;                    // shadows reach this many view di
 export function createScene(container) {
   const lowfx = new URLSearchParams(location.search).has('lowfx');
   // high-performance: on laptops with integrated and discrete graphics, ask for the discrete GPU.
-  // With the post chain (below) the scene is drawn into its own 4x MSAA target and the canvas only ever receives one
+  // With the post chain (below) the scene is drawn into its own 2x MSAA target and the canvas only ever receives one
   // full-screen quad, so a multisampled canvas and a canvas depth buffer would cost bandwidth and do nothing. ?lowfx
   // draws the scene straight to the canvas and keeps both.
   const renderer = new THREE.WebGLRenderer({ antialias: lowfx, depth: lowfx, powerPreference: 'high-performance' });
@@ -167,13 +167,13 @@ export function createScene(container) {
     renderer.setSize(innerWidth, innerHeight);
   });
 
-  // Post chain: HDR scene (4x MSAA) -> bloom on anything brighter than white (emissives, flashes, beams, hot speculars)
+  // Post chain: HDR scene (2x MSAA) -> bloom on anything brighter than white (emissives, flashes, beams, hot speculars)
   // -> tone map + sRGB with a light vignette and a 1-bit dither that stops the dark sky gradients banding.
   // ?lowfx skips the chain and draws straight to the canvas.
   let composer = null, bloom = null;
   if (!lowfx) {
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 2 });
     composer = new EffectComposer(renderer, target);
     composer.setPixelRatio(1);                            // sized in drawing-buffer pixels below
     composer.addPass(new RenderPass(scene, camera));

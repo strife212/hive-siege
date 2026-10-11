@@ -154,12 +154,12 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   pixels that still show sky. A 79-structure base went from about 4,000 draw calls a frame to under 1,000.
   Building HP bars (`src/hpbars.js`, a sprite-equivalent shader), spent casings and gibs are instanced too (shared
   helpers in `src/instancing.js`). The WebGL context asks for the high-performance GPU (dual-GPU laptops) and, with
-  the post chain on, has no MSAA or depth buffer of its own: the scene is drawn into the composer's 4x MSAA target and
+  the post chain on, has no MSAA or depth buffer of its own: the scene is drawn into the composer's 2x MSAA target and
   the canvas only receives the final full-screen pass. The terrain skips the texture lookups of any splat layer whose
   weight is exactly zero at that pixel, and it is drawn after every other solid object so the depth test throws out
   the ground hidden under buildings and bugs before it is shaded (its pixels are the most expensive in the scene).
 - **Adaptive quality** (`src/quality.js`): if the frame rate stays under 45 fps for a 2 s window, rendering steps down
-  a level. Levels 0-4: pixel-ratio cap 1.5 / 1.0 / 0.85 / 0.8 / 0.7, MSAA 4 / 2 / 2 / 0 / 0, shadow map
+  a level. Levels 0-4: pixel-ratio cap 1.5 / 1.0 / 0.85 / 0.8 / 0.7, MSAA 2 / 2 / 2 / 0 / 0, shadow map
   3072 / 2048 / 2048 / 1536 / 1024, bloom off only at the last level. All of it changes live, without shader
   recompiles. Frames over 150 ms (compiles, GC, tab switches) are ignored unless ten come in a row, nothing is judged
   for 3 s after loading or 1.5 s after a change, and if two steps in a row buy under 5% more frames (CPU-bound, or the
@@ -350,7 +350,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   paint chips sampled triplanar in each part's own space, so nothing swims when a turret turns). Buildings sit on a
   sunk footing so slopes never show daylight under a base plate. Boulders share the cliff rock texture. Reflections
   come from a probe that matches the world (dusk horizon, hot sun spot, cool fill) and the frame goes through an HDR
-  chain: 4x MSAA, bloom on anything brighter than white, ACES tone map, light vignette and a dither against banding.
+  chain: 2x MSAA, bloom on anything brighter than white, ACES tone map, light vignette and a dither against banding.
   Add `?lowfx` to the URL to skip the chain on weak GPUs. The UI uses bundled fonts (Rajdhani, Barlow Semi Condensed).
   - **Battle light** (`src/flashes.js`): explosions, muzzle blasts, the flamethrower, railgun bolts, laser hits and
     acid splashes light the ground and buildings around them. A fixed pool of six point lights goes to the flashes
