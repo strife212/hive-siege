@@ -384,6 +384,14 @@ function missileSilo(g) {
 
 // Railgun Battery (2x2): hazard-striped pad, bolted turntable, armoured cradle with capacitor banks and power
 // conduits, finned breech with a charge gauge on top, and twin conductor rails on a recoil sled.
+// Its sensor eye and gauge track are shared by every railgun: they all run off the Fusion Reactor and go dark together.
+M.railEye = M.lens.clone();
+M.railTrack = M.gaugeBack.clone();
+export function railLights(on) {
+  M.railEye.emissiveIntensity = on ? M.lens.emissiveIntensity : 0;
+  M.railEye.color.set(on ? M.lens.color : 0x2a1a18);
+  M.railTrack.emissiveIntensity = on ? M.gaugeBack.emissiveIntensity : 0;
+}
 function railgun(g) {
   g.add(mesh(bevelBox(3.8, 0.12, 3.8), M.dark, 0, 0.06, 0));
   g.add(mesh(bevelBox(3.6, 0.3, 3.6), M.concrete, 0, 0.18, 0));
@@ -426,7 +434,7 @@ function railgun(g) {
   head.add(mesh(bevelBox(0.62, 0.62, 1.7), M.dark, 0, 0.98, -0.5));
   for (let k = 0; k < 6; k++) head.add(mesh(bevelBox(0.8, 0.5, 0.05), M.gunmetal, 0, 0.98, -1.42 - k * 0.09));
   head.add(mesh(bevelBox(0.46, 0.04, 1.1), M.black, 0, 1.3, -0.5));          // gauge bezel
-  head.add(mesh(bevelBox(0.34, 0.02, 0.98), M.gaugeBack, 0, 1.325, -0.5));   // dim blue track
+  head.add(mesh(bevelBox(0.34, 0.02, 0.98), M.railTrack, 0, 1.325, -0.5));   // dim blue track
   const gaugeGeo = bevelBox(0.3, 0.03, 0.94);
   gaugeGeo.translate(0, 0, 0.47);                                                         // origin at the rear end
   const gauge = mesh(gaugeGeo, M.gaugeFill.clone(), 0, 1.335, -0.97);
@@ -438,7 +446,7 @@ function railgun(g) {
   // Sensor mast.
   head.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 6), M.dark, 0.78, 1.45, -1.0));
   head.add(mesh(bevelBox(0.2, 0.16, 0.26), M.white, 0.78, 1.85, -1.0));
-  const eye = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 10), M.lens, 0.78, 1.85, -0.86);
+  const eye = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 10), M.railEye, 0.78, 1.85, -0.86);
   eye.rotation.x = Math.PI / 2;
   head.add(eye);
 
@@ -966,6 +974,153 @@ function uplinkTower(g) {
   };
 }
 
+// ---------------------------------------------------------------- Fusion Reactor
+// Shared by every reactor and driven from its tick, so they all run in step: the plasma's glow flows round the ring
+// (a scrolling emissive map) and beats, light races up the central solenoid, the heat vents breathe.
+function stripTexture(w, h, stops, repeatX, repeatY) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const grad = w > h ? g.createLinearGradient(0, 0, w, 0) : g.createLinearGradient(0, 0, 0, h);
+  for (const [s, v] of stops) grad.addColorStop(s, `rgb(${Math.round(255 * v)},${Math.round(255 * v)},${Math.round(255 * v)})`);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repeatX, repeatY);
+  return t;
+}
+M.fusion = new THREE.MeshStandardMaterial({                                                            // the plasma ring
+  color: 0xffc2f0, emissive: 0xff4fd2, emissiveIntensity: 2.8, roughness: 0.3,
+  emissiveMap: stripTexture(128, 4, [[0, 0.22], [0.16, 1], [0.3, 0.4], [0.5, 0.85], [0.68, 0.22], [0.84, 1], [1, 0.22]], 3, 1),
+});
+M.solenoid = new THREE.MeshStandardMaterial({                                                          // the central column
+  color: 0x5a3a52, emissive: 0xff4fd2, emissiveIntensity: 2.2, roughness: 0.4, metalness: 0.5,
+  emissiveMap: stripTexture(4, 64, [[0, 0.04], [0.42, 0.04], [0.5, 1], [0.58, 0.04], [1, 0.04]], 1, 3),
+});
+M.fusionGlow = new THREE.MeshStandardMaterial({ color: 0xffd6f6, emissive: 0xff5ad8, emissiveIntensity: 3, roughness: 0.3 });
+M.vessel = new THREE.MeshPhysicalMaterial({ color: 0xeee4f4, emissive: 0x5a1450, emissiveIntensity: 0.15, roughness: 0.05, transparent: true, opacity: 0.13, clearcoat: 1, depthWrite: false });
+M.copper = worn(new THREE.MeshStandardMaterial({ color: 0xb8733a, roughness: 0.32, metalness: 0.9 }), { grime: 0.16, chips: 0.1, rough: 0.3 });
+M.vent = new THREE.MeshStandardMaterial({ color: 0x3a1a10, emissive: 0xff5a1a, emissiveIntensity: 0.9, roughness: 0.6 });
+
+// Fusion Reactor (2x2, support): an armoured hall carrying a tokamak on its roof. A ring of plasma burns inside a
+// faint glass vessel, threaded through twelve copper field coils on saddle mounts round a glowing central solenoid
+// with an injector crown. Two tilted containment rings slowly orbit the whole torus in opposite directions; cooling
+// fans spin in the four corner pods and the heat vents along the hall's sides glow.
+function fusionReactor(g) {
+  g.add(mesh(bevelBox(3.8, 0.2, 3.8), M.dark, 0, 0.1, 0));
+  g.add(mesh(bevelBox(3.3, 0.85, 3.3, 0.08), M.white, 0, 0.62, 0));
+  g.add(mesh(bevelBox(3.4, 0.1, 3.4), M.trim, 0, 1.08, 0));
+  for (let k = 0; k < 4; k++) {                                                                        // hall faces
+    const face = new THREE.Group();
+    face.rotation.y = k * Math.PI / 2;
+    face.add(mesh(bevelBox(3.32, 0.12, 0.03), M.hazard, 0, 0.32, 1.655));
+    face.add(mesh(bevelBox(3.32, 0.05, 0.03), M.cyan, 0, 0.96, 1.655));
+    if (k === 0) {
+      face.add(mesh(bevelBox(0.9, 0.62, 0.06), M.gunmetal, 0, 0.6, 1.66));                              // blast door
+      face.add(mesh(bevelBox(1.0, 0.06, 0.07), M.amber, 0, 0.93, 1.66));
+      for (const x of [-0.25, 0, 0.25]) face.add(mesh(bevelBox(0.04, 0.5, 0.03), M.black, x, 0.6, 1.695));
+      for (let q = 0; q < 4; q++) face.add(mesh(bevelBox(0.08, 0.08, 0.03), q % 2 ? M.cyan : M.window, -1.3 + q * 0.15, 0.75, 1.67));   // status lamps
+      face.add(mesh(bevelBox(0.5, 0.26, 0.03), M.gaugeBack, 1.1, 0.68, 1.67));                          // readout
+      face.add(mesh(bevelBox(0.36, 0.06, 0.035), M.gaugeFill, 1.06, 0.68, 1.675));
+    } else if (k === 2) {
+      for (const x of [-0.9, -0.55, -0.2]) face.add(mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.9, 8), M.cable, x, 0.55, 1.72));   // power trunks
+      face.add(mesh(bevelBox(1.0, 0.24, 0.16), M.trim, -0.55, 0.92, 1.72));
+      face.add(mesh(bevelBox(0.6, 0.5, 0.2), M.trim, 0.8, 0.6, 1.74));                                  // switchgear
+      face.add(mesh(bevelBox(0.5, 0.06, 0.04), M.hazard, 0.8, 0.8, 1.85));
+    } else {
+      face.add(mesh(bevelBox(2.3, 0.5, 0.05), M.black, 0, 0.62, 1.66));                                 // heat vent
+      for (let q = 0; q < 6; q++) face.add(mesh(bevelBox(2.2, 0.035, 0.05), M.vent, 0, 0.42 + q * 0.08, 1.68));
+    }
+    g.add(face);
+  }
+
+  // the tokamak: field coils on saddle mounts round a glass vessel with the plasma ring inside
+  const YT = 1.75, R = 0.95, mounts = [], clamps = [];
+  for (let k = 0; k < 12; k++) {
+    const a = k / 12 * Math.PI * 2, s = Math.sin(a), c = Math.cos(a);
+    const coil = mesh(new THREE.TorusGeometry(0.42, 0.065, 4, 20), M.copper, s * R, YT, c * R);
+    coil.rotation.y = a + Math.PI / 2;                                                                  // ring plane through the axis
+    g.add(coil);
+    clamps.push(boxAt(0.1, 0.2, 0.16, s * (R + 0.45), YT, c * (R + 0.45), a), boxAt(0.16, 0.1, 0.14, s * R, YT + 0.46, c * R, a));
+    if (k % 2 === 0) mounts.push(boxAt(0.16, 0.24, 0.34, s * R, 1.24, c * R, a));
+  }
+  g.add(mesh(mergeGeometries(mounts), M.gunmetal), mesh(mergeGeometries(clamps), M.gunmetal));
+  const plasma = mesh(new THREE.TorusGeometry(R, 0.16, 12, 64), M.fusion, 0, YT, 0);
+  plasma.rotation.x = Math.PI / 2;
+  const vessel = mesh(new THREE.TorusGeometry(R, 0.3, 16, 48), M.vessel, 0, YT, 0);
+  vessel.rotation.x = Math.PI / 2;
+  g.add(plasma, vessel);
+
+  // central solenoid and the injector crown with its beating core
+  g.add(mesh(new THREE.CylinderGeometry(0.34, 0.38, 0.1, 20), M.gunmetal, 0, 1.18, 0));
+  g.add(mesh(new THREE.CylinderGeometry(0.24, 0.24, 1.1, 20, 1, true), M.solenoid, 0, 1.78, 0));
+  for (const y of [1.3, 2.26]) g.add(mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.08, 20), M.brass, 0, y, 0));
+  g.add(mesh(new THREE.CylinderGeometry(0.16, 0.26, 0.16, 16), M.gunmetal, 0, 2.38, 0));
+  const prongs = [];
+  for (let k = 0; k < 4; k++) {
+    const a = k / 4 * Math.PI * 2 + Math.PI / 4;
+    prongs.push(strut(new THREE.Vector3(Math.cos(a) * 0.2, 2.44, Math.sin(a) * 0.2), new THREE.Vector3(Math.cos(a) * 0.26, 2.86, Math.sin(a) * 0.26), 0.025, 5));
+  }
+  g.add(mesh(mergeGeometries(prongs), M.brass));
+  const core = mesh(new THREE.SphereGeometry(0.14, 14, 10), M.fusionGlow, 0, 2.66, 0);
+  g.add(core);
+
+  // containment rings: tilted, orbiting the torus in opposite directions, each with four emitter nodes
+  const gimbals = [];
+  for (const [tilt, r] of [[0.22, 1.55], [-0.3, 1.5]]) {
+    const gim = new THREE.Group();
+    gim.position.y = YT;
+    const ring = new THREE.Group();
+    ring.rotation.x = tilt;
+    ring.add(mesh(new THREE.TorusGeometry(r, 0.03, 6, 64), M.trim).rotateX(Math.PI / 2));
+    for (let k = 0; k < 4; k++) {
+      const a = k / 4 * Math.PI * 2;
+      ring.add(mesh(bevelBox(0.12, 0.1, 0.12), M.gunmetal, Math.cos(a) * r, 0, Math.sin(a) * r));
+      ring.add(mesh(new THREE.SphereGeometry(0.05, 8, 6), M.fusionGlow, Math.cos(a) * r, 0.08, Math.sin(a) * r));
+    }
+    gim.add(ring);
+    g.add(gim);
+    gimbals.push(gim);
+  }
+
+  // corner cooling pods with spinning fans, coolant lines running in to the coil mounts
+  const fans = [], lines = [];
+  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    const x = sx * 1.42, z = sz * 1.42;
+    g.add(mesh(bevelBox(0.5, 0.42, 0.5), M.gunmetal, x, 1.34, z));
+    g.add(mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.05, 16), M.black, x, 1.57, z));
+    const fan = new THREE.Group();
+    fan.position.set(x, 1.6, z);
+    for (let q = 0; q < 3; q++) {
+      const blade = mesh(bevelBox(0.36, 0.015, 0.08), M.trim, 0, 0, 0);
+      blade.rotation.set(0.3, q / 3 * Math.PI * 2, 0, 'YXZ');
+      fan.add(blade);
+    }
+    fan.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 8), M.dark, 0, 0.01, 0));
+    g.add(fan);
+    fans.push(fan);
+    lines.push(strut(new THREE.Vector3(x - sx * 0.25, 1.2, z - sz * 0.25), new THREE.Vector3(sx * 0.72, 1.2, sz * 0.72), 0.05, 6));
+    lines.push(boxAt(0.18, 0.18, 0.18, sx * 0.7, 1.22, sz * 0.7));                                       // junction box
+  }
+  g.add(mesh(mergeGeometries(lines), M.trim));
+
+  Object.assign(g.userData, { fans, gimbals, core });                                                  // they move: bake.js keeps them apart
+  g.userData.tick = (dt, t) => {
+    for (const f of fans) f.rotation.y += dt * 9;
+    gimbals[0].rotation.y = t * 0.45;
+    gimbals[1].rotation.y = 1 - t * 0.32;
+    const beat = Math.max(0, Math.sin(t * 2.4)) ** 8;                                                   // a heartbeat in the plasma
+    core.scale.setScalar(1 + 0.3 * beat);
+    // shared materials: every reactor in step
+    M.fusion.emissiveMap.offset.x = -t * 0.45;
+    M.fusion.emissiveIntensity = 2.6 + 1.6 * beat + 0.2 * Math.sin(t * 31);
+    M.solenoid.emissiveMap.offset.y = -t * 0.7;
+    M.fusionGlow.emissiveIntensity = 3 + 4 * beat;
+    M.vent.emissiveIntensity = 0.9 + 0.5 * Math.sin(t * 0.9);
+  };
+}
+
 const ROUND_FOOTING = { hmg: [0.86, 8], turret: [1.16, 8], dual: [1.16, 8], flame: [1.11, 8], laser: [1.1, 24], mortar: [1.86, 20] };   // [radius, sides]
 
 export function makeBuildingMesh(type) {
@@ -1056,6 +1211,7 @@ export function makeBuildingMesh(type) {
     case 'refinery': refinery(g); break;
     case 'lab': researchLab(g); break;
     case 'uplink': uplinkTower(g); break;
+    case 'reactor': fusionReactor(g); break;
     case 'core': commandTower(g); break;
   }
   // Foundation sunk into the ground under everything but walls, mines (each sits on the ground itself) and the

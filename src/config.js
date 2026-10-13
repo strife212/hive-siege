@@ -1,4 +1,4 @@
-export const VERSION = '1.15';                 // shown on the main menu; the minor number goes up by one with every commit (1.9, 1.10, 1.11...)
+export const VERSION = '1.16';                 // shown on the main menu; the minor number goes up by one with every commit (1.9, 1.10, 1.11...)
 export const MAP_SIZE = 80;
 export const HALF = MAP_SIZE / 2;
 export const CELL = 2;
@@ -87,9 +87,9 @@ export const BUILDINGS = {
     desc: 'A heavy VTOL gunship lifts off to hunt the nearest bugs with 100 gatling rounds and 10 rockets, then returns to the pad for 5 s to rearm.',
   },
   rail: {
-    name: 'Railgun Battery', cost: 2000, hp: 300, cat: 'DEFENSE', size: [2, 2], requires: 'lab',
+    name: 'Railgun Battery', cost: 2000, hp: 300, cat: 'DEFENSE', size: [2, 2], requires: 'reactor',
     kind: 'rail', range: 40, damage: 400, charge: 5, turn: 1.3,
-    desc: 'Charges for 5 s then fires a bolt that pierces every bug in a line. Requires a Research Lab.',
+    desc: 'Charges for 5 s then fires a bolt that pierces every bug in a line. Runs off a Fusion Reactor: it cannot be built without one, and goes dark if the last one is lost.',
   },
   airship: {
     name: 'Titan Airship Pad', cost: 5000, hp: 600, cat: 'DEFENSE', size: [2, 3], limit: 1, requires: 'lab',
@@ -107,16 +107,21 @@ export const BUILDINGS = {
     desc: 'A colossal howitzer with cross-map range. Every 10 s it drops one giant shell (650 damage, 7 m blast) on the biggest clump of bugs on the field. Only one can be built. Requires a Research Lab.',
   },
   refinery: {
-    name: 'Refinery', cost: 150, hp: 260, cat: 'ECONOMY',
+    name: 'Refinery', cost: 250, hp: 260, cat: 'ECONOMY',
     income: 3,
     desc: 'Extracts credits from the crust: +3 credits / second, once the first wave has been called.',
   },
   lab: {
     name: 'Research Lab', cost: 500, hp: 220, cat: 'ECONOMY',
-    desc: 'Unlocks the Laser Tower and the TECH tab research. Each tower\'s research is listed once one has been built.',
+    desc: 'Unlocks the TECH tab research, the Laser Tower, the Titan Airship Pad, the Apocalypse and the Fusion Reactor. Each tower\'s research is listed once one has been built.',
+  },
+  // Powers the Railgun Batteries: none can be built until one stands, and they go dark when the last one is lost (game.js).
+  reactor: {
+    name: 'Fusion Reactor', cost: 2500, hp: 500, cat: 'SUPPORT', size: [2, 2], requires: 'lab',
+    desc: 'Powers the Railgun Batteries. Without one they cannot be built, and those standing go dark. Requires a Research Lab.',
   },
   uplink: {
-    name: 'Strategic Uplink Tower', cost: 2000, hp: 700, cat: 'SUPPORT', size: [2, 2],
+    name: 'Strategic Uplink Tower', cost: 2500, hp: 700, cat: 'SUPPORT', size: [2, 2],
     desc: 'A towering relay mast bristling with dishes and antennas that links the base to strategic command. Required to call in the Strategic Nuclear Strike.',
   },
 };
@@ -149,7 +154,7 @@ export const RESEARCH = {
   deepMags:    { group: 'airship', name: 'Deep Magazines', cost: 4500, desc: 'The Titan carries 50% more of everything: 750 gatling and 375 HMG rounds per gun, 38 shells and 45 bombs.' },
   relay:       { group: 'airship', name: 'Fire Control Relay', cost: 6000, desc: 'While the Titan is in the air, every tower within 15 m of the ground beneath it fires 20% faster.' },
   override:    { group: 'apoc', name: 'Priority Override', cost: 4000, desc: 'Take manual control of the Apocalypse Heavy Artillery: select it and press SET TARGET [T] to mark a spot, and it shells only that spot (whenever bugs are in the blast area) until you switch it back to AUTO.' },
-  supercap:    { group: 'rail', name: 'Supercapacitors', cost: 1800, desc: 'Railgun charge time 5 s → 3 s.' },
+  supercap:    { group: 'rail', name: 'Supercapacitors', cost: 3600, desc: 'Railgun charge time 5 s → 3 s.' },
   penetrator:  { group: 'rail', name: 'Tungsten Penetrator', cost: 2250, desc: 'Railgun bolts deal triple damage to the Colossus.' },
 };
 

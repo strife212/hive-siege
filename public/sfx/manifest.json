@@ -17,5 +17,6 @@
   "voice_battleship": "voice/10.wav",
   "voice_strategic": "voice/11.wav",
   "voice_ability_locked": "voice/12.wav",
-  "voice_tower_locked": "voice/13.wav"
+  "voice_tower_locked": "voice/13.wav",
+  "voice_tower_locked_reactor": "voice/15.wav"
 }

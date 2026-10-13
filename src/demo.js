@@ -24,6 +24,7 @@ function fortify() {
   for (const i of [13, 17, 22, 26]) build('laser', i, 14);
   build('mortar', 14, 16); build('mortar', 24, 16);
   build('missile', 16, 21); build('missile', 23, 21);
+  build('reactor', 19, 21);                             // powers the railgun
   build('rail', 19, 15);
 }
 

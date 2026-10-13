@@ -1,12 +1,18 @@
 import { BUILDINGS, RESEARCH } from './config.js';
 import { state, on, startWave, doResearch, sellStructure, hasBuilding, countBuildings, log } from './game.js';
-import { abilities } from './abilities.js';
+import { abilities, ABILITIES } from './abilities.js';
 import { iconImg } from './icons.js';
 import { retract } from './retract.js';
 import { MOBILE } from './mobile.js';
 import { audio } from './audio.js';
 import { RANGE_U } from './terrain.js';
 import { setOverride, clearOverride, inRange } from './apocalypse.js';
+
+// The radio line for clicking a tower that still waits on another building (public/sfx/voice/lines.txt).
+const LOCKED_VOICE = {
+  lab: 'voice_tower_locked',                 // "Tower locked. Requires Research Lab."
+  reactor: 'voice_tower_locked_reactor',     // "Tower locked. Requires Fusion Reactor."
+};
 
 const $ = (id) => document.getElementById(id);
 
@@ -41,7 +47,8 @@ export function createUI({ onSelectBuild }) {
       el.addEventListener('click', () => {
         if (el.classList.contains('maxed')) return log(`Only ${def.limit} ${def.name} allowed`, true);
         if (el.classList.contains('locked')) {
-          audio.voice('voice_tower_locked', { vol: 0.95 });    // "Tower locked. Requires Research Lab."
+          const line = LOCKED_VOICE[def.requires];
+          if (line) audio.voice(line, { vol: 0.95 });
           return log(`${def.name} requires a ${BUILDINGS[def.requires].name}`, true);
         }
         setActive(activeBuild === key ? null : key);
@@ -94,6 +101,7 @@ export function createUI({ onSelectBuild }) {
   techHint.textContent = 'Each tower’s research is listed here once you have built one.';
   techList.appendChild(techHint);
   on('research', () => { if (selected) showSelected(selected); });     // upgraded stats in the info panel
+  on('power', () => { if (selected) showSelected(selected); });        // a railgun gone dark (or back on)
 
   function setActive(key) {
     activeBuild = key;
@@ -163,13 +171,16 @@ export function createUI({ onSelectBuild }) {
       : d.kind === 'airship' ? `Patrols ${d.range} · 2x${d.gatRounds} gatling · 2x${d.hmgRounds} HMG · ${d.shells} shells (${d.artDamage}) · ${d.bombs} bombs (${d.bombDamage}) · ${d.rearm} s rearm`
       : d.kind === 'heli' ? `Patrols ${d.range} · ${d.rounds} x ${d.damage} gatling + ${d.rockets} x ${d.rocketDamage} rockets · ${d.rearm} s rearm`
       : d.kind === 'apoc' ? `Range ${d.minRange}-${d.range} · ${d.damage} dmg, ${d.splash} m blast · One shell every ${d.interval} s`
-      : d.kind === 'rail' ? `Range ${d.range} · ${d.damage} piercing bolt · ${d.charge} s charge`
+      : d.kind === 'rail' ? `Range ${d.range} · ${d.damage} piercing bolt · ${d.charge} s charge${state.railPower ? '' : ' · No power: rebuild a Fusion Reactor'}`
       : d.kind === 'battleship' ? `Railgun: ${d.rail.damage} piercing bolt every ${d.rail.charge} s · 2 CIWS gatlings · ${d.vls.cells}-cell missile battery · 4 dual autocannons · Escort gunship · Shock trooper on the helipad · Lifted out after ${d.deploy} s`
       : d.mines ? `${d.mines} mines · ${d.damage} damage each · New set ${d.reload} s after the last`
       : d.kind
       ? `Range ${d.range} · Damage ${d.damage} · ${d.rate}/s ${d.kind}`
       : d.income ? `+${d.income} credits / s` : '';
-    infoStats.replaceChildren(...stats.split(' · ').filter(Boolean).map((t) => Object.assign(document.createElement('div'), { textContent: t })));
+    // what it unlocks: the lab its towers and the reactor, the reactor the railgun, the uplink its call-ins
+    const unlocks = [...Object.values(BUILDINGS), ...Object.values(ABILITIES)].filter((u) => u.requires === s.type).map((u) => `Unlocks ${u.name}`);
+    const rows = [...stats.split(' · ').filter(Boolean), ...unlocks];
+    infoStats.replaceChildren(...rows.map((t) => Object.assign(document.createElement('div'), { textContent: t })));
   }
 
   const logEl = $('log');

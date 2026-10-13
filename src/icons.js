@@ -5,6 +5,7 @@ const PAL = {
   k: '#15171d', w: '#f4f6f8', g: '#b9c2ce', d: '#7d8898', s: '#4b5361',
   o: '#7f9144', O: '#4d5a2c', r: '#e5493b', R: '#9a2b26', y: '#ffd541', a: '#f28b26',
   b: '#55d4ff', B: '#2b7fc4', n: '#a5713f', N: '#6a4527', G: '#62d66f', p: '#a868e6', c: '#ffedb3',
+  m: '#ff6ad5', M: '#b8327f',
 };
 
 function painter() {
@@ -140,6 +141,16 @@ const DRAW = {
     p.rows(3, [[1, 2], [0, 3], [0, 3], [1, 2]], 'w').px(2, 4, 'g').line(3, 5, 6, 5, 's');                         // dish, left
     p.rows(6, [[13, 2], [13, 3], [13, 3], [13, 2]], 'w').px(13, 7, 'g').line(10, 8, 12, 8, 's');                  // dish, right
     p.rows(10, [[12, 3], [11, 4]], 'd').px(12, 10, 'w').px(13, 10, 'w');                                         // roof uplink dish
+  },
+  reactor(p) {
+    p.rect(1, 12, 14, 3, 'g').rect(1, 12, 14, 1, 'w').rect(1, 14, 14, 1, 'd').px(3, 13, 'b').px(5, 13, 'b').px(12, 13, 'a');   // reactor hall
+    for (let y = 2; y <= 12; y++) for (let x = 0; x < 16; x++) {                                       // the tokamak ring, seen from above at an angle
+      const u = (x + 0.5 - 8) / 7.2, v = (y + 0.5 - 7.5) / 4, r = u * u + v * v;
+      if (r > 1 || r < 0.28) continue;
+      p.px(x, y, x % 3 === 1 ? 'N' : r > 0.42 && r < 0.8 ? (y < 7 ? 'M' : 'm') : 'n');                // copper coils over the plasma
+    }
+    p.rect(7, 3, 2, 7, 's').rect(7, 3, 1, 7, 'd').rect(6, 9, 4, 1, 'n').rect(6, 3, 4, 1, 'n');        // central solenoid
+    p.px(7, 1, 'm').px(8, 1, 'm').px(7, 2, 'w').px(8, 2, 'm');                                          // injector core
   },
   // ---------------------------------------------------------------- research
   plating(p) {

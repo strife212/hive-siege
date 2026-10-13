@@ -67,7 +67,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   towers only start firing once fully risen.
 - **Sidebar**: Red Alert style card list grouped by category, TECH tab for research, a START WAVE 1 button that
   starts pulsing with a bright glow if it has not been pressed 10 s into the game, selected-structure
-  panel with sell (50% refund). A building that needs a Research Lab first shows a padlock over its card's icon. A selected tower shows its reach as a ring drawn into the terrain shader (so it
+  panel with sell (50% refund). A building that needs another one first (a Research Lab, or for the railgun a Fusion Reactor) shows a padlock over its card's icon, and its selection panel lists what it unlocks. A selected tower shows its reach as a ring drawn into the terrain shader (so it
   follows the ground exactly), with a faint tint inside; the mortar's shows its 8-unit dead zone too, and research that
   extends a range updates it live. Aircraft pads, economy and support buildings, walls and mines have none.
   Every tower and minefield keeps a kill count, shown under its integrity bar: a kill goes to whichever structure lands
@@ -84,9 +84,11 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   Mortar Pit (sandbagged tube, 8-26 range, lobbed shells on a ballistic arc with lead, 55 damage in a 3-unit
   splash), Missile Silo (hatches open and a rack rises, six corkscrewing homing rockets every 6 s at the densest
   cluster), Railgun Battery (capacitor banks glow as it charges for 5 s, then a bolt pierces every bug along a
-  60-unit line for up to 400; the mount traverses at a fixed rate and holds its charge until aligned, and a blue
+  60-unit line for up to 400, nearest first: each bug it passes through takes 5% off the next one's hit, down to
+  20%, on top of the falloff with distance (65% at the far end; the Land Battleship's railgun works the same way); the mount traverses at a fixed rate and holds its charge until aligned, and a blue
   gauge on the breech fills with the charge; target priority is the Colossus whenever it is in range, then medium
-  bugs (brutes, spitters), then small ones, nearest first within a class; needs a lab).
+  bugs (brutes, spitters), then small ones, nearest first within a class; $2,000, needs a Fusion Reactor, and goes
+  dark without one).
 - **Fire shader** (`src/flame.js`): flamethrower streams and burning bugs are one instanced quad mesh whose fragment
   shader shapes each flame from scrolling fbm noise, erodes it with age and ramps white-hot to orange, red and sooty
   smoke; premultiplied blending makes the core add light while the smoke occludes.
@@ -98,8 +100,8 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   the strategic strike, and selling digs it up on the spot), HMG Turret (10 rounds/s instant tracers, low damage, short range), Autocannon (guided projectile), Dual Autocannon (two barrels, two shells per salvo,
   casings from both sides), Flamethrower (short-range gravity-arced fire stream; every bug in its 24° cone is
   set burning for 3 s at 14 damage/s, refreshed while it stays in the stream, with flames on the bug), Laser Tower (hitscan beam, needs a Research Lab),
-  Refinery (+3 credits/s, only once wave 1 has been called; until then its drill idles), Research Lab (unlocks laser + research).
-- **Strategic Uplink Tower** (SUPPORT, 2x2, 2000 credits): a very tall comms tower. An armoured equipment hall carries a
+  Refinery (+3 credits/s, only once wave 1 has been called; until then its drill idles), Research Lab (unlocks research, the Laser Tower, the Titan Airship Pad, the Apocalypse and the Fusion Reactor).
+- **Strategic Uplink Tower** (SUPPORT, 2x2, 2500 credits): a very tall comms tower. An armoured equipment hall carries a
   red-and-white banded lattice mast about 15 units high, bristling with hardware:
   - parabolic dishes, microwave drums, two rings of cellular panels, a yagi, crossed dipoles and whips
   - three railed walkway platforms, guy wires, and blinking red aviation lights
@@ -107,6 +109,17 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
 
   The Strategic Nuclear Strike and the Airdrop Land Battleship stay locked until one stands, and lock again if it is
   lost. It sinks whole into a deep silo like everything else.
+- **Fusion Reactor** (SUPPORT, 2x2, 2500 credits, needs a Research Lab): powers the Railgun Batteries, which cannot
+  be built without one. If the last reactor is destroyed (or sold) every railgun goes dark: it drops its target and
+  its charge, stops firing, and its capacitors, charge gauge and sensor eye go unlit, with a warning in the log and
+  "No power" in its selection panel. Power returns as soon as a new reactor's blast doors open (a reactor lowered
+  into its silo still counts). An armoured hall with glowing heat vents carries a tokamak on its roof:
+  - a ring of magenta plasma in a faint glass vessel, threaded through twelve copper field coils on saddle mounts
+  - a central solenoid with light racing up it, and an injector crown whose core swells with every beat of the plasma
+  - two tilted containment rings with glowing emitter nodes, orbiting the torus in opposite directions
+  - cooling pods with spinning fans in the four corners, coolant lines running in to the coils
+
+  The plasma's glow flows round the ring (a scrolling emissive map); all reactors share their materials and run in step.
 - **Research** (TECH tab, needs a Research Lab): GLOBAL is always listed; every building's own section appears the
   first time one is built and stays. Stat research rebuilds the live per-type stats that every structure points at
   (`s.def`), so towers, aircraft and the info panel update the moment it completes.
@@ -133,7 +146,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
     with the same reticle and click / tap-to-aim flow as the abilities (`abilities.designate`), and the gun lays onto it and
     shells only that spot, whenever a bug is inside the blast area, until it is switched back to AUTO. The spot is marked
     on the ground with a pulsing ring the size of the blast.
-  - Railgun: Supercapacitors ($1,800, charge 5 -> 3 s), Tungsten Penetrator ($2,250, x3 damage to the Colossus).
+  - Railgun: Supercapacitors ($3,600, charge 5 -> 3 s), Tungsten Penetrator ($2,250, x3 damage to the Colossus).
 - **Scale**: bugs are rendered as one instanced draw per species (`src/swarm.js`): the rig is baked into a single
   low-poly geometry with per-vertex pivot/axis/phase attributes and the gait, chomp, bob, burn glow and death curl
   run in the vertex shader, so the CPU writes one matrix and four floats per bug. HP bars are one instanced mesh.

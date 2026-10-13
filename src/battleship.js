@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { state, damageEnemy, eachEnemy, burst, log, aimY } from './game.js';
+import { state, damageEnemy, eachEnemy, burst, log, aimY, railStrike } from './game.js';
 import { heightAt, worldToCell, cellKey, isScenery, canyonDist } from './terrain.js';
 import { FLAT, MAP } from './config.js';
 import { makeTracer, makeProjectile, makeMissile } from './entities.js';
@@ -1034,12 +1034,7 @@ function updateRail(s, dt) {
   _b.copy(_a).addScaledVector(_c, reach);
   if (!raised) _b.y = Math.max(_b.y, heightAt(_b.x, _b.z) + 1);
   railBeam(_a, _b);
-  for (const e of state.enemies) {                         // the bolt goes through everything along its line
-    if (e.dead) continue;
-    const ox = e.x - _a.x, oz = e.z - _a.z, along = ox * _c.x + oz * _c.z;
-    if (along < 0 || along > reach) continue;
-    if (Math.abs(-ox * _c.z + oz * _c.x) < 0.9 + 0.4 * e.def.scale) damageEnemy(e, R.damage * (1 - 0.35 * along / reach), s);
-  }
+  railStrike(_a, _c, reach, R.damage, s);                  // through everything along its line, weaker with each bug
   state.shake += 0.15;
   audio.play('railgun_fire', { x: s.x, z: s.z });
 }

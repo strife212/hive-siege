@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { MAPS, BOSS_EVERY, BUILDINGS, ENEMIES, SPECIALS, ANTS, CORNERS, RESEARCH, START_CREDITS, CELLS, MAX_SLOPE, SPAWN_RADIUS, CELL, HALF, FLAT, MAP } from './config.js';
 import { heightAt, cellToWorld, cellKey, inBounds, cellSlope, nestPosition, confine, walkInPoint, approachDir, isScenery } from './terrain.js';
 import {
-  makeBuildingMesh, setWallLinks,
+  makeBuildingMesh, setWallLinks, railLights,
   makeProjectile, makeBeam, makeTracer, makeGibs, makeCasings, makeMortarShell, makeMissile,
 } from './entities.js';
 import { explode, railBeam } from './effects.js';
@@ -69,7 +69,7 @@ export const state = {
   gibCount: 0,
 };
 
-const listeners = { log: [], gameover: [], wave: [], research: [] };
+const listeners = { log: [], gameover: [], wave: [], research: [], power: [] };
 export function on(evt, fn) { listeners[evt].push(fn); }
 export function log(msg, bad = false) { listeners.log.forEach((f) => f(msg, bad)); }
 
@@ -927,8 +927,57 @@ function railTarget(x, z, range) {
   return best;
 }
 
+// Railgun power: the batteries run off a Fusion Reactor. A reactor counts once it has come up out of its silo (it
+// keeps powering them if it is lowered again later); with none left (destroyed or sold) every railgun goes dark: it
+// drops its target, loses its charge and stops firing, its capacitors, gauge and sensor eye unlit, until a new one is up.
+function updatePower() {
+  const on = state.structures.some((s) => s.type === 'reactor' && (s.powering ||= !s.buried));
+  if (on === state.railPower) return;
+  const first = state.railPower === undefined;
+  state.railPower = on;
+  railLights(on);
+  if (first) return;
+  if (!state.demo && state.structures.some((s) => s.def?.kind === 'rail')) {
+    log(on ? 'Fusion Reactor online: the Railgun Batteries are powered up' : 'Fusion Reactor lost: the Railgun Batteries have gone dark', !on);
+  }
+  listeners.power.forEach((f) => f(on));
+}
+const CAP_LIT = new THREE.Color(), CAP_DARK = new THREE.Color(0x1d2a31);
+function railDark(s, dark) {
+  const ud = s.mesh.userData;
+  s.dark = dark;
+  s.target = null;
+  s.charge = 0;
+  if (dark) CAP_LIT.copy(ud.caps.color);
+  ud.caps.color.copy(dark ? CAP_DARK : CAP_LIT);
+  ud.caps.emissiveIntensity = dark ? 0 : 0.3;
+  ud.gauge.scale.z = 0.001;
+  ud.gauge.material.emissiveIntensity = dark ? 0 : 1.8;
+}
+
+// A railgun bolt (the Railgun Battery's and the Land Battleship's) hits every bug along its line, nearest first. Each
+// bug it passes through takes PIERCE off the next one's share (full damage, then 95%, 90%... down to PIERCE_MIN), and
+// on top of that the damage falls off with distance, to 65% at the far end. bossMul multiplies the hit on a Colossus.
+const PIERCE = 0.05, PIERCE_MIN = 0.2;
+export function railStrike(from, dir, reach, damage, src, bossMul = 1) {
+  const hits = [];
+  for (const e of state.enemies) {
+    if (e.dead) continue;
+    const ox = e.x - from.x, oz = e.z - from.z, along = ox * dir.x + oz * dir.z;
+    if (along < 0 || along > reach) continue;
+    if (Math.abs(-ox * dir.z + oz * dir.x) < 0.9 + 0.4 * e.def.scale) hits.push({ e, along });
+  }
+  hits.sort((p, q) => p.along - q.along);
+  hits.forEach(({ e, along }, k) => {
+    const share = Math.max(PIERCE_MIN, 1 - PIERCE * k), falloff = 1 - 0.35 * along / reach;
+    damageEnemy(e, damage * share * falloff * (e.boss ? bossMul : 1), src);
+  });
+}
+
 function updateRailgun(s, dt) {
   const def = s.def, ud = s.mesh.userData;
+  if (!state.railPower) { if (!s.dark) railDark(s, true); return; }
+  if (s.dark) railDark(s, false);
   if (s.target && (s.target.dead || Math.hypot(s.target.x - s.x, s.target.z - s.z) > def.range)) s.target = null;
   s.scan = (s.scan ?? 0) - dt;
   if (!s.target || s.scan <= 0) {
@@ -968,14 +1017,7 @@ function updateRailgun(s, dt) {
   _b.copy(_a).addScaledVector(_c, reach);
   if (!raised) _b.y = Math.max(_b.y, heightAt(_b.x, _b.z) + 1);
   railBeam(_a, _b);
-  for (const e of state.enemies) {
-    if (e.dead) continue;
-    const ox = e.x - _a.x, oz = e.z - _a.z;
-    const along = ox * _c.x + oz * _c.z;
-    if (along < 0 || along > reach) continue;
-    const perp = Math.abs(-ox * _c.z + oz * _c.x);
-    if (perp < 0.9 + 0.4 * e.def.scale) damageEnemy(e, def.damage * (1 - 0.35 * along / reach) * (e.boss && state.research.penetrator ? 3 : 1), s);
-  }
+  railStrike(_a, _c, reach, def.damage, s, state.research.penetrator ? 3 : 1);
   s.recoilT = 0;
   audio.play('railgun_fire', { x: s.x, z: s.z });
 }
@@ -1326,6 +1368,7 @@ export function update(dt) {
   state.time += dt;
   updateWave(dt);
   updateRelay();
+  updatePower();
   for (const s of state.structures) {
     if (retract.update(s, dt)) {                             // stowed, moving or locked down: the building is offline
       s.padDown = true;

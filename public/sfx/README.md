@@ -63,20 +63,21 @@ Looping sounds (started and stopped by the game; files should loop cleanly):
 Radio call-outs (one per support ability, played when it is called in, plus two warnings; not positional, and a
 new one cuts the last one off). The recordings are in `voice/`, with their lines in `voice/lines.txt`:
 
-| name                 | line                                                                  | played                                            |
-| -------------------- | --------------------------------------------------------------------- | ------------------------------------------------- |
-| voice_laser          | 1. Orbital laser online.                                              | Orbital Laser called in                           |
-| voice_lance          | 2. Orbital lance firing.                                              | Orbital Lance called in                           |
-| voice_strafe         | 3. Airstrike inbound.                                                 | Strafing Run called in                            |
-| voice_artillery      | 4. Artillery strike targeted.                                         | Artillery Strike called in                        |
-| voice_troopers       | 5. Shock troopers dropping.                                           | Shock Troopers called in                          |
-| voice_bomber         | 6. Strategic bombing run enroute.                                     | Strategic Bomber called in                        |
-| voice_nuke           | 7. Tactical nuclear strike authorised.                                | Tactical Nuke called in                           |
-| voice_archangel      | 8. Archangel lance charging.                                          | Archangel Lance called in                         |
-| voice_blackhole      | 9. Micro-Singularity away.                                            | Micro-Singularity Gravity Bomb called in          |
-| voice_battleship     | 10. Landship authorised. Clear the dropzone.                          | Airdrop Land Battleship called in                 |
-| voice_strategic      | 11. Strategic launch detected. All structures to defensive positions. | Strategic Nuclear Strike called in                |
-| voice_ability_locked | 12. Ability locked. Requires strategic uplink tower.                  | a locked call-in clicked (no Uplink Tower)        |
-| voice_tower_locked   | 13. Tower locked. Requires Research Lab.                              | a locked tower clicked in the build list (no Lab) |
+| name                       | line                                                                  | played                                             |
+| -------------------------- | --------------------------------------------------------------------- | -------------------------------------------------- |
+| voice_laser                | 1. Orbital laser online.                                              | Orbital Laser called in                            |
+| voice_lance                | 2. Orbital lance firing.                                              | Orbital Lance called in                            |
+| voice_strafe               | 3. Airstrike inbound.                                                 | Strafing Run called in                             |
+| voice_artillery            | 4. Artillery strike targeted.                                         | Artillery Strike called in                         |
+| voice_troopers             | 5. Shock troopers dropping.                                           | Shock Troopers called in                           |
+| voice_bomber               | 6. Strategic bombing run enroute.                                     | Strategic Bomber called in                         |
+| voice_nuke                 | 7. Tactical nuclear strike authorised.                                | Tactical Nuke called in                            |
+| voice_archangel            | 8. Archangel lance charging.                                          | Archangel Lance called in                          |
+| voice_blackhole            | 9. Micro-Singularity away.                                            | Micro-Singularity Gravity Bomb called in           |
+| voice_battleship           | 10. Landship authorised. Clear the dropzone.                          | Airdrop Land Battleship called in                  |
+| voice_strategic            | 11. Strategic launch detected. All structures to defensive positions. | Strategic Nuclear Strike called in                 |
+| voice_ability_locked       | 12. Ability locked. Requires strategic uplink tower.                  | a locked call-in clicked (no Uplink Tower)         |
+| voice_tower_locked         | 13. Tower locked. Requires Research Lab.                              | a locked tower clicked in the build list (no Lab)  |
+| voice_tower_locked_reactor | 15. Tower locked. Requires Fusion Reactor.                            | the Railgun Battery clicked with no Fusion Reactor |
 
 Press M in game to mute.

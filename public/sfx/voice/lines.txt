@@ -11,3 +11,5 @@
 11. Strategic launch detected. All structures to defensive positions.
 12. Ability locked. Requires strategic uplink tower.
 13. Tower locked. Requires Research Lab.
+14. Establishing battlefield control, please stand by. Connection established.
+15. Tower locked. Requires Fusion Reactor.
