@@ -1,8 +1,10 @@
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { audio } from './audio.js';
 import * as THREE from 'three';
-import { state, spawnEnemy, canPlace, placeStructure } from './game.js';
+import { state, spawnEnemy, canPlace, placeStructure, footprint } from './game.js';
 import { abilities } from './abilities.js';
+import { battleships } from './battleship.js';
+import { BASE } from './heavy.js';
 import { heightAt } from './terrain.js';
 import { SCENE } from './config.js';
 
@@ -12,6 +14,43 @@ import { SCENE } from './config.js';
 // rendered by an OfflineAudioContext that is suspended at each frame boundary so sounds land exactly where they
 // happen. The finished MP4 is POSTed to the dev server (/__save, see vite.config.js) which writes it to recordings/.
 const W = 1920, H = 1080;
+
+// ---------------------------------------------------------------- trailer shots
+const query = new URLSearchParams(location.search);
+const smooth = (u) => { u = Math.max(0, Math.min(1, u)); return u * u * (3 - 2 * u); };
+const ground = (x, z) => heightAt(x, z);
+function setFov(camera, fov) { if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); } }
+
+// A mixed swarm laid out in a disc (or, with `band`, a strip across a heading), already above ground.
+function swarm(n, cx, cz, spread, slow = 1, band = null) {
+  for (let k = 0; k < n; k++) {
+    let x, z;
+    if (band) {
+      const along = band.near + Math.random() * (band.far - band.near), across = (Math.random() - 0.5) * band.width;
+      x = cx + band.fx * along - band.fz * across; z = cz + band.fz * along + band.fx * across;
+    } else {
+      const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * spread;
+      x = cx + Math.cos(a) * r; z = cz + Math.sin(a) * r;
+    }
+    const type = k % 11 === 10 ? 'brute' : k % 29 === 6 ? 'spitter' : k % 9 === 4 ? 'darter' : 'skitter';
+    const e = spawnEnemy(type, x, z, true);
+    e.speed *= slow;
+  }
+}
+
+// Strike shots (?scene=strike&ab=<key>): a dense swarm crossing the open map round an aim point, the call-in landing
+// on it `at` s into the take, and a slow push-in from the base side so the bugs come on toward the lens.
+// dist / h: camera distance and height, look: aim height above the ground, side: how far round from straight on.
+// pre: call it in that many seconds before the take instead (the slow ones: the take opens near their big moment).
+const SHOTS = {
+  lance:     { at: 0.4, dist: 30, h: 15, look: 1.5, side: 1.3, bugs: 300, spread: 10, fov: 50 },
+  archangel: { pre: 2.5, dist: 50, h: 14, look: 10, side: 1.25, bugs: 420, spread: 16, fov: 56 },
+  nuke:      { pre: 7, dist: 70, h: 16, look: 14, side: 1.2, bugs: 500, spread: 17, fov: 56 },
+  blackhole: { at: 0.4, dist: 19, h: 8, look: 3, side: 1.3, bugs: 360, spread: 13, fov: 54 },
+  artillery: { at: 0.4, dist: 38, h: 17, look: 1, side: 1.3, bugs: 360, spread: 12, fov: 52 },
+  strafe:    { at: 0.4, dist: 34, h: 13, look: 2, side: 1.3, bugs: 360, spread: 12, fov: 54 },
+};
+const AIM = { x: 30, z: 10 };
 
 // Scripted scenes (?scene=<name>): setup() dresses the map once the intro is out of the way, direct(t, dt) runs every
 // frame of the take with t = seconds into the clip and owns the camera. `ear` is where the audio listener sits.
@@ -105,7 +144,104 @@ const SCENES = {
       if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
     },
   },
+  // Trailer: one call-in on a swarm (SHOTS above).
+  strike: {
+    warm: 4,
+    setup() {
+      state.core.hp = state.core.maxHp = 1e9;
+      this.key = query.get('ab') || 'lance';
+      this.shot = SHOTS[this.key];
+      swarm(this.shot.bugs, AIM.x, AIM.z, this.shot.spread, 0.15);
+      this.fired = !!this.shot.pre;
+      if (this.fired) abilities.demoFire(this.key, AIM);
+      this.preroll = this.shot.pre || 0;
+    },
+    direct(t, dt, camera) {
+      const s = this.shot;
+      if (!this.fired && t >= s.at) { this.fired = true; abilities.demoFire(this.key, AIM); }
+      const inward = Math.atan2(-AIM.x, -AIM.z) + s.side + t * 0.025, d = s.dist * (1 - 0.012 * t), gy = ground(AIM.x, AIM.z);
+      camera.position.set(AIM.x + Math.sin(inward) * d, gy + s.h + 0.15 * t, AIM.z + Math.cos(inward) * d);
+      camera.position.y = Math.max(camera.position.y, ground(camera.position.x, camera.position.z) + 2);
+      camera.lookAt(AIM.x, gy + s.look, AIM.z);
+      setFov(camera, s.fov);
+      ear.x = (camera.position.x + AIM.x) / 2; ear.z = (camera.position.z + AIM.z) / 2;
+    },
+  },
+  // Trailer: the Land Battleship drops onto the open map ahead of a huge wave, then drives straight into it.
+  landship: {
+    warm: 4, preroll: 2.4,
+    setup() {
+      state.core.hp = state.core.maxHp = 1e9;
+      for (const [x, z] of [[20, -14], [-20, -14], [14, -20], [20, 14], [-20, 14], [0, -24]]) {
+        abilities.demoFire('battleship', { x, z });
+        if (state.ships.length) break;
+      }
+      const s = this.ship = state.ships[0];
+      this.fx = Math.sin(s.yaw); this.fz = Math.cos(s.yaw);
+      swarm(560, s.x, s.z, 0, 1, { fx: this.fx, fz: this.fz, near: 26, far: 52, width: 46 });
+      this.ordered = false; this.cam = null; this.look = null;
+    },
+    direct(t, dt, camera) {
+      const s = this.ship, fx = this.fx, fz = this.fz, sx = -fz, sz = fx;   // forward, and across it
+      if (!this.ordered && s.phase === 'active') {
+        this.ordered = true;
+        s.selected = true;
+        battleships.order({ x: s.x + fx * 40, z: s.z + fz * 40 });
+        s.selected = false;
+      }
+      const P = s.mesh.position;
+      let want, goal;
+      if (s.phase === 'drop' || s.phase === 'landed') {                       // low on the ground ahead, looking up at it coming down
+        want = new THREE.Vector3(s.x + fx * 16 + sx * 13, ground(s.x, s.z) + 2.2, s.z + fz * 16 + sz * 13);
+        goal = new THREE.Vector3(P.x, P.y + 2.5, P.z);
+      } else if (query.get('cam') === 'wide') {                               // ahead and above: the whole ship ploughing into the wave
+        want = new THREE.Vector3(P.x + fx * 21 + sx * 15, P.y + 9.5, P.z + fz * 21 + sz * 15);
+        goal = new THREE.Vector3(P.x + fx * 6, P.y + 1, P.z + fz * 6);
+      } else {                                                                 // tracking alongside the bow as it ploughs in
+        want = new THREE.Vector3(P.x + fx * 10 + sx * 11, P.y + 4.2, P.z + fz * 10 + sz * 11);
+        goal = new THREE.Vector3(P.x + fx * 6, P.y + 2.2, P.z + fz * 6);
+      }
+      want.y = Math.max(want.y, ground(want.x, want.z) + 1.6);
+      if (!this.cam) { this.cam = want.clone(); this.look = goal.clone(); }
+      this.cam.lerp(want, Math.min(1, dt * 1.6));
+      this.look.lerp(goal, Math.min(1, dt * 5));
+      camera.position.copy(this.cam);
+      camera.lookAt(this.look);
+      setFov(camera, 52);
+      ear.x = this.cam.x; ear.z = this.cam.z;
+    },
+  },
+  // Trailer: a big walled base on the open map holding off a huge wave from every side, with a Colossus in it; a slow
+  // crane round the base that rises and pulls back wide for the title.
+  base: {
+    warm: 4, preroll: 1.5,
+    setup() {
+      state.core.hp = state.core.maxHp = 1e9;
+      state.credits = 1e7;
+      for (const [type, i, j] of BASE) {
+        const [w, h] = footprint(type);
+        let free = true;
+        for (let a = 0; a < w; a++) for (let b = 0; b < h; b++) if (state.occ.has(`${i + a},${j + b}`)) free = false;
+        if (free) placeStructure(type, i, j, { instant: true });
+      }
+      for (let k = 0; k < 760; k++) {
+        const a = Math.random() * Math.PI * 2, r = 42 + Math.random() * 16;
+        const type = k % 11 === 10 ? 'brute' : k % 31 === 6 ? 'spitter' : k % 9 === 4 ? 'darter' : k % 5 === 2 ? 'ant' : 'skitter';
+        spawnEnemy(type, Math.cos(a) * r, Math.sin(a) * r, true);
+      }
+      spawnEnemy('colossus', 22, 52, true);                  // beyond the base from the camera: it looms up behind it
+    },
+    direct(t, dt, camera) {
+      const T = Number(query.get('record')) || 10, u = smooth(t / T);
+      const a = -2.25 + 0.5 * u, r = 25 + 27 * u, y = 9 + 21 * u;
+      camera.position.set(Math.sin(a) * r, y, Math.cos(a) * r);
+      camera.lookAt(0, 1.5 - u, 0);
+      setFov(camera, 50);
+      ear.x = camera.position.x * 0.4; ear.z = camera.position.z * 0.4;
+    },
+  },
 };
+
 const status = (window.__record = { phase: 'init', frame: 0, frames: 0, file: null, error: null });
 
 export async function record({ seconds, tick, renderer, camera, scene, setDirector }) {

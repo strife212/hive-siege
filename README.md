@@ -202,13 +202,13 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
 - **Intro cinematic** (`src/intro.js`): the Core drops from orbit on flickering thrusters, deploys landing
   legs, kicks up dust on touchdown and plants its pylons; the camera then flies to the gameplay view and
   the sidebar slides in. Any key or click skips it; append `?nointro` to the URL to jump straight to the fly-in.
-- **Colossus** (boss, every 10th wave, `src/boss.js`): a giant bug on eight long spindly legs (procedural stepping + two-bone IK) that walks
+- **Colossus** (boss, wave 10 and then every 5th wave: 15, 20, 25..., `src/boss.js`): a giant bug on eight long spindly legs (procedural stepping + two-bone IK) that walks
   straight over walls and towers and stabs the Core with its front legs. 5000 HP (scaled by wave), boss bar at the top. Turrets, the railgun
   and the flamethrower elevate to hit its hull. Death: convulsions and ruptures, legs buckle, it crashes down, the abdomen swells and bursts
   (damaging nearby bugs), and the husk sinks away. Debug menu (Z) has a *Spawn boss* button.
-  Every Colossus killed, by any means, makes the hive adapt. Bugs that spawn from then on get +10% HP and +10% speed,
-  compounding: x1.1, then x1.21, and so on. The next Colossus is included. Bugs already on the field keep their stats
-  (`HIVE_BUFF` / `state.hiveBuff` in `src/game.js`).
+  Every Colossus killed, by any means, makes the hive adapt. Bugs that spawn from then on get +10% HP and +8% speed,
+  compounding: x1.1 HP, then x1.21, and so on (speed x1.08, x1.17...). The next Colossus is included. Bugs already on
+  the field keep their stats (`HIVE_HP` / `HIVE_SPEED`, `state.hiveHp` / `state.hiveSpeed` in `src/game.js`).
 - **Titan Airship Pad** (2x3, 5000 credits, limit 1, needs a Research Lab, `src/airship.js`): a big rigid airship (ring-framed cigar hull, cruciform tail, long lit
   gondola, four ducted fans, solar spine) that parks over the thickest knot of bugs. Twin gatlings (500 rds each), twin HMGs (250 each), a
   belly howitzer (25 shells, big splash) and a bomb bay that drops 30 bombs straight down. Returns when empty or idle, rearms moored for 8 s.

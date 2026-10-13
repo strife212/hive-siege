@@ -1,4 +1,4 @@
-export const VERSION = '1.16';                 // shown on the main menu; the minor number goes up by one with every commit (1.9, 1.10, 1.11...)
+export const VERSION = '1.17';                 // shown on the main menu; the minor number goes up by one with every commit (1.9, 1.10, 1.11...)
 export const MAP_SIZE = 80;
 export const HALF = MAP_SIZE / 2;
 export const CELL = 2;
@@ -158,7 +158,8 @@ export const RESEARCH = {
   penetrator:  { group: 'rail', name: 'Tungsten Penetrator', cost: 2250, desc: 'Railgun bolts deal triple damage to the Colossus.' },
 };
 
-export const BOSS_EVERY = 10;                 // a Colossus joins every tenth wave
+export const BOSS_FIRST = 10, BOSS_EVERY = 5;  // a Colossus joins wave 10, then every fifth wave after it (15, 20, 25...)
+export const bossWave = (n) => n >= BOSS_FIRST && (n - BOSS_FIRST) % BOSS_EVERY === 0;
 export const ENEMIES = {
   colossus: {
     name: 'Colossus', boss: true, hp: 5000, speed: 1.75, damage: 90, attackRate: 0.55, reward: 500, scale: 3,

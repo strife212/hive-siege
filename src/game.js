@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MAPS, BOSS_EVERY, BUILDINGS, ENEMIES, SPECIALS, ANTS, CORNERS, RESEARCH, START_CREDITS, CELLS, MAX_SLOPE, SPAWN_RADIUS, CELL, HALF, FLAT, MAP } from './config.js';
+import { MAPS, bossWave, BUILDINGS, ENEMIES, SPECIALS, ANTS, CORNERS, RESEARCH, START_CREDITS, CELLS, MAX_SLOPE, SPAWN_RADIUS, CELL, HALF, FLAT, MAP } from './config.js';
 import { heightAt, cellToWorld, cellKey, inBounds, cellSlope, nestPosition, confine, walkInPoint, approachDir, isScenery } from './terrain.js';
 import {
   makeBuildingMesh, setWallLinks, railLights,
@@ -61,7 +61,7 @@ export const state = {
   waveHold: false,               // a strategic strike is holding the attack (strategic.js): nothing spawns, no new wave
   waveResumeAt: 0,               // ...and after it, a breather: the attack resumes at this time
   nextWave: false,               // a wave was cleared during a hold: the next one starts when the hold lifts
-  hiveBuff: 1,                   // enemy HP and speed multiplier: x1.1 for every Colossus killed (HIVE_BUFF)
+  hiveHp: 1, hiveSpeed: 1,       // enemy HP and speed multipliers: x1.1 HP and x1.08 speed for every Colossus killed (HIVE_HP / HIVE_SPEED)
   nests: [],
   flowDirty: true,
   flowBuilt: -99,
@@ -381,17 +381,17 @@ function spreadNapalm(e) {
 }
 
 // ---------------------------------------------------------------- enemies
-const HIVE_BUFF = 1.1;
+const HIVE_HP = 1.1, HIVE_SPEED = 1.08;
 // from: a bug hole (burrows.js) the bug climbs out of: it starts deep in the shaft near the middle and comes up the
 // wall and over the lip on the side it faces.
 export function spawnEnemy(type, x, z, walkIn = false, from = null) {
   const def = ENEMIES[type];
   // +12% health per wave, up to the wave each species stops toughening at (hpCapWave; none = keeps scaling), times the
   // hive's adaptation to every Colossus killed so far
-  const maxHp = Math.round(def.hp * (1 + 0.12 * (Math.max(1, Math.min(state.wave, def.hpCapWave ?? Infinity)) - 1))) * state.hiveBuff;
+  const maxHp = Math.round(def.hp * (1 + 0.12 * (Math.max(1, Math.min(state.wave, def.hpCapWave ?? Infinity)) - 1))) * state.hiveHp;
   const e = {
     id: nextId++, type, def, x, z, hp: maxHp, maxHp, dead: false,
-    speed: def.speed * (def.boss ? 1 : 0.9 + Math.random() * 0.2) * state.hiveBuff,
+    speed: def.speed * (def.boss ? 1 : 0.9 + Math.random() * 0.2) * state.hiveSpeed,
     attackCd: Math.random() * 0.5, target: null, lunge: 0,
     aimX: (Math.random() - 0.5) * 3, aimZ: (Math.random() - 0.5) * 3,
     fx: 0, fz: 1, phase: Math.random() * Math.PI * 2, walk: 0, emerge: 0,
@@ -449,11 +449,12 @@ function killEnemy(e, quiet = false, src = null) {
 }
 export const consumeEnemy = (e) => { if (!e.dead) killEnemy(e, true); };
 
-// Every Colossus that falls makes the hive adapt: bugs that spawn from then on get 10% more HP and 10% more speed,
+// Every Colossus that falls makes the hive adapt: bugs that spawn from then on get 10% more HP and 8% more speed,
 // compounding with each kill. Bugs already on the field keep their stats.
 function adaptHive() {
-  state.hiveBuff *= HIVE_BUFF;
-  log(`The hive adapts: new bugs are now ${Math.round((state.hiveBuff - 1) * 100)}% tougher and faster.`, true);
+  state.hiveHp *= HIVE_HP;
+  state.hiveSpeed *= HIVE_SPEED;
+  log(`The hive adapts: new bugs are now ${Math.round((state.hiveHp - 1) * 100)}% tougher and ${Math.round((state.hiveSpeed - 1) * 100)}% faster.`, true);
 }
 
 // Gibs: flung bits of debris, soil and ichor. Plain records; each kind is drawn by one instanced mesh (updateEffects).
@@ -526,8 +527,8 @@ export function startWave(force = false) {
       burrows.open(x, z);
     }
   }
-  if (n % BOSS_EVERY === 0) { const at = state.nests[0]; spawnEnemy('colossus', at.x, at.z); }
-  listeners.wave.forEach((f) => f(n, n % BOSS_EVERY === 0));
+  if (bossWave(n)) { const at = state.nests[0]; spawnEnemy('colossus', at.x, at.z); }
+  listeners.wave.forEach((f) => f(n, bossWave(n)));
   if (carry) {                                             // a forced wave on top: what was still to come comes too
     state.spawnQueue = carry.q.concat(state.spawnQueue);
     state.walkQueue = carry.w.concat(state.walkQueue);

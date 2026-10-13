@@ -5,7 +5,7 @@ import { weather } from './weather.js';
 // Heavy scene (debug menu, or ?map=test&heavy with the test map unlocked): the stress case the performance numbers
 // are measured in. The test range's 1200 bugs plus darters, spitters and ants, in rain, round a walled base with every
 // kind of tower, while support strikes land on the swarm one after another, overlapping, for as long as it runs.
-const BASE = [
+export const BASE = [
   ['lab', 21, 17], ['refinery', 18, 20], ['reactor', 20, 19],
   ...[[13, 13], [26, 13], [13, 26], [26, 26], [19, 12], [20, 27], [12, 20], [27, 19]].map((p) => ['hmg', ...p]),
   ...[[15, 15], [24, 15], [15, 24], [24, 24]].map((p) => ['turret', ...p]),
