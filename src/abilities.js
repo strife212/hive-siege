@@ -132,7 +132,7 @@ function textSprite(size = 6) {
 }
 
 // ---------------------------------------------------------------- Orbital Lance
-function orbitalLance(x, z, R) {
+function orbitalLance(x, z, R, src) {
   const y = heightAt(x, z);
   const beams = [];
   const N = 5;
@@ -172,7 +172,7 @@ function orbitalLance(x, z, R) {
         fired = true;
         main.visible = true;
         audio.play('lance_impact', { x, z });
-        explode(x, z, 3.2, 572, R * 1.1, { color: 0x7fd0ff, shake: 1.3, smoke: 14 });
+        explode(x, z, 3.2, 572, R * 1.1, { color: 0x7fd0ff, shake: 1.3, smoke: 14, src });
         for (let k = 0; k < 24; k++) {
           const a = rnd(0, Math.PI * 2), sp = rnd(8, 14);
           puff(x, y + 0.4, z, { color: 0xc9a070, size: 1.5, grow: 2.5, life: 1.3, opacity: 0.6, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: rnd(1, 2), drag: 2 });
@@ -199,7 +199,7 @@ function orbitalLance(x, z, R) {
 }
 
 // ---------------------------------------------------------------- Orbital Laser (cursor guided)
-function orbitalLaser(x, z) {
+function orbitalLaser(x, z, src) {
   const R = ABILITIES.laser.radius, K = R / 1.65;                // K: size relative to the original 1.65 m beam
   const P = new THREE.Vector3(x, heightAt(x, z), z);
   const T = new THREE.Vector3(x, 0, z);
@@ -228,7 +228,7 @@ function orbitalLaser(x, z) {
     if (scorchT > 0.2) { scorchT = 0; spawnScorch(ab.scene, P.x, P.z, 1.3 * K); }
     sndT += dt;
     if (snd && sndT > 0.25) { sndT = 0; snd.setPos(P.x, P.z); }
-    damageCircle(P.x, P.z, R * 1.067, 91 * dt * w, 0.6);           // a touch wider than the reticle, as before
+    damageCircle(P.x, P.z, R * 1.067, 91 * dt * w, 0.6, src);      // a touch wider than the reticle, as before
     if (t >= DUR) { disposeGroup(beam); killPuff(glow); if (snd) snd.stop(); ab.laser = null; return false; }
     return true;
   }, guide(p) { T.set(p.x, 0, p.z); } };
@@ -361,7 +361,7 @@ function makeRocket() {
   return g;
 }
 
-function strafingRun(cx, cz, dx, dz, len, wid) {
+function strafingRun(cx, cz, dx, dz, len, wid, src) {
   const px = -dz, pz = dx;
   const jets = [[0, 0], [-3.5, -4], [3.5, -4]].map(([side, back]) => {
     const j = makeJet();
@@ -441,7 +441,7 @@ function strafingRun(cx, cz, dx, dz, len, wid) {
             puff(tx, to.y + 0.3, tz, { color: 0xffd090, size: 0.7, life: 0.12, opacity: 0.9, additive: true });
             burst(tx, to.y + 0.2, tz, 'soil', 2, 5);
             impactRing(tx, to.y, tz, 2.178);
-            damageCircle(tx, tz, 2.178, 10.89, 0.6);
+            damageCircle(tx, tz, 2.178, 10.89, 0.6, src);
             audio.play('autocannon_fire', { x: jetPos.x, z: jetPos.z, vol: 0.32, delay: Math.random() * 0.03, force: true });
           }
         }
@@ -457,7 +457,7 @@ function strafingRun(cx, cz, dx, dz, len, wid) {
           puff(r.m.position.x, r.m.position.y, r.m.position.z, { color: 0xffa040, size: 0.35, life: 0.15, opacity: 0.8, additive: true });
         }
         if (r.m.position.y <= r.target.y + 0.3 || r.m.position.distanceTo(r.target) < 0.6) {
-          explode(r.target.x, r.target.z, 1.4, 58.3, 2.904, { shake: 0.12, smoke: 5 });
+          explode(r.target.x, r.target.z, 1.4, 58.3, 2.904, { shake: 0.12, smoke: 5, src });
           ab.scene.remove(r.m); rockets.splice(k, 1);
         }
       }
@@ -486,7 +486,7 @@ function makeShell() {
   g.add(b, tip);
   return g;
 }
-function artilleryStrike(cx, cz, R) {
+function artilleryStrike(cx, cz, R, src) {
   const shells = [];
   const count = 20 + Math.floor(Math.random() * 5);
   const times = Array.from({ length: count }, (_, i) => 0.3 + (i / count) * 6.0 + rnd(0, 0.2));
@@ -516,7 +516,7 @@ function artilleryStrike(cx, cz, R) {
         s.trail += dt;
         if (s.trail > 0.04) { s.trail = 0; puff(s.m.position.x, s.m.position.y, s.m.position.z, { color: 0xe0d8d0, size: 0.5, grow: 0.6, life: 0.4, opacity: 0.35 }); }
         if (s.m.position.y <= s.target.y + 0.2) {
-          explode(s.target.x, s.target.z, 1.7, 82.5, 3.08, { shake: 0.3, smoke: 7 });
+          explode(s.target.x, s.target.z, 1.7, 82.5, 3.08, { shake: 0.3, smoke: 7, src });
           disposeGroup(s.m); shells.splice(k, 1);
         }
       }
@@ -611,7 +611,7 @@ export function makeMushroom(cx, gy, cz, R, { top: TOP = 30, hold: HOLD = 12, go
 }
 
 const CLOUD_GONE = 20;                                        // seconds after detonation when the mushroom cloud has cleared
-function nuclearStrike(cx, cz, R) {
+function nuclearStrike(cx, cz, R, src) {
   const gy = heightAt(cx, cz);
   const ring = new THREE.Mesh(ringGeo(cx, cz, R, 0.35), bandMat(0xff4040));
   const fill = new THREE.Mesh(discGeo(cx, cz, R), fillMat(0xff4040));
@@ -690,7 +690,7 @@ function nuclearStrike(cx, cz, R) {
             const x = cx + Math.cos(an) * rr, z = cz + Math.sin(an) * rr;
             fires.push({ x, y: heightAt(x, z) + 0.15, z, size: rnd(1.6, 3.8) * (rr > BLAST ? 1.15 : 0.9), t: rnd(0, 0.2), out: CLOUD_GONE * rnd(0.72, 1) });
           }
-          damageCircle(cx, cz, BLAST, 3300, 0.25);
+          damageCircle(cx, cz, BLAST, 3300, 0.25, src);
           state.shake += 4.4;
           log('Nuclear detonation!', true);
         }
@@ -703,7 +703,7 @@ function nuclearStrike(cx, cz, R) {
           igniteT -= dt;
           if (igniteT <= 0) {
             igniteT = 0.25;
-            eachEnemy(cx, cz, FIRE, (e, d2) => { if (d2 > BLAST * BLAST) e.burn = { dps: 33, t: Math.max(e.burn?.t ?? 0, 5) }; });
+            eachEnemy(cx, cz, FIRE, (e, d2) => { if (d2 > BLAST * BLAST) e.burn = { dps: 33, t: Math.max(e.burn?.t ?? 0, 5), src }; });
           }
           fireT += dt;
           while (fireT > 0.012) {
@@ -784,7 +784,7 @@ function nuclearStrike(cx, cz, R) {
 // from the rim, scoring the ground as they come; they merge into one lance that swells to an enormous width,
 // wreathed in lightning and growing brighter and louder until it detonates and throws out a train of shockwaves.
 const segGeo = new THREE.CylinderGeometry(1, 1, 1, 5, 1, true);
-function archangelLance(cx, cz, R) {
+function archangelLance(cx, cz, R, src) {
   const gy = heightAt(cx, cz), SKY = 170;
   const T_MERGE = 4.6, T_BOOM = 9.6, T_END = 16.5, BLAST = R * 1.35;
   const GOLD = 0xffd98a, PALE = 0xfff4d6;
@@ -857,7 +857,7 @@ function archangelLance(cx, cz, R) {
           setBeam(bm.b, from, to, merged ? Math.max(0, 1 - (t - T_MERGE) * 2.5) : 0.7 + conv * 1.1);
           bm.glow.position.copy(to); bm.glow.scale.setScalar((1.4 + Math.random() * 0.6) * (merged ? Math.max(0, 1 - (t - T_MERGE) * 2.5) : 1));
           if (!merged) {
-            damageCircle(to.x, to.z, 1.3, 90 * dt, 0.5);
+            damageCircle(to.x, to.z, 1.3, 90 * dt, 0.5, src);
             if (Math.random() < 0.6) puff(to.x, to.y + 0.2, to.z, { color: GOLD, size: 0.6, life: 0.5, opacity: 0.85, additive: true, vy: rnd(1.5, 4), vx: rnd(-1, 1), vz: rnd(-1, 1) });
           }
         }
@@ -881,7 +881,7 @@ function archangelLance(cx, cz, R) {
         from.set(cx, gy + SKY, cz); to.set(cx, gy - 0.5, cz);
         for (const m of shells) { setSeg(m, from, to, width * m.userData.w * surge); m.material.opacity = Math.min(1, m.userData.o * (0.75 + 0.6 * swell)); }
         pool.scale.setScalar(width * 1.9 * surge); pool.material.opacity = 0.35 + 0.45 * swell;
-        damageCircle(cx, cz, width + 1, (250 + 650 * swell) * dt, 0.3);
+        damageCircle(cx, cz, width + 1, (250 + 650 * swell) * dt, 0.3, src);
         state.shake = Math.max(state.shake, 0.2 + 1.1 * swell * swell);
         if (hum) hum.setVol(0.5 + 1.3 * swell);
         // crackle
@@ -933,7 +933,7 @@ function archangelLance(cx, cz, R) {
         audio.play('nuke_impact', { vol: 1 });
         audio.play('nuke_rumble', { vol: 0.9 });
         audio.play('lance_impact', { x: cx, z: cz, vol: 1 });
-        damageCircle(cx, cz, BLAST, 3300, 0.25);
+        damageCircle(cx, cz, BLAST, 3300, 0.25, src);
         explode(cx, cz, 6.5, 0, 0, { color: 0xffe2a0, shake: 0, smoke: 22 });
         state.shake += 4.6;
         spawnScar(ab.scene, cx, cz, R * 2.4, { hold: 16, fade: 6, glow: 10, glowI: 0.12 });
@@ -1125,19 +1125,22 @@ export const abilities = {
       return true;
     }
     let fx;
-    if (key === 'lance') fx = orbitalLance(p.x, p.z, def.radius);
-    else if (key === 'laser') fx = orbitalLaser(p.x, p.z);
-    else if (key === 'strafe') { const d = dirFromCore(p); fx = strafingRun(p.x, p.z, d.x, d.z, def.length, def.width); }
-    else if (key === 'artillery') fx = artilleryStrike(p.x, p.z, def.radius);
-    else if (key === 'nuke') fx = nuclearStrike(p.x, p.z, def.radius);
-    else if (key === 'troopers') fx = troopers.dropPods(p.x, p.z, def.radius);
-    else if (key === 'archangel') fx = archangelLance(p.x, p.z, def.radius);
-    else if (key === 'blackhole') fx = blackHoleBomb(ab.scene, p.x, p.z, def.radius);
-    else if (key === 'strategic') fx = strategicStrike({ scene: ab.scene, camera: ab.camera, controls: ab.controls, setCinematic: (fn) => { ab.cine = fn; } });
-    else if (key === 'bomber') { const d = lineDir(ab.anchor, p); fx = bombingRun(ab.scene, ab.anchor.x, ab.anchor.z, d.x, d.z, def.width); }
-    else if (key === 'battleship') fx = battleships.drop(p.x, p.z);
+    const src = { kills: 0, key, quiet: !!ab.quiet };         // every kill this strike makes is credited here (tally below)
+    src.done = () => tally(src);
+    if (key === 'lance') fx = orbitalLance(p.x, p.z, def.radius, src);
+    else if (key === 'laser') fx = orbitalLaser(p.x, p.z, src);
+    else if (key === 'strafe') { const d = dirFromCore(p); fx = strafingRun(p.x, p.z, d.x, d.z, def.length, def.width, src); }
+    else if (key === 'artillery') fx = artilleryStrike(p.x, p.z, def.radius, src);
+    else if (key === 'nuke') fx = nuclearStrike(p.x, p.z, def.radius, src);
+    else if (key === 'troopers') fx = troopers.dropPods(p.x, p.z, def.radius, src);
+    else if (key === 'archangel') fx = archangelLance(p.x, p.z, def.radius, src);
+    else if (key === 'blackhole') fx = blackHoleBomb(ab.scene, p.x, p.z, def.radius, src);
+    else if (key === 'strategic') fx = strategicStrike({ scene: ab.scene, camera: ab.camera, controls: ab.controls, setCinematic: (fn) => { ab.cine = fn; }, src });
+    else if (key === 'bomber') { const d = lineDir(ab.anchor, p); fx = bombingRun(ab.scene, ab.anchor.x, ab.anchor.z, d.x, d.z, def.width, src); }
+    else if (key === 'battleship') fx = battleships.drop(p.x, p.z, src);
     if (!fx) return true;                                       // refused (no room for the battleship there): stays armed
     if (!ab.quiet) audio.voice(`voice_${key}`, { vol: 0.95 }); // the radio call-out (public/sfx/voice, lines.txt)
+    if (key !== 'troopers' && key !== 'battleship') fx.credit = src;   // those two report when their squad / ship is gone
     ab.effects.push(fx);
     ab.cooldowns[key] = cooldownOf(key);
     abilities.cancel();
@@ -1146,12 +1149,37 @@ export const abilities = {
   update(dt) {
     const onStation = battleships.deployLeft() !== null;     // the battleship's cooldown waits until its time on the field is up
     for (const k of Object.keys(ab.cooldowns)) if (k !== 'battleship' || !onStation) ab.cooldowns[k] = Math.max(0, ab.cooldowns[k] - dt);
-    for (let k = ab.effects.length - 1; k >= 0; k--) if (!ab.effects[k].update(dt)) ab.effects.splice(k, 1);
+    for (let k = ab.effects.length - 1; k >= 0; k--) if (!ab.effects[k].update(dt)) { ab.effects[k].credit?.done(); ab.effects.splice(k, 1); }
     updateParticles(dt);
     if (ab.armed === 'designate' ? !ab.designate.alive() : ab.armed && locked(ab.armed)) abilities.cancel();   // its building was lost while armed
     refreshBar();
   },
 };
+// Kill tally. Each call-in credits its kills to its own record; once it has fully played out (its effect is over; for
+// shock troopers, the last of the squad is down; for the battleship, it has been lifted out or destroyed) its kills
+// and this game's running total for that call-in pop up above the bar for a few seconds. The title demo and the
+// scripted scenes fire quietly and are left out.
+const totals = {};
+function tally(src) {
+  if (src.quiet || src.tallied) return;
+  src.tallied = true;
+  totals[src.key] = (totals[src.key] || 0) + src.kills;
+  if (!state.demo) killPopup(ABILITIES[src.key].name, src.kills, totals[src.key]);
+}
+let pops = null;
+function killPopup(name, kills, total) {
+  if (!pops) { pops = document.createElement('div'); pops.id = 'killpops'; document.body.appendChild(pops); }
+  const bar = document.getElementById('abilities').getBoundingClientRect();     // centred just above the bar, wherever it is
+  pops.style.left = `${bar.left + bar.width / 2}px`;
+  pops.style.bottom = `${innerHeight - bar.top + 10}px`;
+  const el = document.createElement('div');
+  el.className = 'killpop';
+  el.innerHTML = `<b>${name}</b><span>Kills: <em>${kills.toLocaleString('en-US')}</em></span><span>Total: <em>${total.toLocaleString('en-US')}</em></span>`;
+  el.addEventListener('animationend', () => el.remove());
+  pops.appendChild(el);
+  while (pops.children.length > 3) pops.firstChild.remove();                     // a burst of them: the oldest go first
+}
+
 // An ability that needs a building (the strategic strike needs the Uplink Tower) is locked until one stands.
 const locked = (key) => !!ABILITIES[key].requires && !hasBuilding(ABILITIES[key].requires);
 

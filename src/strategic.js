@@ -76,7 +76,7 @@ function makeICBM() {
 }
 
 // ---------------------------------------------------------------- the strike
-export function strategicStrike({ scene, camera, controls, setCinematic }) {
+export function strategicStrike({ scene, camera, controls, setCinematic, src = null }) {
   const gx = 0, gz = 0, gy = heightAt(0, 0);
   const GZ = new THREE.Vector3(gx, gy, gz);
   const banner = document.getElementById('strategic'), line1 = banner.querySelector('b'), line2 = banner.querySelector('span');
@@ -216,10 +216,10 @@ export function strategicStrike({ scene, camera, controls, setCinematic }) {
       const r2 = (FRONT * a + 6) ** 2;
       for (const e of state.enemies) {
         if (e.dead || (e.x - gx) ** 2 + (e.z - gz) ** 2 >= r2) continue;
-        if (!e.boss) { damageEnemy(e, 1e9); continue; }
+        if (!e.boss) { damageEnemy(e, 1e9, src); continue; }
         if (struck.has(e)) continue;                             // the front washes over it once
         struck.add(e);
-        damageEnemy(e, BOSS_HIT);
+        damageEnemy(e, BOSS_HIT, src);
         if (!e.dead) log('The Colossus survived the strike!', true);
       }
       for (const tr of state.troopers) if (tr.hp > 0 && (tr.x - gx) ** 2 + (tr.z - gz) ** 2 < r2) tr.hp = 0;

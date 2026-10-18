@@ -447,7 +447,7 @@ function killEnemy(e, quiet = false, src = null) {
   e.held = null;
   state.deadCount++;                                     // compacted out of state.enemies at end of frame
 }
-export const consumeEnemy = (e) => { if (!e.dead) killEnemy(e, true); };
+export const consumeEnemy = (e, src = null) => { if (!e.dead) killEnemy(e, true, src); };
 
 // Every Colossus that falls makes the hive adapt: bugs that spawn from then on get 10% more HP and 8% more speed,
 // compounding with each kill. Bugs already on the field keep their stats.

@@ -174,7 +174,7 @@ export function lineSpan(ax, az, dx, dz, lim) {
 const SPEED = 38, ALT = 44, GRAV = 26, SPACING = 4.6;
 const _q = new THREE.Vector3();
 
-export function bombingRun(scene, ax, az, dx, dz, width) {
+export function bombingRun(scene, ax, az, dx, dz, width, src = null) {
   const px = -dz, pz = dx;
   const [m0, m1] = lineSpan(ax, az, dx, dz, EXTENT);             // whole map, for the flight
   const [b0, b1] = lineSpan(ax, az, dx, dz, FLAT + 4);           // where bombs are worth dropping
@@ -235,7 +235,7 @@ export function bombingRun(scene, ax, az, dx, dz, width) {
         const ground = heightAt(p.x, p.z);
         if (p.y - ground < 14 && !b.sang && whistle <= 0) { b.sang = true; whistle = 0.35; audio.play('artillery_whistle', { x: p.x, z: p.z, vol: 0.55 }); }
         if (p.y <= ground + 0.3) {
-          explode(p.x, p.z, 2.5, 187, 5.72, { shake: 0.28, smoke: 9 });
+          explode(p.x, p.z, 2.5, 187, 5.72, { shake: 0.28, smoke: 9, src });
           scene.remove(b.m);
           bombs.splice(k, 1);
         }

@@ -610,7 +610,7 @@ const landingYaw = (x, z) => (x * x + z * z < 1 ? 0 : Math.atan2(x, z));
 let scene = null;
 const rigs = [], wrecks = [];                              // harnesses flying back up; destroyed ships burning out
 
-function drop(x, z) {
+function drop(x, z, credit = null) {
   const yaw = landingYaw(x, z);
   if (!fits(x, z, yaw, null)) return null;
   const mesh = makeShip();
@@ -628,7 +628,7 @@ function drop(x, z) {
     guns: ud.guns.map((m) => ({ yaw: m.start, arc: m.rest, half: 1.75, side: m.side, target: null, scan: 0, cd: rnd(0, 0.5), recoil: 1 })),
     vls: { cd: 2, salvo: null, open: 0 },
     snd: null, thrust: null,
-    escort: { heli: ud.heli, pad: ud.pad, h: newEscort() },
+    escort: { heli: ud.heli, pad: ud.pad, h: newEscort() }, credit,
     sentry: makeSentry(ud.body, DECK, SHIP.sentry.posts),
   };
   // a moving target: acid globs (acid.js) land on the side of the hull facing the spitter
@@ -1194,11 +1194,15 @@ function updateDamage(s, dt) {
   if (f < 0.25) puff(_a.x, _a.y, _a.z, { color: 0xff8a30, size: rnd(0.5, 0.9), grow: 1.2, life: 0.4, opacity: 0.85, additive: true, vy: 2 });
 }
 
+// Off the field, lifted out or destroyed: its kill count goes to the call-in's tally (abilities.js).
+function report(s) { if (s.credit) { s.credit.kills = s.kills; s.credit.done?.(); s.credit = null; } }
+
 function die(s) {
   s.live = false;
   s.selected = false;
   s.phase = 'dead';
   state.ships.splice(state.ships.indexOf(s), 1);
+  report(s);
   const ud = s.mesh.userData;
   scene.remove(ud.ring);
   ud.ring.geometry.dispose();
@@ -1328,6 +1332,7 @@ function liftOff(s) {
   s.live = false;
   s.selected = false;
   state.ships.splice(state.ships.indexOf(s), 1);
+  report(s);
   scene.remove(ud.ring);
   ud.ring.geometry.dispose();
   s.mesh.remove(ud.bar);
@@ -1406,8 +1411,8 @@ export const battleships = {
     return HULL.map(([lx, lz]) => [x + lx * c + lz * sn, z - lx * sn + lz * c]);
   },
   // Ability effect. null: no room to land there (the strike stays armed).
-  drop(x, z) {
-    const fx = drop(x, z);
+  drop(x, z, credit = null) {
+    const fx = drop(x, z, credit);
     if (!fx) log('No room for the battleship to land there: it needs open ground clear of buildings.', true);
     return fx;
   },

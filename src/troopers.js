@@ -201,11 +201,12 @@ const blocked = (x, z) => {
   return (!!st && !st.buried && !st.def?.walkable) || shipAt(x, z);   // closed blast doors and minefields can be walked over
 };
 
-function spawnTrooper(x, z, tx, tz) {
+function spawnTrooper(x, z, tx, tz, src = null) {
   const mesh = makeTrooperMesh();
   scene.add(mesh);
   const t = { x, z, hp: T.hp, mesh, fx: tx - x, fz: tz - z, moveTo: { x: tx, z: tz }, target: null, scan: Math.random() * 0.25,
-    cd: rnd(0.2, 0.8), nade: rnd(3, 6), walk: Math.random() * 6, seed: Math.random() * 20, selected: false, hurt: false, flash: 0, recoil: 0, raise: 0, aimX: 0, aimZ: 1 };
+    cd: rnd(0.2, 0.8), nade: rnd(3, 6), walk: Math.random() * 6, seed: Math.random() * 20, selected: false, hurt: false, flash: 0, recoil: 0, raise: 0, aimX: 0, aimZ: 1, src };
+  if (src) src.alive++;
   state.troopers.push(t);
   return t;
 }
@@ -233,7 +234,7 @@ function releaseGrenade(t) {
   m.scale.setScalar(1.0);                                    // about 0.08 units across in flight
   m.position.copy(from);
   scene.add(m);
-  nades.push({ m, from, to: new THREE.Vector3(ex, heightAt(ex, ez), ez), t: 0, dur: 0.7 + Math.hypot(ex - from.x, ez - from.z) * 0.035,
+  nades.push({ m, from, to: new THREE.Vector3(ex, heightAt(ex, ez), ez), t: 0, dur: 0.7 + Math.hypot(ex - from.x, ez - from.z) * 0.035, src: t.src,
     spin: new THREE.Vector3(rnd(-9, 9), rnd(-4, 4), rnd(-9, 9)) });
 }
 
@@ -277,7 +278,7 @@ function updateTrooper(t, dt) {
       const tr = makeTracer(_a, _b);
       scene.add(tr);
       state.beams.push({ mesh: tr, life: 0.05, max: 0.05 });
-      damageEnemy(e, T.mgDamage);
+      damageEnemy(e, T.mgDamage, t.src);
       audio.play('hmg_fire', { x: t.x, z: t.z, vol: 0.22 });
       t.flash = 0.045;
       t.recoil = 1;
@@ -389,7 +390,7 @@ function updatePod(p, dt) {
   if (!p.landed) {                                              // impact: crush whatever is underneath
     p.landed = true;
     m.position.copy(p.land);
-    explode(p.land.x, p.land.z, 1.3, 70, 2.8, { shake: 0.45, smoke: 6 });
+    explode(p.land.x, p.land.z, 1.3, 70, 2.8, { shake: 0.45, smoke: 6, src: p.src });
     audio.play('hub_land', { x: p.land.x, z: p.land.z, vol: 0.8 });
     for (let n = 0; n < 14; n++) {
       const a = rnd(0, Math.PI * 2);
@@ -403,8 +404,9 @@ function updatePod(p, dt) {
     p.unloaded = true;
     for (let k = 0; k < TEAM; k++) {
       const a = k * Math.PI * 2 / 3 + p.yaw;                                     // one trooper down each ramp
-      spawnTrooper(p.land.x + Math.sin(a) * 0.3, p.land.z + Math.cos(a) * 0.3, p.land.x + Math.sin(a) * 2.3, p.land.z + Math.cos(a) * 2.3);
+      spawnTrooper(p.land.x + Math.sin(a) * 0.3, p.land.z + Math.cos(a) * 0.3, p.land.x + Math.sin(a) * 2.3, p.land.z + Math.cos(a) * 2.3, p.src);
     }
+    if (p.src) p.src.pods--;
   }
   if (since > 26) m.position.y = p.land.y - (since - 26) * 1.6;                  // spent pod sinks away
   if (since > 28.5) { scene.remove(m); return false; }
@@ -415,7 +417,9 @@ export const troopers = {
   init(s) { scene = s; },
 
   // Ability effect: POD_COUNT pods scattered over the target circle, landing a beat apart.
-  dropPods(cx, cz, radius) {
+  // src: the drop's kill record (abilities.js): the pods, and every trooper they bring, credit their kills to it, and it
+  // reports once every pod has unloaded and the last of the squad is down.
+  dropPods(cx, cz, radius, src = null) {
     const spots = [];
     for (let tries = 0; spots.length < POD_COUNT && tries < 200; tries++) {
       const a = rnd(0, Math.PI * 2), r = radius * Math.sqrt(Math.random()) * 0.9;
@@ -424,6 +428,7 @@ export const troopers = {
       spots.push({ x, z });
     }
     if (!spots.length) spots.push({ x: cx, z: cz });
+    if (src) Object.assign(src, { pods: spots.length, alive: 0 });
     const slant = rnd(0, Math.PI * 2);
     spots.forEach((q, k) => {
       const mesh = makePodMesh();
@@ -433,7 +438,7 @@ export const troopers = {
       scene.add(mesh);
       const land = new THREE.Vector3(q.x, heightAt(q.x, q.z) - 0.15, q.z);
       const start = land.clone().add(new THREE.Vector3(Math.cos(slant) * 22, 110, Math.sin(slant) * 22));
-      pods.push({ mesh, land, start, yaw, t: -(0.4 + k * 0.42 + rnd(0, 0.15)), fall: 1.15, landed: false, unloaded: false, whistled: false });
+      pods.push({ mesh, land, start, yaw, t: -(0.4 + k * 0.42 + rnd(0, 0.15)), fall: 1.15, landed: false, unloaded: false, whistled: false, src });
     });
     log(`Shock troopers inbound: ${spots.length} drop pods!`);
     if (!troopers.hinted) { troopers.hinted = true; setTimeout(() => log('Drag a box over troopers to select them, then click to move.'), 3500); }
@@ -446,7 +451,11 @@ export const troopers = {
     const list = state.troopers;
     for (let k = list.length - 1; k >= 0; k--) {
       const t = list[k];
-      if (t.hp <= 0) { killTrooper(t); list.splice(k, 1); continue; }
+      if (t.hp <= 0) {
+        killTrooper(t); list.splice(k, 1);
+        if (t.src && --t.src.alive <= 0 && t.src.pods <= 0) t.src.done?.();   // the last of the drop is down
+        continue;
+      }
       updateTrooper(t, dt);
     }
     for (let a = 0; a < list.length; a++) for (let b = a + 1; b < list.length; b++) {          // keep the squad from stacking
@@ -468,7 +477,7 @@ export const troopers = {
       n.m.position.y += Math.sin(u * Math.PI) * 2.6;
       n.m.rotation.x += n.spin.x * dt; n.m.rotation.y += n.spin.y * dt; n.m.rotation.z += n.spin.z * dt;
       if (u >= 1) {
-        explode(n.to.x, n.to.z, 0.9, T.nadeDamage, T.nadeRadius, { shake: 0, smoke: 3 });
+        explode(n.to.x, n.to.z, 0.9, T.nadeDamage, T.nadeRadius, { shake: 0, smoke: 3, src: n.src });
         scene.remove(n.m);
         nades.splice(k, 1);
       }

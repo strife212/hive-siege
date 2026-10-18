@@ -104,7 +104,7 @@ function makeBomb() {
 }
 
 // ---------------------------------------------------------------- the effect
-export function blackHoleBomb(scene, cx, cz, R) {
+export function blackHoleBomb(scene, cx, cz, R, src = null) {
   const gy = heightAt(cx, cz), hy = gy + H;
   const centre = new THREE.Vector3(cx, hy, cz);
   const start = new THREE.Vector3(cx - 14, gy + 62, cz - 9);
@@ -171,7 +171,7 @@ export function blackHoleBomb(scene, cx, cz, R) {
     const e = h.e;
     h.done = true;
     e.held = null;
-    consumeEnemy(e);
+    consumeEnemy(e, src);
     audio.play('bh_consume', { x: cx, z: cz, vol: 0.5 });
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xe0c8ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
     s.position.set(cx + Math.cos(h.ang) * HR, hy + rnd(-0.4, 0.4), cz + Math.sin(h.ang) * HR);
@@ -203,7 +203,7 @@ export function blackHoleBomb(scene, cx, cz, R) {
         h.r = Math.max(4.5, h.r - 3.2 * dt);
         h.lift = Math.min(1.6, h.lift + dt * 0.9);
         e.x = cx + Math.cos(h.ang) * h.r; e.z = cz + Math.sin(h.ang) * h.r;
-        damageEnemy(e, BOSS_DPS * dt);
+        damageEnemy(e, BOSS_DPS * dt, src);
         return;
       }
       const w = (0.9 + 5.5 / (h.r + 0.6)) * h.spin;                             // faster round the drain
@@ -219,7 +219,7 @@ export function blackHoleBomb(scene, cx, cz, R) {
       e.fx = -Math.sin(h.ang) * h.spin; e.fz = Math.cos(h.ang) * h.spin;     // facing along the orbit
       e.walk += dt * 9;                                                        // legs scrambling
       e.aimH = h.lift + 0.5 * e.def.scale;
-      damageEnemy(e, DPS * (1 + 1.2 * clamp01(1 - h.r / R)) * dt);
+      damageEnemy(e, DPS * (1 + 1.2 * clamp01(1 - h.r / R)) * dt, src);
       if (!e.dead && SMALL(e) && h.r <= rMin + 0.05) consume(h);
     } else {                                                                   // spat back to where it was taken from
       h.u += dt / h.dur;

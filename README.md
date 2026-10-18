@@ -253,6 +253,10 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   - Draw calls and triangles for the whole frame, including the shadow and post-processing passes, plus bug and
     particle counts.
 
+- **Kill tally** (`src/abilities.js`): every call-in credits its kills to its own record (the `src` of each hit it
+  lands, burns included). Once it has fully played out (its effect is over; for shock troopers, the last of the
+  squad is down; for the battleship, it has been lifted out or destroyed) a card pops up above the call-in bar for a
+  few seconds with its name, its kills and this game's running total for that call-in.
 - **Active abilities** (`src/abilities.js`): five commander powers on a bottom-centre bar (keys 1-5), each with
   a terrain-draped targeting reticle and a cooldown. Orbital Lance (five beams spiral inward and merge into one
   strike), Orbital Laser (sustained beam that follows the cursor for 6 s, scorching a trail), Strafing Run
