@@ -1,4 +1,4 @@
-export const VERSION = '1.18';                 // shown on the main menu; the minor number goes up by one with every commit (1.9, 1.10, 1.11...)
+export const VERSION = '1.19';                 // shown on the main menu; the minor number goes up by one with every commit (1.9, 1.10, 1.11...)
 export const MAP_SIZE = 80;
 export const HALF = MAP_SIZE / 2;
 export const CELL = 2;
@@ -103,8 +103,8 @@ export const BUILDINGS = {
   // Ultimate artillery (apocalypse.js): reaches anywhere on the map and always shells the biggest clump of bugs.
   apoc: {
     name: 'Apocalypse Heavy Artillery', cost: 6000, hp: 900, cat: 'DEFENSE', size: [3, 3], limit: 1, requires: 'lab',
-    kind: 'apoc', range: 180, minRange: 10, damage: 650, splash: 7, interval: 10, turn: 0.8,
-    desc: 'A colossal howitzer with cross-map range. Every 10 s it drops one giant shell (650 damage, 7 m blast) on the biggest clump of bugs on the field. Only one can be built. Requires a Research Lab.',
+    kind: 'apoc', range: 180, minRange: 10, damage: 750, splash: 8, interval: 10, turn: 0.8,
+    desc: 'A colossal howitzer with cross-map range. Every 10 s it drops one giant shell (750 damage, 8 m blast) on the biggest clump of bugs on the field. Only one can be built. Requires a Research Lab.',
   },
   refinery: {
     name: 'Refinery', cost: 250, hp: 260, cat: 'ECONOMY',

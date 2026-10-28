@@ -214,7 +214,7 @@ Aiming then committing is on for any touch screen (tablets too); the touch bar i
   belly howitzer (25 shells, big splash) and a bomb bay that drops 30 bombs straight down. Returns when empty or idle, rearms moored for 8 s.
 - **Apocalypse Heavy Artillery** (3x3, 6000 credits, limit 1, needs a Research Lab, `src/apocalypse.js`): a colossal sci-fi howitzer on a slab with four
   outrigger jacks: armoured turret, trunnion-mounted cradle with recuperators, a long barrel wrapped in glowing coil rings and a slotted
-  muzzle brake. Range 180 (the whole map; nothing closer than 10), one 650-damage shell with a 7 m blast every 10 s. It shells the
+  muzzle brake. Range 180 (the whole map; nothing closer than 10), one 750-damage shell with an 8 m blast every 10 s. It shells the
   biggest clump on the field: bugs are binned into 4-unit cells weighted by size (ants count little, brutes and spitters double, the
   Colossus most), each cell scored with its neighbours, and the shell is aimed at the weighted centroid led by the clump's walking
   speed. Each shot plays the full cycle: the barrel slams back and runs out, drops level, the breech door slides open and throws out the
